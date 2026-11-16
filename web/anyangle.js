@@ -7,7 +7,7 @@ import { promptForSnapshot } from './batch-queue.mjs?v=20261116en';
 let graphRevision = 0;
 let closeActive = null;
 const extensionURL = new URL('./editor/index.html', import.meta.url);
-extensionURL.searchParams.set('v', '20261116modelplacement');
+extensionURL.searchParams.set('v', '20261116typography');
 
 function openEditor(node, widget) {
   closeActive?.();
@@ -18,6 +18,7 @@ function openEditor(node, widget) {
   Object.assign(dialog.style, { width: '96vw', height: '94vh', maxWidth: 'none', maxHeight: 'none', padding: '0', border: '1px solid #3a5265', borderRadius: '12px', background: '#101920', overflow: 'hidden' });
   const frame = document.createElement('iframe');
   const url = new URL(extensionURL); url.searchParams.set('session', session);
+  url.searchParams.set('hostTextSize', getComputedStyle(document.body).fontSize);
   frame.src = url; frame.title = 'AnyAngle Studio · 3D Camera and Pose Editor';
   Object.assign(frame.style, { width: '100%', height: '100%', border: '0', display: 'block' });
   dialog.append(frame); document.body.append(dialog);

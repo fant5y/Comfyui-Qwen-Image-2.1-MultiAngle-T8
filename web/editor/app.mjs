@@ -41,6 +41,23 @@ let batchRunning = false, batchController = null, batchViews = [], batchId = nul
 const batchReplies = new Map();
 const controls = new Map();
 
+const textSize = $('#studio-text-size');
+const textSizeKey = 'anyangle-studio.text-scale';
+const hostTextSize = parseFloat(params.get('hostTextSize'));
+const baseTextSize = embedded && Number.isFinite(hostTextSize) ? Math.max(15, Math.min(24, hostTextSize)) : 15;
+try {
+  const savedScale = localStorage.getItem(textSizeKey);
+  if (Array.from(textSize.options).some(option => option.value === savedScale)) textSize.value = savedScale;
+} catch { /* Browser storage is optional. */ }
+function applyTextSize() {
+  document.documentElement.style.setProperty('--studio-text-size', (baseTextSize * Number(textSize.value)) + 'px');
+}
+applyTextSize();
+textSize.onchange = () => {
+  applyTextSize();
+  try { localStorage.setItem(textSizeKey, textSize.value); } catch { /* Browser storage is optional. */ }
+};
+
 const workspace = $('#workspace');
 for (const handle of workspace.querySelectorAll('[data-sidebar]')) {
   const side = handle.dataset.sidebar;
