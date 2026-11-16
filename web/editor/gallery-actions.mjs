@@ -1,7 +1,7 @@
 import { installGalleryKeypoints } from './gallery-keypoints.mjs?v=20261116en';
 import { poseCopyIssue } from './openpose.mjs?v=20261116en';
-import { applyGalleryPose, galleryPoseGuide, galleryViewPlan } from './gallery-pose.mjs?v=20261116en';
-import { libraryManifest } from './reference-library.mjs?v=20261116en';
+import { applyGalleryPose, galleryPoseGuide, galleryViewPlan } from './gallery-pose.mjs?v=20261116sharedscene';
+import { libraryManifest } from './reference-library.mjs?v=20261116sharedscene';
 
 const assetURL = asset => `/anyangle-studio/assets/${encodeURIComponent(asset.name)}`;
 function modal(title) {

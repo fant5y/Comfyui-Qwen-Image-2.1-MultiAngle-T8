@@ -1,20 +1,20 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116sceneselection';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116sharedscene';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116en';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116sources';
+import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116sharedscene';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116sharedscene';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116sceneselection';
-import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116sharedscene';
+import { installGalleryActions } from './gallery-actions.mjs?v=20261116sharedscene';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116sceneselection';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116sharedscene';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
-import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116en';
+import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116sharedscene';
 
 const $ = selector => document.querySelector(selector);
 const clone = value => structuredClone(value);
@@ -1108,7 +1108,7 @@ $('#return-to-cast').onclick = () => run(async () => {
   if (glbScene) {
     doc.conditioning.guide = 'coarse';
     previewGuide = 'coarse';
-    $('#prop-list').closest('details').open = true;
+    $('#actors-panel').open = true;
   }
   setMode('position');
   changed();
@@ -1214,7 +1214,7 @@ $('#extract-coarse').onclick = () => run(reconstructPhoto);
 $('#preview-coarse').onclick = () => { previewVisible = true; refresh(); renderPreview(); };
 $('#import-glb').onclick = () => {
   if (doc.source.kind === 'human') {
-    $('#prop-list').closest('details').open = true;
+    $('#actors-panel').open = true;
     importModel();
   } else $('#glb-file').click();
 };
@@ -1507,7 +1507,7 @@ $('#clear-canvas').onclick = () => run(async () => {
   if (!canvasHasObjects()) return;
   const rollback = begin(), previous = doc;
   const defaults = defaultScene();
-  doc = { ...doc, source: defaults.source, actors: [], props: [], contacts: [], activeActorId: null,
+  doc = { ...doc, source: defaults.source, actors: [], props: [], sceneOrder: [], contacts: [], activeActorId: null,
     selectedActorIds: [], cameraTarget: null, mesh: defaults.mesh, pose: defaults.pose, front: 0, scale: 1,
     sourceStale: false, derivedGuideStale: false, derivedGuideSource: null, openpose: null,
     conditioning: { ...doc.conditioning, guide: 'coarse', map: null, mapKind: null, mapOrigin: 'auto' } };

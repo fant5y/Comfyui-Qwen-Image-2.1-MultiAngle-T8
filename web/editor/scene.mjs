@@ -11,8 +11,8 @@ import { SplatScene } from './splat.mjs?v=20261116en';
 import { capturePNG } from './capture.mjs?v=20261116en';
 import { liftOpenPose, copyVisiblePose, WORLD_KEYPOINT_NAMES, ORDER, LIMBS, COLORS } from './openpose.mjs?v=20261116en';
 import { createActor, ensureActors, activeActor, bindActor, saveActor, visibleActors } from './actors.mjs?v=20261116en';
-import { loadProp, disposeProp, placeProp } from './props.mjs?v=20261116modelrotation';
-import { emptyLibrary } from './reference-library.mjs?v=20261116en';
+import { loadProp, disposeProp, placeProp } from './props.mjs?v=20261116sharedscene';
+import { emptyLibrary } from './reference-library.mjs?v=20261116sharedscene';
 
 export const PRESETS = [
   { name: 'Natural Stand', bones: { upperarm_l: [0, 0, -8], upperarm_r: [0, 0, 8] } },
@@ -655,6 +655,19 @@ export class StudioScene {
       if (this.doc.source.kind === 'human' && this.doc.conditioning?.colorActors !== true) {
         for (const actor of visibleActors(this.doc)) for (const material of this.animalActors.get(actor.id)?.colors.slice(0, 1) || [].concat(this.actorMesh(actor.id)?.material || [])) {
           if (material.color) { actorColors.push([material, material.color.clone()]); material.color.set('#e3e9ee'); }
+        }
+      }
+      if (this.doc.conditioning?.colorActors === true && !options.depth && !options.canny && !options.actorIds) {
+        for (const model of this.doc.props || []) {
+          if (model.visible === false || !model.editorColor) continue;
+          const materials = new Set();
+          this.propRoots.get(model.id)?.traverse(mesh => {
+            if (mesh.isMesh) for (const material of [].concat(mesh.material || [])) if (material.color) materials.add(material);
+          });
+          for (const material of materials) {
+            actorColors.push([material, material.color.clone()]);
+            material.color.set(model.editorColor);
+          }
         }
       }
       if (options.depth) {

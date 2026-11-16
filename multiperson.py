@@ -127,6 +127,12 @@ def canonical_scene(raw):
         prop.setdefault("label", f"Prop {index + 1}")
         if not isinstance(prop["label"], str):
             raise ValueError("Invalid prop label")
+        if "editorColor" in prop and (not isinstance(prop["editorColor"], str)
+                                     or not re.fullmatch(r"#[a-fA-F0-9]{6}", prop["editorColor"])):
+            raise ValueError("Invalid GLB guide color")
+        description = prop.get("description", "")
+        if not isinstance(description, str) or len(description) > 16000:
+            raise ValueError("GLB appearance must be text up to 16000 characters")
         for key in ("visible", "locked"):
             prop.setdefault(key, key == "visible")
             if not isinstance(prop[key], bool):
@@ -135,6 +141,9 @@ def canonical_scene(raw):
         if not isinstance(asset, dict) or not isinstance(asset.get("name"), str) or not re.fullmatch(r"[a-f0-9]{64}\.glb", asset["name"]):
             raise ValueError("Scene props require an embedded GLB asset")
         normalize_transform(prop)
+        for axis in ("scaleX", "scaleY", "scaleZ"):
+            if axis in prop["transform"] and (not finite(prop["transform"][axis]) or prop["transform"][axis] <= 0):
+                raise ValueError(f"Invalid GLB size {axis}")
         for axis in ("pitch", "roll"):
             if axis in prop["transform"] and not finite(prop["transform"][axis]):
                 raise ValueError(f"Invalid GLB rotation {axis}")
@@ -198,6 +207,11 @@ def canonical_scene(raw):
             raise ValueError("Invalid composition cameraTarget")
     if scene["version"] == 3:
         validate_library(scene)
+    if "sceneOrder" in scene:
+        order = scene["sceneOrder"]
+        if not isinstance(order, list) or not all(isinstance(item, str) for item in order):
+            raise ValueError("Scene order must be a list of IDs")
+        scene["sceneOrder"] = list(dict.fromkeys(item for item in order if item in ids or item in prop_ids))
     return scene
 
 

@@ -1,4 +1,4 @@
-import { USES, newUse, addReference, upgradeReferences, libraryManifest, libraryPrompt, staleGuide } from './reference-library.mjs?v=20261116en';
+import { USES, newUse, addReference, upgradeReferences, libraryManifest, libraryPrompt, staleGuide } from './reference-library.mjs?v=20261116sharedscene';
 import { uuid } from '../uuid.mjs?v=20261116en';
 const $ = id => document.getElementById(id);
 const copy = value => JSON.parse(JSON.stringify(value));

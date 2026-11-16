@@ -1,13 +1,12 @@
-import { createActor, activeActor, ensureActors, bindActor, cloneActor, removeActor, moveActor, editableActors, actorSeed, applySceneTemplate } from './actors.mjs?v=20261116en';
+import { createActor, activeActor, ensureActors, bindActor, cloneActor, removeActor, editableActors, actorSeed, applySceneTemplate } from './actors.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { installCastTools } from './cast-tools.mjs?v=20261116sceneselection';
+import { installCastTools } from './cast-tools.mjs?v=20261116sharedscene';
 import { poseCopyIssue, ORDER } from './openpose.mjs?v=20261116en';
 import { guideSource } from './guides.mjs?v=20261116en';
-import { addReference, newUse } from './reference-library.mjs?v=20261116en';
+import { addReference, newUse } from './reference-library.mjs?v=20261116sharedscene';
 
 let context, renderKey, renderedDoc, renderedRoles = [], references = [];
-let refreshCastTools;
 const $ = id => document.getElementById(id);
 const clone = value => structuredClone(value);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -28,14 +27,18 @@ export function installActorsUI(options) {
   context = options;
   $('actors-panel').innerHTML = `<summary class="section-heading collapsible-heading"><h2>Scene Characters <small id="actor-count">0</small></h2><span class="tag">CAST</span></summary>
     <div class="actor-toolbar"><button id="add-actor" class="accent-button">＋ Add Character</button><button id="clone-actor">Duplicate</button><button id="delete-actor">Delete</button></div>
-    <p class="hint">Select a character to edit. Ctrl-click to select multiple. Visibility controls output. Locking protects poses and positions.</p><div id="actor-list" class="actor-list"></div>
-    <div id="prop-list" class="actor-list"></div><label>Drag Plane<select id="actor-plane"><option value="screen">View Plane · Up / Down / Left / Right</option><option value="ground">Ground Plane · Forward / Back / Left / Right</option></select></label><div id="model-controls" hidden></div><div id="active-actor-controls"><label>Name<input id="actor-label" maxlength="48"></label><label>Character Color<input id="actor-color" type="color"></label>
+    <p class="hint">Select an item to edit. Ctrl-click to select multiple characters. Visibility controls output. Locking protects poses and positions.</p><div id="actor-list" class="actor-list"></div>
+    <label>Drag Plane<select id="actor-plane"><option value="screen">View Plane · Up / Down / Left / Right</option><option value="ground">Ground Plane · Forward / Back / Left / Right</option></select></label><div id="active-actor-controls"><label>Name<input id="actor-label" maxlength="255"></label><label>Guide Color<input id="actor-color" type="color"></label>
     <div class="actor-position"><label>X<input id="actor-x" type="number" step="0.1"></label><label>Y<input id="actor-y" type="number" step="0.1"></label><label>Z<input id="actor-z" type="number" step="0.1"></label></div>
     <div class="dimensions"><label>Facing °<input id="actor-yaw" type="number" step="1"></label><label>Scale<input id="actor-scale" type="number" min="0.01" step="0.01"></label></div>
+    <div id="model-size" class="actor-position" hidden><label>Size X<input id="model-scaleX" type="number" min="0.01" step="0.01"></label><label>Size Y<input id="model-scaleY" type="number" min="0.01" step="0.01"></label><label>Size Z<input id="model-scaleZ" type="number" min="0.01" step="0.01"></label></div>
+    <div id="model-rotation" class="dimensions" hidden><label>Pitch °<input id="model-pitch" type="number" step="1"></label><label>Roll °<input id="model-roll" type="number" step="1"></label></div>
     <div class="compact-actions"><button id="ground-actors">Ground Selected</button><button id="fit-actors">Fit Selected</button></div>
+    <div id="model-rotation-actions" class="compact-actions" hidden><button id="rotate-model">Rotate in Viewport</button></div>
+    <label id="model-joint-row" hidden>Rotation Target<select id="model-joint"></select></label>
     <div class="actor-identity"><h3>Identity Reference <small>Separate from pose source</small></h3><label>Source<select id="actor-reference"><option value="text">Text Description</option><option value="upload">Upload Character Photo…</option><option value="reference">Use Scene Source Image</option></select></label><img id="actor-reference-preview" alt="Character identity photo" hidden><label>Describe Character in Group Photo<input id="actor-source-person" placeholder="For example, the person with glasses on the left"></label><label>Appearance / Clothing<textarea id="actor-description" rows="3" maxlength="16000" placeholder="Character appearance, clothing, and style"></textarea></label><p id="actor-binding-state" class="hint"></p></div></div>
     <label class="option-toggle"><input id="actor-identities" type="checkbox"><span>Assign Each Character an Identity<small>Use the Qwen Base Model with Multi-Image Encode.</small></span></label>
-    <label class="option-toggle"><input id="color-actors" type="checkbox"><span>Use Character Colors in Coarse Render<small>Distinguishes characters. Pose guides keep standard joint colors.</small></span></label>`;
+    <label class="option-toggle"><input id="color-actors" type="checkbox"><span>Use Guide Colors in Coarse Render<small>Distinguishes characters and models. Pose guides keep standard joint colors.</small></span></label>`;
   const identityFile = document.createElement('input'); identityFile.type = 'file'; identityFile.accept = 'image/*'; identityFile.hidden = true; identityFile.id = 'actor-identity-file'; document.body.append(identityFile);
   const readReferences = button('Read Connected Character Photos', () => context.send('anyangle-read-actors')); readReferences.id = 'read-actor-references'; readReferences.className = 'wide-button'; $('actors-panel').append(readReferences);
   const readKeypoints = button('Read Connected Pose Keypoints', () => context.send('anyangle-read-keypoints')); readKeypoints.id = 'read-pose-keypoints'; readKeypoints.className = 'wide-button'; readKeypoints.hidden = true; $('openpose-panel').prepend(readKeypoints);
@@ -53,22 +56,58 @@ export function installActorsUI(options) {
     doc.activeActorId = actor.id; doc.selectedActorIds = [actor.id]; bindActor(doc); await context.studio().restore(doc);
   });
   $('delete-actor').onclick = () => context.studio().selectedModel() ? context.deleteModel() : atomic(async () => { const doc = context.doc(); removeActor(doc, doc.activeActorId); await context.studio().restore(doc); });
-  for (const [id, key] of [['actor-x', 'x'], ['actor-y', 'y'], ['actor-z', 'z'], ['actor-yaw', 'yaw'], ['actor-scale', 'scale']]) $(''+id).onchange = () => {
-    const actor = activeActor(context.doc()), value = Number($(id).value);
-    if (!actor || actor.locked || !Number.isFinite(value) || key === 'scale' && value <= 0) return;
-    context.begin(); actor.transform[key] = value; bindActor(context.doc()); context.studio().updateActorTransform(actor); context.changed();
+  const selected = () => context.studio().selectedModel() || activeActor(context.doc());
+  for (const [id, key] of [['actor-x', 'x'], ['actor-y', 'y'], ['actor-z', 'z'], ['actor-yaw', 'yaw'], ['actor-scale', 'scale'], ...['scaleX', 'scaleY', 'scaleZ'].map(key => ['model-' + key, key]), ['model-pitch', 'pitch'], ['model-roll', 'roll']]) $(id).onchange = () => {
+    const studio = context.studio(), item = selected(), value = $(id).valueAsNumber;
+    if (!item || item.locked || !Number.isFinite(value) || key.startsWith('scale') && value <= 0) {
+      refreshActorsUI();
+      if (item) $(id).value = Number((item.transform[key] ?? (key.startsWith('scale') ? 1 : 0)).toFixed(3));
+      return;
+    }
+    context.begin();
+    item.transform[key] = value;
+    if (studio.selectedModel()) studio.updateProp(item);
+    else { bindActor(context.doc()); studio.updateActorTransform(item); }
+    context.changed();
   };
-  $('actor-label').onchange = () => { const actor = activeActor(context.doc()); if (!actor) return; context.begin(); actor.label = $('actor-label').value.trim() || 'Character'; context.changed(); };
+  $('actor-label').onchange = () => {
+    const item = selected();
+    if (!item) return;
+    context.begin(); item.label = $('actor-label').value.trim() || item.label; context.changed(false);
+  };
   $('actor-color').onchange = () => {
-    const actor = activeActor(context.doc()); if (!actor) return; context.begin(); actor.editorColor = $('actor-color').value;
-    if (actor.source.kind === 'animal') context.studio().updateActorTransform(actor);
-    else context.studio().viewer.setActiveCharacterAppearance({ color: actor.editorColor });
+    const studio = context.studio(), item = selected();
+    if (!item) return;
+    context.begin(); item.editorColor = $('actor-color').value;
+    if (!studio.selectedModel()) {
+      if (item.source.kind === 'animal') studio.updateActorTransform(item);
+      else studio.viewer.setActiveCharacterAppearance({ color: item.editorColor });
+    }
     context.changed();
   };
   $('actor-plane').onchange = () => { context.begin(); context.doc().interaction.movePlane = $('actor-plane').value; context.changed(false); };
-  $('ground-actors').onclick = () => { context.begin(); context.studio().groundActors(context.doc().selectedActorIds); context.changed(); };
+  $('ground-actors').onclick = () => {
+    const studio = context.studio(), model = studio.selectedModel();
+    context.begin();
+    if (model) studio.groundModel(model);
+    else studio.groundActors(context.doc().selectedActorIds);
+    context.changed();
+  };
   $('fit-actors').onclick = () => { context.begin(); context.studio().fit(true); context.changed(); };
-  $('actor-description').onchange = () => { const actor = activeActor(context.doc()); if (!actor) return; context.begin(); actor.identity.description = $('actor-description').value; context.changed(false); };
+  $('rotate-model').onclick = () => context.editScene();
+  $('model-joint').onchange = event => {
+    const studio = context.studio();
+    studio.finishDrag();
+    studio.modelJoint = event.target.value === '' ? null : Number(event.target.value);
+    context.editScene();
+  };
+  $('actor-description').onchange = () => {
+    const item = selected();
+    if (!item) return;
+    context.begin();
+    (context.studio().selectedModel() ? item : item.identity).description = $('actor-description').value;
+    context.changed(false);
+  };
   $('actor-source-person').onchange = () => { const actor = activeActor(context.doc()); if (!actor) return; context.begin(); const description = $('actor-source-person').value.trim(); actor.identity.sourcePerson = actor.identity.sourcePerson && typeof actor.identity.sourcePerson === 'object' ? { ...actor.identity.sourcePerson, description } : description || null; context.changed(false); };
   $('actor-identities').onchange = () => { context.begin(); context.doc().conditioning.identityMode = $('actor-identities').checked ? 'actors' : 'scene'; context.changed(false); };
   $('color-actors').onchange = () => { context.begin(); context.doc().conditioning.colorActors = $('color-actors').checked; context.changed(); };
@@ -112,7 +151,7 @@ export function installActorsUI(options) {
   };
   $('export-keypoints').onclick = () => { const json = context.studio().poseJSON(); context.downloadBlob(new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' }), 'AnyAngle-OpenPose.json'); };
   context.selectModel = selectModel;
-  refreshCastTools = installCastTools(context); refreshActorsUI();
+  installCastTools(context); refreshActorsUI();
 }
 export function updateActorReferences(value) {
   references = value || []; renderKey = null;
@@ -165,28 +204,76 @@ export async function selectRole(id, additive = false) {
     context.refresh();
   });
 }
+function sceneEntries(doc) {
+  const entries = new Map([
+    ...(doc.actors || []).map(item => [item.id, { item, model: false }]),
+    ...(doc.props || []).map(item => [item.id, { item, model: true }]),
+  ]);
+  const ordered = [];
+  for (const id of doc.sceneOrder || []) {
+    if (entries.has(id)) { ordered.push(entries.get(id)); entries.delete(id); }
+  }
+  return [...ordered, ...entries.values()];
+}
 export function refreshActorsUI() {
   if (!context) return;
-  refreshCastTools?.();
   const doc = context.doc(), actor = activeActor(doc), human = doc.source.kind === 'human';
+  const studio = context.studio(), model = studio?.selectedModel(), entries = sceneEntries(doc);
   const identity = $('actor-reference').closest('.actor-identity');
   identity.hidden = false;
-  for (const element of identity.children) element.hidden = doc.version === 3 && element !== $('actor-description').closest('label');
+  for (const element of identity.children) element.hidden = (doc.version === 3 || !!model) && element !== $('actor-description').closest('label');
   $('actor-identities').closest('label').hidden = doc.version === 3;
   const staticGuide = doc.conditioning.promptMode !== 'custom' && ['image', 'canny-image'].includes(guideSource(doc).kind);
   $('actors-panel').classList.toggle('cast-inactive', !human);
   $('read-actor-references').hidden = doc.version === 3 || !references.length;
-  const key = JSON.stringify([human, doc.actors?.map(({ id, label, editorColor, visible, locked, identity }) => ({ id, label, editorColor, visible, locked, identity })), doc.activeActorId, doc.selectedActorIds, context.studio()?.selectedModelId, references]);
-  if (key !== renderKey || doc !== renderedDoc || (doc.actors || []).some((role,index) => role !== renderedRoles[index])) {
-    renderKey = key; renderedDoc = doc; renderedRoles = (doc.actors || []).slice(); $('actor-list').replaceChildren();
-    for (const [index, role] of (doc.actors || []).entries()) {
-      const card = document.createElement('div'); card.className = 'actor-card'; card.classList.toggle('active', role.id === doc.activeActorId && doc.selectedActorIds?.includes(role.id) && !context.studio()?.selectedModelId); card.classList.toggle('selected', !context.studio()?.selectedModelId && doc.selectedActorIds?.includes(role.id)); card.style.setProperty('--actor-color', role.editorColor);
-      const choose = button(`${String(index + 1).padStart(2, '0')}  ${role.label}`, event => { if (human) selectRole(role.id, event.ctrlKey || event.metaKey); }); choose.className = 'actor-name';
-      const controls = document.createElement('div'); controls.className = 'actor-card-actions';
-      controls.append(button(role.visible === false ? '○' : '◉', () => { context.begin(); role.visible = role.visible === false; context.studio().updateActorTransform(role); context.studio().setMode(context.studio().mode); context.changed(); }, role.visible === false ? 'Show Character' : 'Hide Character'),
-        button(role.locked ? 'Locked' : 'Lock', () => { context.begin(); role.locked = !role.locked; context.studio().setMode(context.studio().mode); context.changed(false); }, role.locked ? 'Unlock Character' : 'Lock Character'),
-        button('↑', () => { context.begin(); moveActor(doc, role.id, -1); context.changed(false); }, 'Move Layer Forward'), button('↓', () => { context.begin(); moveActor(doc, role.id, 1); context.changed(false); }, 'Move Layer Back'));
-      card.append(choose, controls); $('actor-list').append(card);
+  const key = JSON.stringify([human, entries.map(({ item: { id, label, editorColor, visible, locked, identity } }) => ({ id, label, editorColor, visible, locked, identity })), doc.activeActorId, doc.selectedActorIds, model?.id, references]);
+  if (key !== renderKey || doc !== renderedDoc || entries.some(({ item }, index) => item !== renderedRoles[index])) {
+    renderKey = key; renderedDoc = doc; renderedRoles = entries.map(({ item }) => item);
+    $('actor-list').replaceChildren();
+    for (const [index, entry] of entries.entries()) {
+      const item = entry.item;
+      const selected = model ? model.id === item.id : doc.selectedActorIds?.includes(item.id);
+      const card = document.createElement('div');
+      card.className = 'actor-card';
+      card.classList.toggle('active', !!selected && (entry.model || doc.activeActorId === item.id));
+      card.classList.toggle('selected', !!selected);
+      card.style.setProperty('--actor-color', item.editorColor || '#8da8b6');
+      const choose = button(`${String(index + 1).padStart(2, '0')}  ${item.label}`, event => {
+        if (entry.model) selectModel(item.id);
+        else selectRole(item.id, event.ctrlKey || event.metaKey);
+      });
+      choose.className = 'actor-name';
+      choose.setAttribute('aria-pressed', String(!!selected));
+      const controls = document.createElement('div');
+      controls.className = 'actor-card-actions';
+      controls.append(button(item.visible === false ? '○' : '◉', () => {
+        context.begin();
+        item.visible = item.visible === false;
+        if (entry.model) studio.updateProp(item);
+        else studio.updateActorTransform(item);
+        studio.setMode(studio.mode);
+        context.changed();
+      }, item.visible === false ? 'Show' : 'Hide'), button(item.locked ? 'Locked' : 'Lock', () => {
+        context.begin(); item.locked = !item.locked; studio.setMode(studio.mode); context.changed(false);
+      }, item.locked ? 'Unlock' : 'Lock'));
+      for (const [offset, label, title] of [[-1, '↑', 'Move Up'], [1, '↓', 'Move Down']]) {
+        const destination = index + offset;
+        const move = button(label, () => {
+          context.begin();
+          const ordered = entries.slice();
+          ordered.splice(index, 1);
+          ordered.splice(destination, 0, entry);
+          doc.sceneOrder = ordered.map(({ item }) => item.id);
+          doc.actors = ordered.filter(entry => !entry.model).map(({ item }) => item);
+          doc.props = ordered.filter(entry => entry.model).map(({ item }) => item);
+          context.changed(false);
+        }, title);
+        move.disabled = destination < 0 || destination >= entries.length;
+        controls.append(move);
+      }
+      card.inert = !human;
+      card.append(choose, controls);
+      $('actor-list').append(card);
     }
     const selector = $('actor-reference'); selector.innerHTML = '<option value="text">Text Description</option><option value="upload">Upload / Replace Photo…</option><option value="reference">Use Scene Source Image</option>';
     if (actor?.identity.asset && !actor.identity.inputKey && actor.identity.asset.name !== doc.reference?.name) selector.append(new Option('Uploaded Character Photo', 'asset'));
@@ -194,15 +281,40 @@ export function refreshActorsUI() {
     if (actor?.identity.inputKey && !references.some(ref => ref.inputKey === actor.identity.inputKey)) selector.append(new Option(`${actor.identity.inputKey} · Saved assignment`, actor.identity.inputKey));
     selector.value = actor?.identity.inputKey || (actor?.identity.asset ? actor.identity.asset.name === doc.reference?.name ? 'reference' : 'asset' : 'text');
   }
-  $('actor-count').textContent = `${(doc.actors || []).filter(role => role.visible !== false).length} / ${doc.actors?.length || 0}`;
-  const modelSelected = doc.props?.some(prop => prop.id === context.studio()?.selectedModelId);
-  const actorSelected = actor && doc.selectedActorIds?.includes(actor.id);
-  $('active-actor-controls').hidden = !actorSelected || !human || modelSelected;
-  $('clone-actor').disabled = $('delete-actor').disabled = !human || !(actorSelected || modelSelected);
+  $('actor-count').textContent = `${entries.filter(({ item }) => item.visible !== false).length} / ${entries.length}`;
+  const selected = model || (doc.selectedActorIds?.includes(actor?.id) ? actor : null);
+  $('active-actor-controls').hidden = !selected || !human;
+  $('clone-actor').disabled = $('delete-actor').disabled = !human || !selected;
+  $('model-size').hidden = $('model-rotation').hidden = $('model-rotation-actions').hidden = !model;
+  $('rotate-model').disabled = !model || model.locked || model.visible === false;
+  $('ground-actors').disabled = !!model && (model.locked || model.visible === false);
+  $('fit-actors').disabled = model?.visible === false;
+  const joints = model ? studio.modelJoints() : [];
+  const jointSelect = $('model-joint');
+  $('model-joint-row').hidden = !joints.length;
+  if (joints.length) {
+    const names = joints.map(({ bone }, index) => bone.name || 'Joint ' + (index + 1));
+    const key = JSON.stringify(names);
+    if (jointSelect.dataset.key !== key) {
+      jointSelect.dataset.key = key;
+      jointSelect.replaceChildren(new Option('Whole Model', ''), ...names.map((name, index) => new Option(name, index)));
+    }
+    jointSelect.value = String(studio.modelJoint ?? '');
+    jointSelect.disabled = $('rotate-model').disabled;
+  }
+  if (selected) {
+    $('actor-label').maxLength = model ? 255 : 48;
+    const fields = [['actor-label', selected.label], ['actor-color', selected.editorColor || '#8da8b6'],
+      ['actor-description', model ? model.description || '' : selected.identity.description]];
+    for (const key of ['x', 'y', 'z', 'yaw', 'scale', 'scaleX', 'scaleY', 'scaleZ', 'pitch', 'roll']) {
+      const id = ['scaleX', 'scaleY', 'scaleZ', 'pitch', 'roll'].includes(key) ? 'model-' + key : 'actor-' + key;
+      $(id).disabled = selected.locked;
+      fields.push([id, Number((selected.transform[key] ?? (key.startsWith('scale') ? 1 : 0)).toFixed(3))]);
+    }
+    for (const [id, value] of fields) if (document.activeElement !== $(id)) $(id).value = value;
+  }
   if (actor) {
-    for (const [id, value] of [['actor-label', actor.label], ['actor-color', actor.editorColor], ...['x', 'y', 'z', 'yaw', 'scale'].map(key => [`actor-${key}`, actor.transform[key]]), ['actor-description', actor.identity.description], ['actor-source-person', typeof actor.identity.sourcePerson === 'string' ? actor.identity.sourcePerson : actor.identity.sourcePerson?.description || '']])
-      if (document.activeElement !== $(id)) $(id).value = value;
-    for (const key of ['x', 'y', 'z', 'yaw', 'scale']) $('actor-'+key).disabled = actor.locked;
+    if (document.activeElement !== $('actor-source-person')) $('actor-source-person').value = typeof actor.identity.sourcePerson === 'string' ? actor.identity.sourcePerson : actor.identity.sourcePerson?.description || '';
     const image = $('actor-reference-preview'); image.hidden = doc.version === 3 || !actor.identity.asset;
     if (actor.identity.asset) image.src = `/anyangle-studio/assets/${encodeURIComponent(actor.identity.asset.name)}`;
     $('actor-binding-state').textContent = staticGuide ? `${doc.reference ? 'Source guidance uses the shared source image' : 'Currently using the structure guide and text'}. Character assignments take effect when you return to 3D guidance.`

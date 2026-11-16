@@ -153,6 +153,10 @@ def library_manifest(scene):
             "actors": [{"id": actor["id"], "label": actor.get("label") or actor["id"], "transform": actor.get("transform", {}), "editorColor": actor.get("editorColor"),
                         "description": actor.get("identity", {}).get("description", "")}
                        for actor in scene.get("actors", []) if not static and scene.get("source", {}).get("kind") == "human" and actor.get("visible", True)],
+            "props": [{"label": model.get("label") or model["id"], "editorColor": model.get("editorColor"),
+                       "description": model.get("description", "")}
+                      for model in scene.get("props", []) if not static and kind != "pose"
+                      and scene.get("source", {}).get("kind") == "human" and model.get("visible", True)],
             "imageCount": count, "excluded": excluded, "missing": missing, "warnings": warnings}
 
 
@@ -164,12 +168,12 @@ def library_prompt(scene, manifest):
     lines = []
     original = next((reference for reference in manifest["references"] if "scene-source" in reference.get("referenceIds", [])), None)
     anyangle = settings.get("model", "anyangle") == "anyangle"
+    kind = "coarse" if anyangle else settings.get("guide", "coarse")
     if guide and anyangle and original:
         lines.append(f"Change the camera angle from <image{guide['index']}> to <image{original['index']}>.")
     elif guide:
         instructions = {"coarse": "camera angle, composition, poses and placement", "pose": "body poses, limb directions, position and framing",
                         "depth": "spatial depth, layout and occlusion", "canny": "silhouettes, contours and major edges"}
-        kind = "coarse" if anyangle else settings.get("guide", "coarse")
         lines.append(f"Create a finished image following the {instructions[kind]} in <image{guide['index']}>. Do not render guide marks, mannequin colors or skeleton lines.")
         actors = manifest["actors"]
         if actors:
@@ -180,6 +184,12 @@ def library_prompt(scene, manifest):
                 lines.append(f"Person {index + 1}{color} in the guide is {actor['label']}.{description}")
     elif manifest["mode"] == "references-only":
         lines.append("Create one coherent finished image using the references only for their specified purposes.")
+    if guide:
+        for index, model in enumerate(manifest.get("props", []), start=1):
+            color = f" (guide color {model['editorColor']})" if kind == "coarse" and settings.get("colorActors") and model.get("editorColor") else ""
+            appearance = model["description"].strip()
+            description = f" {appearance}" if appearance else ""
+            lines.append(f"Model {index}{color} in <image{guide['index']}> is {model['label']}. Keep its size, placement and orientation.{description}")
     rules = {
         "free": "Use the relevant content as a general reference",
         "identity": "Use only the face identity and hairstyle; do not copy the clothing, pose or background",

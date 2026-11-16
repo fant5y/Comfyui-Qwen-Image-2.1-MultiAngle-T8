@@ -109,6 +109,8 @@ export function libraryManifest(scene) {
   const kind = anyangle ? 'coarse' : settings.guide || 'coarse', staticGuide = kind !== 'coarse' && (settings.map && (settings.mapKind || kind) === kind || kind === 'canny' && scene.reference && settings.mapOrigin !== 'auto');
   return { version: 2, mode, imageOrder: order, guide, references,
     actors: (scene.actors || []).filter(actor => !staticGuide && scene.source?.kind === 'human' && actor.visible !== false).map(actor => ({ id: actor.id, label: actor.label || actor.id, transform: actor.transform || {}, editorColor: actor.editorColor ?? null, description: actor.identity?.description || '' })),
+    props: (scene.props || []).filter(model => !staticGuide && kind !== 'pose' && scene.source?.kind === 'human' && model.visible !== false)
+      .map(model => ({ label: model.label || model.id, editorColor: model.editorColor ?? null, description: model.description || '' })),
     imageCount, excluded, missing: excluded.filter(entry => entry.reason.startsWith('Missing connection')).map(entry => entry.label),
     warnings: imageCount > 10 ? ['Qwen Image 2.1 recommends up to 10 images. All images will be sent. Monitor output quality and VRAM use.'] : [] };
 }
@@ -117,12 +119,12 @@ export function libraryPrompt(scene, manifest) {
   if (settings.promptMode === 'custom') return settings.customPrompt ?? '';
   const lines = [], guide = manifest.guide;
   const anyangle = (settings.model || 'anyangle') === 'anyangle';
+  const kind = anyangle ? 'coarse' : settings.guide || 'coarse';
   const original = manifest.references.find(reference => reference.referenceIds.includes('scene-source'));
   if (guide && anyangle && original) {
     lines.push(`Change the camera angle from <image${guide.index}> to <image${original.index}>.`);
   } else if (guide) {
     const instructions = { coarse: 'camera angle, composition, poses and placement', pose: 'body poses, limb directions, position and framing', depth: 'spatial depth, layout and occlusion', canny: 'silhouettes, contours and major edges' };
-    const kind = anyangle ? 'coarse' : settings.guide || 'coarse';
     lines.push(`Create a finished image following the ${instructions[kind]} in <image${guide.index}>. Do not render guide marks, mannequin colors or skeleton lines.`);
     if (manifest.actors.length) {
       lines.push(`The guide contains ${manifest.actors.length} people. Keep their identities and placements separate.`);
@@ -132,6 +134,13 @@ export function libraryPrompt(scene, manifest) {
       });
     }
   } else if (manifest.mode === 'references-only') lines.push('Create one coherent finished image using the references only for their specified purposes.');
+  if (guide) {
+    for (const [index, model] of (manifest.props || []).entries()) {
+      const color = kind === 'coarse' && settings.colorActors && model.editorColor ? ` (guide color ${model.editorColor})` : '';
+      const appearance = model.description.trim();
+      lines.push(`Model ${index + 1}${color} in <image${guide.index}> is ${model.label}. Keep its size, placement and orientation.${appearance ? ` ${appearance}` : ''}`);
+    }
+  }
   const rules = { free: 'Use the relevant content as a general reference', identity: 'Use only the face identity and hairstyle; do not copy the clothing, pose or background',
     clothing: "Use only the clothing design; do not copy the model's identity, pose or background", accessory: 'Use only the accessory or product design; do not add people from this reference',
     scene: 'Use the environment and background; do not add people from this reference', style: 'Use the visual style, lighting and color palette; do not copy the subject or pose', layout: 'Use the arrangement and composition; do not copy subject identities',

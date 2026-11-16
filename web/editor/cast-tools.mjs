@@ -1,7 +1,7 @@
 import { editableActors, bindActor } from './actors.mjs?v=20261116en';
-import { PRESETS } from './scene.mjs?v=20261116sceneselection';
+import { PRESETS } from './scene.mjs?v=20261116sharedscene';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { detachTargets } from './reference-library.mjs?v=20261116en';
+import { detachTargets } from './reference-library.mjs?v=20261116sharedscene';
 
 const $ = id => document.getElementById(id);
 export function installCastTools(context) {
@@ -52,108 +52,5 @@ export function installCastTools(context) {
   });
   file.onchange = ()=>{const chosen=file.files[0];file.value='';if(!chosen)return;
     mutate(async()=>{if(context.doc().source.kind!=='human')throw new Error('Switch to a mannequin scene before importing props.');const asset=await context.upload(chosen);const prop={id:`prop-${uuid()}`,label:chosen.name,asset,transform:{x:0,y:0,z:-5,scale:1,yaw:0},visible:true,locked:false};context.doc().props||=[];context.doc().props.push(prop);await context.studio().restoreProps();context.selectModel(prop.id);});
-  };
-  function render() {
-    const list = $('prop-list');
-    const studio = context.studio();
-    const controls = $('model-controls');
-    list.replaceChildren();
-    controls.replaceChildren();
-    controls.hidden = true;
-    const actionButton = (label, action, tooltip = label) => {
-      const button = document.createElement('button'); button.textContent = label; button.title = tooltip;
-      button.setAttribute('aria-label', tooltip); button.onclick = action; return button;
-    };
-    const doc = context.doc(), props = doc.props || [];
-    for (const [index, prop] of props.entries()) {
-      const selected = studio?.selectedModelId === prop.id;
-      const card = document.createElement('div'); card.className = 'actor-card';
-      card.style.setProperty('--actor-color', '#8da8b6');
-      card.classList.toggle('active', selected);
-      const title = document.createElement('button'); title.className = 'actor-name'; title.textContent = `${String((doc.actors?.length || 0) + index + 1).padStart(2, '0')}  ${prop.label}`;
-      title.setAttribute('aria-pressed', String(selected)); title.onclick = () => context.selectModel(prop.id);
-      const actions = document.createElement('div'); actions.className = 'actor-card-actions';
-      const visible = prop.visible !== false;
-      actions.append(actionButton(visible ? '◉' : '○', () => mutate(() => {
-        prop.visible = !visible; studio.updateProp(prop); studio.setMode(studio.mode);
-      }), visible ? 'Hide Model' : 'Show Model'));
-      actions.append(actionButton(prop.locked ? 'Locked' : 'Lock', () => mutate(() => {
-        prop.locked = !prop.locked; studio.setMode(studio.mode);
-      }), prop.locked ? 'Unlock Model' : 'Lock Model'));
-      for (const [offset, label, tooltip] of [[-1, '↑', 'Move Layer Forward'], [1, '↓', 'Move Layer Back']]) {
-        const destination = index + offset;
-        const move = actionButton(label, () => {
-          context.begin();
-          props.splice(index, 1);
-          props.splice(destination, 0, prop);
-          context.changed(false);
-        }, tooltip);
-        move.disabled = destination < 0 || destination >= props.length;
-        actions.append(move);
-      }
-      card.append(title, actions); list.append(card);
-    }
-    const prop = studio?.selectedModel();
-    if (!prop) return;
-    controls.hidden = false;
-    const inspector = controls;
-    const name = document.createElement('label'), nameInput = document.createElement('input');
-    nameInput.value = prop.label; nameInput.maxLength = 255;
-    nameInput.onchange = () => {
-      const label = nameInput.value.trim();
-      if (!label || label === prop.label) { nameInput.value = prop.label; return; }
-      context.begin(); prop.label = label; context.changed(false);
-    };
-    name.append('Name', nameInput); inspector.append(name);
-    const addFields = (className, fields) => {
-      const group = document.createElement('div'); group.className = className;
-      for (const [key, label, step] of fields) {
-        const row = document.createElement('label'), input = document.createElement('input');
-        input.type = 'number'; input.step = step; input.disabled = prop.locked;
-        const displayValue = () => Number((prop.transform[key] ?? 0).toFixed(3));
-        input.value = displayValue();
-        input.onchange = () => {
-          const value = input.valueAsNumber;
-          if (!Number.isFinite(value) || key === 'scale' && value <= 0) { input.value = displayValue(); return; }
-          if (value === displayValue()) return;
-          context.begin(); prop.transform[key] = value; studio.updateProp(prop); context.changed();
-        };
-        row.append(label, input); group.append(row);
-      }
-      inspector.append(group);
-    };
-    addFields('actor-position', [['x', 'X', '.1'], ['y', 'Y', '.1'], ['z', 'Z', '.1']]);
-    addFields('dimensions', [['yaw', 'Facing °', '1'], ['scale', 'Scale', '.01']]);
-    addFields('dimensions', [['pitch', 'Pitch °', '1'], ['roll', 'Roll °', '1']]);
-    const actions = document.createElement('div'); actions.className = 'compact-actions';
-    const rotate = actionButton('Rotate in Viewport', () => context.editScene());
-    rotate.disabled = prop.locked || prop.visible === false;
-    const ground = actionButton('Ground Selected', () => mutate(() => studio.groundModel(prop)));
-    ground.disabled = rotate.disabled;
-    const fit = actionButton('Fit Selected', () => mutate(() => studio.fit(true)));
-    fit.disabled = prop.visible === false;
-    actions.append(ground, fit, rotate);
-    inspector.append(actions);
-    const joints = studio.modelJoints();
-    if (joints.length) {
-      const label = document.createElement('label'), select = document.createElement('select');
-      select.append(new Option('Whole Model', ''));
-      joints.forEach(({ bone }, index) => select.append(new Option(bone.name || 'Joint ' + (index + 1), String(index))));
-      select.value = String(studio.modelJoint ?? '');
-      select.disabled = rotate.disabled;
-      select.onchange = () => {
-        studio.finishDrag();
-        studio.modelJoint = select.value === '' ? null : Number(select.value);
-        context.editScene();
-      };
-      label.append('Rotation Target', select); inspector.append(label);
-    }
-  }
-  let key, renderedDoc, renderedProps = [];
-  return () => {
-    const doc = context.doc(), props = doc.props || [], next = JSON.stringify([context.studio()?.selectedModelId, doc.actors?.length, props]);
-    if (next !== key || doc !== renderedDoc || props.some((prop, i) => prop !== renderedProps[i])) {
-      key = next; renderedDoc = doc; renderedProps = props.slice(); render();
-    }
   };
 }

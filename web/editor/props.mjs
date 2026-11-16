@@ -27,7 +27,7 @@ export function disposeProp(root) {
   }); root.removeFromParent();
 }
 export function placeProp(root, prop, enabled = true) {
-  const t = prop.transform; root.position.set(t.x,t.y,t.z); root.scale.setScalar(t.scale); root.rotation.set(THREE.MathUtils.degToRad(t.pitch ?? 0), THREE.MathUtils.degToRad(t.yaw),
+  const t = prop.transform; root.position.set(t.x,t.y,t.z); root.scale.set(t.scale * (t.scaleX ?? 1), t.scale * (t.scaleY ?? 1), t.scale * (t.scaleZ ?? 1)); root.rotation.set(THREE.MathUtils.degToRad(t.pitch ?? 0), THREE.MathUtils.degToRad(t.yaw),
     THREE.MathUtils.degToRad(t.roll ?? 0), "YXZ");
   root.userData.joints.forEach(({ bone, rest }, index) => {
     const rotation = prop.jointRotations?.[index];
