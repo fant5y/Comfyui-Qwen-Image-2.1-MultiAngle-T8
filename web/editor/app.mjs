@@ -179,7 +179,7 @@ async function renderPreview() {
 function refresh() {
   if (studio && (doc.source.kind === 'splat' || doc.source.kind === 'empty') &&
       (studio.mode !== 'camera' || $('#edit-mode').classList.contains('active'))) setMode('camera');
-  if (linkedReference.connected) doc.reference = linkedReference.asset || null;
+  if (linkedReference.asset) doc.reference = linkedReference.asset;
   const guide = currentGuide(), base = doc.conditioning.model === 'base', input = guideSource(doc);
   const manifest = buildManifest(doc), multi = actorMode(doc);
   const castMapping = doc.source.kind === 'human' && doc.conditioning.identityMode === 'actors' && base;
@@ -1317,7 +1317,7 @@ async function start(token, reference = { connected: false }, structure = { conn
     linkedStructure = structure;
     unwiredAnyAngle = needsWiring;
     const referenceChanged = reference.connected && !!reference.asset && reference.asset.name !== doc.reference?.name;
-    if (reference.connected) { const previous = doc.reference; doc.reference = reference.asset || null; sourceChanged(doc, previous); }
+    if (reference.asset) { const previous = doc.reference; doc.reference = reference.asset; sourceChanged(doc, previous); }
     if (doc.version !== 3 && doc.source.kind === 'splat' && doc.source.reference?.name !== doc.reference?.name) doc.source = { kind: 'empty' };
     studio = new StudioScene($('#viewport'), { begin, change: changed, camera: () => { revision++; refresh(); schedulePreview(); $('#status').textContent = 'Camera draft · Apply to save'; $('#status').dataset.state = 'dirty'; }, pick: selectRole, select: (name, updateControls = true) => {
       selectedBone = name || '';
@@ -1338,7 +1338,6 @@ async function start(token, reference = { connected: false }, structure = { conn
     $('#status').dataset.state = snapshot ? 'saved' : 'dirty';
     if (referenceChanged) { $('#status').textContent = 'Connected source updated · Apply to save it to the scene'; $('#status').dataset.state = 'dirty'; }
     setBusy(false); await renderPreview();
-    if (requiresGuide() && doc.reference && doc.source.kind === 'empty' && currentGuide() === 'coarse') await run(reconstructPhoto);
   } catch (e) { showLoadError(e); error(e); }
 }
 function readPendingReference() {
@@ -1406,7 +1405,10 @@ if (embedded) {
     if (event.source !== parent || event.origin !== location.origin || event.data?.session !== session) return;
     if (event.data.type === 'anyangle-load' && !started) {
       started = true; await start(event.data.snapshot, event.data.reference, event.data.structure, event.data.unwiredAnyAngle, event.data.initialSettings);
-      pendingActors = { actorReferences: event.data.actorReferences, error: event.data.inputError }; readPendingActors();
+      if (!ready) return;
+      setReferenceConnections(event.data.actorReferences);
+      if (event.data.inputError) toast(event.data.inputError);
+      refresh();
       $('#read-pose-keypoints').hidden = !event.data.keypointsConnected;
       $('#read-animal-keypoints').hidden = !event.data.keypointsConnected;
     } else if (event.data.type === 'anyangle-actors' && ready) {

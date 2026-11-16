@@ -7,7 +7,7 @@ import { promptForSnapshot } from './batch-queue.mjs?v=20261116en';
 let graphRevision = 0;
 let closeActive = null;
 const extensionURL = new URL('./editor/index.html', import.meta.url);
-extensionURL.searchParams.set('v', '20261116limbbend');
+extensionURL.searchParams.set('v', '20261116manualread');
 
 function openEditor(node, widget) {
   closeActive?.();
@@ -61,7 +61,7 @@ function openEditor(node, widget) {
       sameSignature = !!plan && plan.signature === previousSignature;
       referenceSignature = plan?.signature || null;
       if (!plan) reference = { connected: false };
-      else if (plan.filename || execute) {
+      else if (execute) {
         if (!sameSignature) reference = { connected: true, pending: true };
         send('anyangle-reference', { reference: { ...reference, message: plan.filename ? 'Reading connected source image…' : 'Running upstream nodes for the reference image…' } });
         // Use ComfyUI's decoder for direct images too: JPEG decoding can differ
@@ -70,7 +70,7 @@ function openEditor(node, widget) {
         if (!valid()) return;
         if ((await getPlan())?.signature !== plan.signature) throw new Error('The upstream connection changed. Read the image again.');
         reference = { connected: true, asset, message: 'Connected IMAGE · First image' };
-      } else reference = { connected: true, message: 'Read the upstream image to run the nodes needed to retrieve it.' };
+      } else reference = { connected: true, message: 'Read the connected source image to update the scene.' };
     } catch (error) {
       reference = { connected, ...(sameSignature && previous.asset ? { asset: previous.asset } : {}),
         pending: false, error: error.message, message: error.message };
@@ -89,7 +89,7 @@ function openEditor(node, widget) {
       sameSignature = !!plan && plan.signature === previousSignature;
       structureSignature = plan?.signature || null;
       if (!plan) structure = { connected: false };
-      else if (plan.filename || execute) {
+      else if (execute) {
         if (!sameSignature) structure = { connected: true, pending: true };
         send('anyangle-structure', { structure: { ...structure, message: 'Reading connected structure guide…' } });
         const asset = await executeReference(plan, valid);
@@ -113,7 +113,7 @@ function openEditor(node, widget) {
     for (const { inputKey, plan } of plans) {
       let asset = actorSignatures.get(inputKey) === plan.signature ? previous.get(inputKey)?.asset : null;
       let batch = asset ? previous.get(inputKey) : null, readError = null;
-      try { if ((!asset || execute) && (plan.filename || execute)) { batch = await executeReference(plan, valid, 'batch'); asset = batch?.asset; } }
+      try { if (execute) { batch = await executeReference(plan, valid, 'batch'); asset = batch?.asset; } }
       catch (error) { readError = error.message; asset = null; batch = null; }
       if (!valid()) return;
       result.push({ inputKey, asset, assets: batch?.assets, batchCount: batch?.batchCount || 1, error: readError, message: readError || (asset ? 'Connected IMAGE · First image' : 'Read the references to run their upstream nodes.') });
