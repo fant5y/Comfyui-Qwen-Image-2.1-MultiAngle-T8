@@ -11,8 +11,8 @@ import { SplatScene } from './splat.mjs?v=20261116en';
 import { capturePNG } from './capture.mjs?v=20261116en';
 import { liftOpenPose, copyVisiblePose, WORLD_KEYPOINT_NAMES, ORDER, LIMBS, COLORS } from './openpose.mjs?v=20261116en';
 import { createActor, ensureActors, activeActor, bindActor, saveActor, visibleActors } from './actors.mjs?v=20261116en';
-import { loadProp, disposeProp, placeProp } from './props.mjs?v=20261116referenceroles';
-import { emptyLibrary } from './reference-library.mjs?v=20261116referenceroles';
+import { loadProp, disposeProp, placeProp } from './props.mjs?v=20261116canvasprompt';
+import { emptyLibrary, canvasBackgroundAsset } from './reference-library.mjs?v=20261116canvasprompt';
 
 export const PRESETS = [
   { name: 'Natural Stand', bones: { upperarm_l: [0, 0, -8], upperarm_r: [0, 0, 8] } },
@@ -171,7 +171,8 @@ export class StudioScene {
     });
     this.cameraClips = [this.viewer.camera, this.viewer.captureCamera].map(camera => ({ near: camera.near, far: camera.far }));
     this.viewer.setDirectionalSkydomeVisible(false);
-    this.viewer.scene.background = new THREE.Color('#171f28');
+    this.workspaceBackground = new THREE.Color('#171f28');
+    this.viewer.scene.background = this.workspaceBackground;
     this.viewer.camera.fov = 38;
     this.viewer.updateLights([{ type: 'ambient', color: '#ffffff', intensity: 1.3 },
       { type: 'directional', color: '#ffffff', intensity: 1.7, x: 8, y: 20, z: 18 }]);
@@ -208,6 +209,40 @@ export class StudioScene {
     const { width, height } = this.canvas.parentElement.getBoundingClientRect();
     this.viewer.resize(Math.max(1, width), Math.max(1, height));
     if (this.mode === 'camera' && this.baseTarget) this.updateShot();
+    this.showCanvasBackground();
+  }
+
+  updateCanvasBackground() {
+    const name = canvasBackgroundAsset(this.doc)?.name;
+    if (name === this.backgroundName) return this.backgroundLoad;
+    this.backgroundName = name;
+    this.backgroundTexture?.dispose();
+    this.backgroundTexture = null;
+    this.showCanvasBackground();
+    const pending = name ? new THREE.TextureLoader().loadAsync(assetURL(name)).then(texture => {
+      // A reference may be replaced or removed while the image is loading.
+      if (this.disposed || this.backgroundLoad !== pending) { texture.dispose(); return null; }
+      texture.colorSpace = THREE.SRGBColorSpace;
+      this.backgroundTexture = texture;
+      this.showCanvasBackground();
+      return texture;
+    }).catch(() => null) : null;
+    this.backgroundLoad = pending;
+    return pending;
+  }
+
+  fitBackground(texture, aspect) {
+    const imageAspect = texture.image.width / texture.image.height;
+    const x = Math.min(1, aspect / imageAspect), y = Math.min(1, imageAspect / aspect);
+    texture.repeat.set(x, y);
+    texture.offset.set((1 - x) / 2, (1 - y) / 2);
+  }
+
+  showCanvasBackground() {
+    if (!this.workspaceBackground || this.capturing || this.disposed) return;
+    if (this.backgroundTexture) this.fitBackground(this.backgroundTexture, this.viewer.camera.aspect);
+    this.viewer.scene.background = this.backgroundTexture || this.workspaceBackground;
+    this.viewer.requestRender();
   }
 
   buildHuman(pose, actor = activeActor(this.doc)) {
@@ -616,15 +651,18 @@ export class StudioScene {
   }
 
   async capture(width = this.doc.width, height = this.doc.height, options = {}) {
-    if (this.doc.source.kind === 'empty') throw new Error('Rebuild the source subject or import its 3D scene first.');
+    const backgroundAsset = !options.depth && !options.canny && !options.actorIds && canvasBackgroundAsset(this.doc);
+    const backgroundTexture = backgroundAsset ? await this.updateCanvasBackground() : null;
+    if (backgroundAsset && !backgroundTexture) throw new Error('Could not load the canvas background. Replace or clear the reference image.');
+    if (this.doc.source.kind === 'empty' && !backgroundTexture) throw new Error('Rebuild the source subject or import its 3D scene first.');
     await this.waitForCaptureReady();
     const v = this.viewer;
     const content = this.splat?.root || this.animal?.root || (this.doc.source.kind === 'glb' ? this.glb : v.skinnedMesh);
-    if (!content) throw new Error('The scene has no renderable assets.');
+    if (!content && !backgroundTexture) throw new Error('The scene has no renderable assets.');
     const contents = this.doc.source.kind === 'human' && this.actorRoots?.size
       ? [...(options.actorIds ? this.doc.actors.filter(actor => options.actorIds.includes(actor.id)) : visibleActors(this.doc)).map(actor => this.actorRoots.get(actor.id)),
-        ...(!options.actorIds ? (this.doc.props || []).filter(prop=>prop.visible!==false).map(prop=>this.propRoots.get(prop.id)) : [])].filter(Boolean) : [content];
-    if (!contents.length) throw new Error('Make at least one character visible.');
+        ...(!options.actorIds ? (this.doc.props || []).filter(prop=>prop.visible!==false).map(prop=>this.propRoots.get(prop.id)) : [])].filter(Boolean) : this.doc.source.kind === 'empty' ? [] : [content].filter(Boolean);
+    if (!contents.length && !backgroundTexture) throw new Error('Make at least one character visible.');
     if (options.depth && this.splat) throw new Error('Use DA3 source depth for a TripoSplat reconstruction.');
     const visibility = v.scene.children.map(object => [object, object.visible]);
     // VNCCS attaches joint markers below the skinned mesh, not just to the scene.
@@ -635,7 +673,7 @@ export class StudioScene {
     const background = v.scene.background;
     const overrideMaterial = v.scene.overrideMaterial;
     const actorColors = [];
-    let depthMaterial = null, cannyMaterial = null;
+    let depthMaterial = null, cannyMaterial = null, captureBackground = null;
     this.capturing = true;
     let restoreSplat = null;
     try {
@@ -652,6 +690,12 @@ export class StudioScene {
       for (const [object] of visibility) object.visible = contents.includes(object) || !!object.isLight;
       for (const [object] of nestedHelpers) object.visible = false;
       v.scene.background = new THREE.Color(this.doc.background);
+      if (backgroundTexture) {
+        captureBackground = backgroundTexture.clone();
+        if (this.splat) captureBackground.colorSpace = THREE.NoColorSpace;
+        this.fitBackground(captureBackground, width / height);
+        v.scene.background = captureBackground;
+      }
       if (this.doc.source.kind === 'human' && this.doc.conditioning?.colorActors !== true) {
         for (const actor of visibleActors(this.doc)) for (const material of this.animalActors.get(actor.id)?.colors.slice(0, 1) || [].concat(this.actorMesh(actor.id)?.material || [])) {
           if (material.color) { actorColors.push([material, material.color.clone()]); material.color.set('#e3e9ee'); }
@@ -697,7 +741,7 @@ export class StudioScene {
       }
       // The bundled splat shader writes already encoded RGB, unlike Three's
       // standard mesh materials. Preserve those colors and its background.
-      if (this.splat) v.scene.background.convertLinearToSRGB();
+      if (this.splat && v.scene.background.isColor) v.scene.background.convertLinearToSRGB();
       v.scene.updateMatrixWorld(true);
       v.skeleton?.update();
       return capturePNG(v.renderer, v.scene, camera, width, height,
@@ -706,10 +750,10 @@ export class StudioScene {
       for (const [object, visible] of visibility) object.visible = visible;
       for (const [object, visible] of nestedHelpers) object.visible = visible;
       v.scene.background = background;
-      v.scene.overrideMaterial = overrideMaterial; depthMaterial?.dispose(); cannyMaterial?.dispose();
+      v.scene.overrideMaterial = overrideMaterial; depthMaterial?.dispose(); cannyMaterial?.dispose(); captureBackground?.dispose();
       for (const [material, color] of actorColors) material.color.copy(color);
       try { restoreSplat?.(); }
-      finally { this.capturing = false; this.updateShot(); }
+      finally { this.capturing = false; this.showCanvasBackground(); this.updateShot(); }
     }
   }
 
@@ -1237,6 +1281,8 @@ export class StudioScene {
     // GLB props, the main GLB and line helpers remain attached: the viewer owns
     // their final disposal and deduplicates shared geometry/material/texture.
     this.propRoots?.clear();
+    if (this.viewer.scene?.background === this.backgroundTexture) this.viewer.scene.background = this.workspaceBackground;
+    this.backgroundTexture?.dispose();
     this.viewer.dispose();
     this.glb = null; this.glbName = null;
     this.grid = this.ring = this.photoFrame = this.shotHelper = null;

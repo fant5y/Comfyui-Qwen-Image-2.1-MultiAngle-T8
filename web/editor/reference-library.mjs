@@ -4,6 +4,9 @@ export const USES = { free: 'General Reference', character: 'Character Appearanc
 const copy = value => JSON.parse(JSON.stringify(value));
 const uid = prefix => `${prefix}-${uuid()}`;
 export const emptyLibrary = () => ({ version: 1, mode: 'guided', items: [], firstReferenceId: null, firstResolution: 0, templates: [] });
+export function canvasBackgroundAsset(scene) {
+  return scene.referenceLibrary?.items?.find(item => item.id === scene.backgroundReferenceId && !item.missing)?.asset;
+}
 export function newUse(kind = 'free', target = { kind: 'scene', ids: [], text: '' }) {
   return { id: uid('use'), kind, target: copy(target), enabled: true, sourceText: '', instruction: '' };
 }
@@ -141,15 +144,19 @@ export function libraryPrompt(scene, manifest) {
       lines.push(`Model ${index + 1}${color} in <image${guide.index}> is ${model.label}. Keep its size, placement and orientation.${appearance ? ` ${appearance}` : ''}`);
     }
   }
+  for (const reference of manifest.references) for (const use of reference.usages || [])
+    lines.push(referencePromptLine(reference.index, use));
+  if (settings.promptExtra?.trim()) lines.push(settings.promptExtra.trim());
+  return lines.join('\n');
+}
+
+export function referencePromptLine(index, use) {
   const rules = { free: 'Use the relevant content as a general reference',
     character: 'Use the depicted character’s appearance, hairstyle, clothing and accessories; follow the scene composition and leave out the reference background', identity: 'Use only the face identity and hairstyle; do not copy the clothing, pose or background',
     clothing: "Use only the clothing design; do not copy the model's identity, pose or background", accessory: 'Use only the accessory or product design; do not add people from this reference',
     scene: 'Use the environment and background; do not add people from this reference', style: 'Use the visual style, lighting and color palette; do not copy the subject or pose', layout: 'Use the arrangement and composition; do not copy subject identities',
     pose: 'Use only the body pose, limb directions and gesture; do not copy the face, body shape, clothing, background or drawing style' };
-  for (const reference of manifest.references) for (const use of reference.usages || []) {
-    const source = use.sourceText?.trim() ? ` Source content: ${use.sourceText.trim()}.` : '', extra = use.instruction?.trim() ? ` ${use.instruction.trim()}` : '';
-    lines.push(`<image${reference.index}>: ${rules[use.kind]} for ${use.targetText}.${source}${extra}`);
-  }
-  if (settings.promptExtra?.trim()) lines.push(settings.promptExtra.trim());
-  return lines.join('\n');
+  const source = use.sourceText?.trim() ? ` Source content: ${use.sourceText.trim()}.` : '';
+  const extra = use.instruction?.trim() ? ` ${use.instruction.trim()}` : '';
+  return `<image${index}>: ${rules[use.kind]} for ${use.targetText}.${source}${extra}`;
 }

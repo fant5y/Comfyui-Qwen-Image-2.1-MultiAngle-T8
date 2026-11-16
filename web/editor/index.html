@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AnyAngle Studio · T8</title><link rel="stylesheet" href="./style.css?v=20261116bodyrange"><link rel="stylesheet" href="./references.css?v=20261116sources"><link rel="stylesheet" href="./pose-library.css?v=20261029v180"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AnyAngle Studio · T8</title><link rel="stylesheet" href="./style.css?v=20261116bodyrange"><link rel="stylesheet" href="./references.css?v=20261116canvasprompt"><link rel="stylesheet" href="./pose-library.css?v=20261029v180"></head>
 <body>
 <header class="topbar">
   <div class="brand"><img src="../icons/aperture.svg" alt=""><strong>ANYANGLE</strong><span>STUDIO</span><small title="Studio version">T8 · v1.8.0</small></div>
@@ -83,7 +83,6 @@
       <div class="prompt-options">
         <label>Prompt Mode<select id="prompt-mode"><option value="default">Two-Image Template · Default</option><option value="single">Guide Image Only</option><option value="custom">Custom Prompt</option></select></label>
         <label><span id="prompt-label">Additional Description</span><textarea id="prompt-editor" rows="8" maxlength="16000" aria-describedby="prompt-mode-hint"></textarea></label>
-        <button type="button" id="edit-generated-prompt">Edit Generated Prompt</button>
         <button type="button" id="reset-prompt" title="Restore the automatic template and clear prompt edits">Reset to Default</button>
         <p id="prompt-mode-hint" class="hint"></p>
         <details id="prompt-output"><summary>Generated Prompt</summary><code id="prompt-preview"></code></details>
@@ -123,5 +122,5 @@
 <input type="file" id="reference-file" accept="image/*" hidden><input type="file" id="glb-file" accept=".glb" hidden><input type="file" id="pose-file" accept=".json,application/json" hidden><input type="file" id="openpose-file" accept="image/png,image/jpeg,image/webp,.json,application/json" hidden><input type="file" id="map-file" accept="image/*" hidden>
 <input type="file" id="scene-file" accept=".zip,application/zip" hidden>
 <dialog id="people-dialog" class="people-dialog"><form method="dialog"><div class="section-heading"><h2>Copy Multiple Poses from a Photo</h2><button value="cancel" formnovalidate>Cancel</button></div><p id="people-count" class="hint"></p><div class="people-picker"><div class="people-image"><img id="people-photo" alt="Pose Source Photo"><div id="people-overlay"></div></div><div id="people-choices"></div></div><label class="option-toggle"><input id="people-match-layout" type="checkbox" checked><span>Match positions to the photo and fit the full scene</span></label><label class="option-toggle"><input id="people-bind-photo" type="checkbox"><span>Also assign this photo as an identity reference<small>Leave off to copy poses only</small></span></label><div class="compact-actions"><button value="current">Copy One Pose to Current Character</button><button value="all" class="primary">Create Selected Characters</button></div></form></dialog>
-<script type="module" src="./app.mjs?v=20261116referenceroles"></script>
+<script type="module" src="./app.mjs?v=20261116canvasprompt"></script>
 </body></html>

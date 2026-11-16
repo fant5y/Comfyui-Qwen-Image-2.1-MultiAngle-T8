@@ -1,20 +1,20 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116referenceroles';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116canvasprompt';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116referenceroles';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116referenceroles';
+import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261116canvasprompt';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116canvasprompt';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116referenceroles';
-import { installGalleryActions } from './gallery-actions.mjs?v=20261116referenceroles';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116canvasprompt';
+import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116referenceroles';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116canvasprompt';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
-import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116referenceroles';
+import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116canvasprompt';
 
 const $ = selector => document.querySelector(selector);
 const clone = value => structuredClone(value);
@@ -127,7 +127,7 @@ function hasGuide() {
   const source = guideSource(doc);
   return source.kind === 'image' || source.kind === 'canny-image' || source.kind === 'canny-scene'
     || source.kind === 'depth-scene'
-    || source.kind === 'pose' && doc.source.kind === 'human' && doc.actors.some(actor => actor.visible !== false && actor.source.kind !== 'animal') || source.kind === 'scene' && doc.source.kind !== 'empty';
+    || source.kind === 'pose' && doc.source.kind === 'human' && doc.actors.some(actor => actor.visible !== false && actor.source.kind !== 'animal') || source.kind === 'scene' && (doc.source.kind !== 'empty' || !!canvasBackgroundAsset(doc));
 }
 function applyDisabled() {
   return busy || !ready || !hasGuide() || !!linkedReference.pending;
@@ -142,7 +142,7 @@ function setBusy(value) {
   if (!value && pendingKeypoints) queueMicrotask(readPendingKeypoints);
 }
 function canvasHasObjects() {
-  return doc.source.kind !== 'empty' || !!(doc.actors?.length || doc.props?.length);
+  return doc.source.kind !== 'empty' || !!(doc.actors?.length || doc.props?.length || doc.backgroundReferenceId);
 }
 async function run(task) {
   if (busy) return;
@@ -259,7 +259,7 @@ function refresh() {
     $(`#${id}`).classList.toggle('active', active); $(`#${id}`).setAttribute('aria-pressed', String(active));
   }
   $('#view-scene').hidden = staticGuide || guide === 'depth' && input.kind !== 'depth-scene';
-  $('#view-scene').disabled = doc.source.kind === 'empty';
+  $('#view-scene').disabled = doc.source.kind === 'empty' && !canvasBackgroundAsset(doc);
   $('#lens-panel').hidden = staticGuide;
   $('#mouse-pitch').closest('section').hidden = staticGuide;
   $('#lens-mode').value = doc.camera.focalLength ? 'custom' : 'original';
@@ -352,7 +352,7 @@ function refresh() {
   $('#empty-scene').hidden = !empty;
   $('#coarse-inputs').hidden = guide !== 'coarse';
   $('#extract-coarse').disabled = !doc.reference || !!linkedReference.pending;
-  $('#preview-coarse').disabled = empty;
+  $('#preview-coarse').disabled = empty && !canvasBackgroundAsset(doc);
   $('#coarse-status').textContent = splat ? doc.source.keep_background ? 'Reconstruction with background is ready. Preview it or adjust the camera. Large scenes are experimental.' : 'The reconstructed subject is ready. Preview it or adjust the camera.'
     : animal ? 'Render a guide from the animal’s current pose and camera angle.'
     : human ? 'The scene uses a posable mannequin. Rebuild the source to render its subject.'
@@ -414,12 +414,12 @@ function refresh() {
   $('#image-order-row').hidden = promptMode === 'single';
   const customPrompt = promptMode === 'custom';
   const promptEditor = $('#prompt-editor');
-  $('#prompt-label').textContent = customPrompt ? 'Full Prompt' : 'Additional Description';
-  promptEditor.placeholder = customPrompt ? 'Enter the full prompt' : 'Describe characters, setting, clothing, and style';
-  const promptText = doc.conditioning[customPrompt ? 'customPrompt' : 'promptExtra'] ?? '';
+  const unifiedPrompt = doc.version === 3;
+  $('#prompt-label').textContent = customPrompt || unifiedPrompt ? 'Full Prompt' : 'Additional Description';
+  promptEditor.placeholder = customPrompt || unifiedPrompt ? 'Enter the full prompt' : 'Describe characters, setting, clothing, and style';
+  const promptText = unifiedPrompt ? scenePrompt(doc, manifest) : doc.conditioning[customPrompt ? 'customPrompt' : 'promptExtra'] ?? '';
   if (promptEditor.value !== promptText) promptEditor.value = promptText;
-  $('#prompt-output').hidden = customPrompt;
-  $('#edit-generated-prompt').hidden = customPrompt;
+  $('#prompt-output').hidden = customPrompt || unifiedPrompt;
   $('#reset-prompt').disabled = promptMode === 'default' && !doc.conditioning.customPrompt && !doc.conditioning.promptExtra;
   $('#image-wiring').textContent = promptMode === 'single' ? 'Current guide → image_1. Use Additional Description for characters, setting, and style.'
     : `Source → image_${3 - imageIndex} · Current guide → image_${imageIndex}. Update the encoder connections if you change the order.`;
@@ -500,6 +500,7 @@ function refresh() {
   for (const axis of ['x', 'y', 'z']) controls.get(`bone-${axis}`)?.refresh();
   refreshActorsUI();
   refreshReferencesUI();
+  studio?.updateCanvasBackground();
 }
 
 function animalJointLabel(name) {
@@ -718,17 +719,10 @@ $('#prompt-editor').onblur = () => { editingPrompt = false; };
 $('#prompt-editor').oninput = event => {
   if (!editingPrompt) begin();
   editingPrompt = true;
+  if (doc.version === 3) doc.conditioning.promptMode = 'custom';
   const key = doc.conditioning.promptMode === 'custom' ? 'customPrompt' : 'promptExtra';
   doc.conditioning[key] = event.target.value;
   changed(false);
-};
-$('#edit-generated-prompt').onclick = () => {
-  const generated = $('#prompt-preview').textContent;
-  begin();
-  doc.conditioning.customPrompt = generated;
-  doc.conditioning.promptMode = 'custom';
-  changed();
-  $('#prompt-editor').focus();
 };
 $('#reset-prompt').onclick = () => {
   begin();
@@ -1507,7 +1501,7 @@ $('#clear-canvas').onclick = () => run(async () => {
   if (!canvasHasObjects()) return;
   const rollback = begin(), previous = doc;
   const defaults = defaultScene();
-  doc = { ...doc, source: defaults.source, actors: [], props: [], sceneOrder: [], contacts: [], activeActorId: null,
+  doc = { ...doc, source: defaults.source, actors: [], props: [], sceneOrder: [], contacts: [], activeActorId: null, backgroundReferenceId: null,
     selectedActorIds: [], cameraTarget: null, mesh: defaults.mesh, pose: defaults.pose, front: 0, scale: 1,
     sourceStale: false, derivedGuideStale: false, derivedGuideSource: null, openpose: null,
     conditioning: { ...doc.conditioning, guide: 'coarse', map: null, mapKind: null, mapOrigin: 'auto' } };
@@ -1666,6 +1660,7 @@ installActorsUI({ doc: () => doc, replace: value => { doc = value; }, studio: ()
   placeScene: () => { previewVisible = false; setMode('position'); },
   editScene: () => { previewVisible = false; setMode('edit'); refresh(); } });
 installReferencesUI({ doc: () => doc, sourceConnected: () => linkedReference.connected, run, begin, changed, askName, upload, send, toast,
+  addCharacter,
   clearSource: () => run(clearSourceImage),
   setSource: asset => run(async () => {
     if (linkedReference.connected || !asset?.name || doc.reference?.name === asset.name) return;

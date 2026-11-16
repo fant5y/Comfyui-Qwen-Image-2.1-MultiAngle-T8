@@ -254,8 +254,15 @@ class StudioStore:
         if not no_guide and model == "base" and guide_mode == "pose" and source_kind != "human" and not (
                 conditioning.get("map") and conditioning.get("mapKind") == "pose"):
             raise ValueError("OpenPose guide requires a pose image or human mannequin")
-        if not no_guide and source_kind == "empty" and not (model == "base" and guide_mode in ("pose", "depth", "canny") and
-                                           (conditioning.get("map") or scene.get("reference"))):
+        background_id = scene.get("backgroundReferenceId")
+        has_canvas_background = scene.get("version") == 3 and guide_mode == "coarse" and background_id and any(
+            item["id"] == background_id and item.get("asset") and not item.get("missing")
+            for item in scene.get("referenceLibrary", {}).get("items", ())
+        )
+        has_structure_image = model == "base" and guide_mode in ("pose", "depth", "canny") and (
+            conditioning.get("map") or scene.get("reference")
+        )
+        if not no_guide and source_kind == "empty" and not (has_canvas_background or has_structure_image):
             raise ValueError("Current guide requires a 3D scene or an imported image")
         guide_asset = conditioning.get("map")
         if guide_asset:

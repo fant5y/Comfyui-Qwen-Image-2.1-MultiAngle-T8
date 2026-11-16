@@ -1,5 +1,5 @@
 import { indexGallery, searchGallery, relatedSuggestions } from './gallery-search.mjs?v=20261116en';
-import { addGalleryReference } from './gallery-pose.mjs?v=20261116referenceroles';
+import { addGalleryReference } from './gallery-pose.mjs?v=20261116canvasprompt';
 import { uuid } from '../uuid.mjs?v=20261116en';
 
 const API='/anyangle-studio/pose-gallery', $=id=>document.getElementById(id);

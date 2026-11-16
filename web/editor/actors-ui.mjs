@@ -1,10 +1,10 @@
 import { createActor, activeActor, ensureActors, bindActor, cloneActor, removeActor, editableActors, actorSeed, applySceneTemplate } from './actors.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { installCastTools } from './cast-tools.mjs?v=20261116referenceroles';
+import { installCastTools } from './cast-tools.mjs?v=20261116canvasprompt';
 import { poseCopyIssue, ORDER } from './openpose.mjs?v=20261116en';
 import { guideSource } from './guides.mjs?v=20261116en';
-import { addReference, newUse } from './reference-library.mjs?v=20261116referenceroles';
+import { addReference, newUse } from './reference-library.mjs?v=20261116canvasprompt';
 
 let context, renderKey, renderedDoc, renderedRoles = [], references = [];
 const $ = id => document.getElementById(id);
@@ -23,6 +23,20 @@ async function editTransaction(action) {
     throw error;
   }
 }
+export function addCharacter({ label, onAdded } = {}) {
+  return atomic(async () => {
+    const doc = context.doc(), wasEmpty = doc.source.kind === 'empty' && !doc.actors?.length;
+    context.studio().syncPose(); ensureActors(doc); const actor = createActor(doc.actors.length, label ? { label } : {});
+    doc.actors.push(actor); doc.activeActorId = actor.id; doc.selectedActorIds = [actor.id]; doc.source = { kind: 'human' };
+    onAdded?.(actor);
+    bindActor(doc); if (wasEmpty) { doc.conditioning.model = 'base'; doc.conditioning.identityMode = 'actors'; doc.conditioning.imageOrder = 'guide-first'; }
+    context.studio().selectedModelId = null; context.studio().modelJoint = null;
+    await context.studio().restore(doc); await context.ensureHumanTools(); context.showScene();
+    $('actors-panel').open = true;
+    context.toast(onAdded ? 'Character added with its reference.' : 'Character added.');
+  });
+}
+
 export function installActorsUI(options) {
   context = options;
   $('actors-panel').innerHTML = `<summary class="section-heading collapsible-heading"><h2>Scene Characters <small id="actor-count">0</small></h2><span class="tag">CAST</span></summary>
@@ -42,15 +56,7 @@ export function installActorsUI(options) {
   const identityFile = document.createElement('input'); identityFile.type = 'file'; identityFile.accept = 'image/*'; identityFile.hidden = true; identityFile.id = 'actor-identity-file'; document.body.append(identityFile);
   const readReferences = button('Read Connected Character Photos', () => context.send('anyangle-read-actors')); readReferences.id = 'read-actor-references'; readReferences.className = 'wide-button'; $('actors-panel').append(readReferences);
   const readKeypoints = button('Read Connected Pose Keypoints', () => context.send('anyangle-read-keypoints')); readKeypoints.id = 'read-pose-keypoints'; readKeypoints.className = 'wide-button'; readKeypoints.hidden = true; $('openpose-panel').prepend(readKeypoints);
-  $('add-actor').onclick = () => atomic(async () => {
-    const doc = context.doc(), wasEmpty = doc.source.kind === 'empty' && !doc.actors?.length;
-    context.studio().syncPose(); ensureActors(doc); const actor = createActor(doc.actors.length);
-    doc.actors.push(actor); doc.activeActorId = actor.id; doc.selectedActorIds = [actor.id]; doc.source = { kind: 'human' };
-    bindActor(doc); if (wasEmpty) { doc.conditioning.model = 'base'; doc.conditioning.identityMode = 'actors'; doc.conditioning.imageOrder = 'guide-first'; }
-    context.studio().selectedModelId = null; context.studio().modelJoint = null;
-    await context.studio().restore(doc); await context.ensureHumanTools(); context.showScene();
-    context.toast(wasEmpty ? 'Character added. Add more characters or select one to edit and assign an identity.' : 'Character added. Qwen Base Model is recommended for multi-character posing. Your current model stays selected.');
-  });
+  $('add-actor').onclick = () => addCharacter();
   $('clone-actor').onclick = () => context.studio().selectedModel() ? context.duplicateModel() : atomic(async () => {
     const doc = context.doc(); context.studio().syncPose(); const actor = cloneActor(doc);
     doc.activeActorId = actor.id; doc.selectedActorIds = [actor.id]; bindActor(doc); await context.studio().restore(doc);

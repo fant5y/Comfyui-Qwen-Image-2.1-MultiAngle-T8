@@ -1,7 +1,7 @@
-import { StudioScene, defaultScene } from './scene.mjs?v=20261116referenceroles';
+import { StudioScene, defaultScene } from './scene.mjs?v=20261116canvasprompt';
 import { activeActor, createActor, bindActor, editableActors } from './actors.mjs?v=20261116en';
 import { applyCatalogTransaction, catalogPoseTargets, filterCatalog, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installPoseGallery, galleryImage, galleryLabel } from './pose-gallery-ui.mjs?v=20261116referenceroles';
+import { installPoseGallery, galleryImage, galleryLabel } from './pose-gallery-ui.mjs?v=20261116canvasprompt';
 
 const clone = value => structuredClone(value);
 const $ = id => document.getElementById(id);

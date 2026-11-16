@@ -18,3 +18,5 @@
 [hidden]{display:none!important}
 #reference-stage-thumbs img,.reference-drop img#reference,.reference-source>img{filter:none!important}
 @media(max-width:880px){.reference-tabs{top:0}.reference-stage-preview{padding:18px 16px}.reference-send-plan{top:0}.reference-materials .compact-actions{flex-wrap:wrap}.reference-preview-title{flex-direction:column;align-items:start}.reference-use{grid-template-columns:1fr}.reference-use>label{grid-column:1}.reference-objects{width:100%}}
+
+.reference-role-preview,.reference-role-options{grid-column:1/-1}.reference-role-preview{margin:0;overflow-wrap:anywhere}.reference-role-options>summary{cursor:pointer;color:var(--muted);padding:4px 0}.reference-role-options>label,.reference-role-options>.reference-use-actions{margin-top:8px}
