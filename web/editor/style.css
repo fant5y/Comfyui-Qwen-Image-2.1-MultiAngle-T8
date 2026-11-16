@@ -125,3 +125,6 @@ details:not([open])>.collapsible-heading{margin-bottom:0}
 .scene-background-position{margin-top:10px}
 .scene-background-position label{min-width:0;flex:1}
 .scene-background-position input{min-width:0;width:100%}
+
+#scene-background-placement{display:flex;flex:none;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px 14px;padding:7px 12px;background:#111a22;border-top:1px solid var(--line);font-size:11px}
+#scene-background-placement .scene-background-position{width:min(100%,300px);margin:0}

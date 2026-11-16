@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AnyAngle Studio · T8</title><link rel="stylesheet" href="./style.css?v=20261116scenebackdrop"><link rel="stylesheet" href="./references.css?v=20261116scenebackdrop"><link rel="stylesheet" href="./pose-library.css?v=20261029v180"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AnyAngle Studio · T8</title><link rel="stylesheet" href="./style.css?v=20261116placement"><link rel="stylesheet" href="./references.css?v=20261116scenebackdrop"><link rel="stylesheet" href="./pose-library.css?v=20261029v180"></head>
 <body>
 <header class="topbar">
   <div class="brand"><img src="../icons/aperture.svg" alt=""><strong>ANYANGLE</strong><span>STUDIO</span><small title="Studio version">T8 · v1.8.0</small></div>
@@ -58,6 +58,7 @@
       <div id="loading" class="loading" role="status"><img src="../icons/aperture.svg" alt=""><strong id="loading-text">Preparing 3D Workspace</strong><span id="loading-detail">Loading local rendering assets</span></div>
     </div>
     <div class="stage-help" id="stage-help">The yellow outline marks the output frame <span>Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom</span></div>
+    <div id="scene-background-placement" hidden><span>Scene Background</span></div>
     <section class="shot-shelf" id="shot-shelf"><div class="section-heading"><h2>Saved Camera Views <small id="shot-count">0</small></h2><div class="compact-actions"><button id="open-batch">Batch Views</button><button id="save-shot"><img src="../icons/plus.svg" alt="">Save Current View</button></div></div><div id="shots" class="shots"><p class="empty-note">Save camera views here. Selecting a saved view keeps the current pose.</p></div></section>
   </section>
   <button type="button" class="sidebar-resize" data-sidebar="right" aria-label="Resize right sidebar" title="Drag or use arrow keys. Double-click to reset."></button>
@@ -84,7 +85,7 @@
       <div id="scene-background-options" hidden>
         <label class="option-toggle"><input id="scene-background-visible" type="checkbox" checked>Show Scene Background</label>
         <div class="dimensions"><label>Scale ×<input id="scene-background-scale" type="number" min="0.05" max="20" step="0.05" value="1"></label><button type="button" id="fit-scene-background">Fit to Frame</button></div>
-        <div class="dimensions scene-background-position"><label>X<input id="scene-background-x" type="number" step="0.5" value="0"></label><label>Y<input id="scene-background-y" type="number" step="0.5" value="0"></label><label>Z<input id="scene-background-z" type="number" step="0.5" value="0"></label></div>
+        <div id="scene-background-position" class="dimensions scene-background-position"><label>X<input id="scene-background-x" type="number" step="0.5" value="0"></label><label>Y<input id="scene-background-y" type="number" step="0.5" value="0"></label><label>Z<input id="scene-background-z" type="number" step="0.5" value="0"></label></div>
       </div>
     </details>
     <details class="protocol sidebar-section" open>
@@ -131,5 +132,5 @@
 <input type="file" id="reference-file" accept="image/*" hidden><input type="file" id="glb-file" accept=".glb" hidden><input type="file" id="pose-file" accept=".json,application/json" hidden><input type="file" id="openpose-file" accept="image/png,image/jpeg,image/webp,.json,application/json" hidden><input type="file" id="map-file" accept="image/*" hidden>
 <input type="file" id="scene-file" accept=".zip,application/zip" hidden>
 <dialog id="people-dialog" class="people-dialog"><form method="dialog"><div class="section-heading"><h2>Copy Multiple Poses from a Photo</h2><button value="cancel" formnovalidate>Cancel</button></div><p id="people-count" class="hint"></p><div class="people-picker"><div class="people-image"><img id="people-photo" alt="Pose Source Photo"><div id="people-overlay"></div></div><div id="people-choices"></div></div><label class="option-toggle"><input id="people-match-layout" type="checkbox" checked><span>Match positions to the photo and fit the full scene</span></label><label class="option-toggle"><input id="people-bind-photo" type="checkbox"><span>Also assign this photo as an identity reference<small>Leave off to copy poses only</small></span></label><div class="compact-actions"><button value="current">Copy One Pose to Current Character</button><button value="all" class="primary">Create Selected Characters</button></div></form></dialog>
-<script type="module" src="./app.mjs?v=20261116scenebackdrop"></script>
+<script type="module" src="./app.mjs?v=20261116placement"></script>
 </body></html>

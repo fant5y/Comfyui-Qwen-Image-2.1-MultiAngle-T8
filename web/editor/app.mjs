@@ -281,6 +281,7 @@ function refresh() {
   $('#width').value = doc.width; $('#height').value = doc.height;
   $('#background').value = doc.background;
   $('#scene-background-options').hidden = !canvasBackgroundAsset(doc);
+  updateBackgroundPlacement();
   $('#scene-background-visible').checked = doc.sceneBackground?.visible !== false;
   $('#scene-background-scale').value = doc.sceneBackground?.scale ?? 1;
   for (const axis of ['x', 'y', 'z']) $(`#scene-background-${axis}`).value = doc.sceneBackground?.[axis] ?? 0;
@@ -658,9 +659,19 @@ for (const [side, label] of [['l', 'Left Hand'], ['r', 'Right Hand']]) {
   row.append(title, buttons); $('#hands').append(row);
 }
 
+function updateBackgroundPlacement() {
+  const placement = $('#scene-background-placement');
+  placement.hidden = previewVisible || studio?.mode !== 'position' || !canvasBackgroundAsset(doc)
+    || (doc.referenceLibrary && doc.referenceLibrary.mode !== 'guided');
+  const parent = placement.hidden ? $('#scene-background-options') : placement;
+  const fields = $('#scene-background-position');
+  if (fields.parentElement !== parent) parent.append(fields);
+}
+
 function setMode(mode) {
   studio.setMode(mode);
   mode = studio.mode;
+  updateBackgroundPlacement();
   $('#camera-mode').classList.toggle('active', mode === 'camera'); $('#edit-mode').classList.toggle('active', mode === 'edit');
   $('#position-mode').classList.toggle('active', mode === 'position'); $('#position-mode').setAttribute('aria-pressed', String(mode === 'position'));
   $('#camera-mode').setAttribute('aria-pressed', String(mode === 'camera')); $('#edit-mode').setAttribute('aria-pressed', String(mode === 'edit'));
