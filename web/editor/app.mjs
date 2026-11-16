@@ -334,7 +334,11 @@ function refresh() {
   $('#keep-background').disabled = !doc.reference || !!linkedReference.pending;
   const reconstructionChanged = splat && !!doc.source.keep_background !== keepBackground;
   $('#reconstruction-state').textContent = splat ? 'The reconstruction keeps its source pose. Move the camera for a different view or switch to a mannequin to edit the pose.' : 'Rebuild the subject from the source image, then adjust the camera.';
-  $('#return-to-cast').hidden = !splat || !doc.actors.length;
+  const returnToCast = $('#return-to-cast');
+  const glbScene = doc.source.kind === 'glb';
+  returnToCast.hidden = !(splat || glbScene) || !doc.actors.length;
+  returnToCast.textContent = glbScene ? 'Keep GLB as Prop and Restore Characters' : 'Return to Mannequins';
+  $('#import-glb-label').textContent = mannequinScene ? 'Import GLB Prop' : 'Import GLB Scene';
   $('#reconstruct').disabled = !doc.reference || !!linkedReference.pending;
   if (reconstructionChanged) $('#reconstruction-state').textContent = 'Background setting changed · Rebuild to apply it. The preview shows the last result.';
   if (doc.reference && doc.actors.length) {
@@ -1065,9 +1069,22 @@ async function clearSourceImage() {
 }
 $('#clear-reference').onclick = () => run(clearSourceImage);
 $('#return-to-cast').onclick = () => run(async () => {
-  if (doc.source.kind !== 'splat' || !doc.actors.length) return;
+  const glbScene = doc.source.kind === 'glb';
+  if (!(glbScene || doc.source.kind === 'splat') || !doc.actors.length) return;
   const previous = clone(doc), rollback = begin();
   const actor = activeActor(doc) || doc.actors[0];
+  if (glbScene) {
+    const { kind, ...asset } = doc.source;
+    (doc.props ||= []).push({
+      id: `prop-${uuid()}`,
+      label: asset.label || 'Imported GLB',
+      asset,
+      // Standalone GLBs normalize to 20 units and props to 10.
+      transform: { x: 0, y: 0, z: 0, scale: doc.scale * 2, yaw: doc.front },
+      visible: true,
+      locked: false,
+    });
+  }
   doc.source = { kind: 'human' };
   doc.sourceStale = false;
   doc.camera = defaultScene().camera;
@@ -1075,6 +1092,11 @@ $('#return-to-cast').onclick = () => run(async () => {
   try { await studio.restore(doc); studio.fit(); }
   catch (error) { doc = previous; rollback?.(); await studio.restore(doc); throw error; }
   previewVisible = false;
+  if (glbScene) {
+    doc.conditioning.guide = 'coarse';
+    previewGuide = 'coarse';
+    $('#prop-list').closest('details').open = true;
+  }
   setMode('position');
   changed();
 });
@@ -1177,7 +1199,12 @@ $('#keep-background').onchange = () => {
 };
 $('#extract-coarse').onclick = () => run(reconstructPhoto);
 $('#preview-coarse').onclick = () => { previewVisible = true; refresh(); renderPreview(); };
-$('#import-glb').onclick = () => $('#glb-file').click();
+$('#import-glb').onclick = () => {
+  if (doc.source.kind === 'human') {
+    $('#prop-list').closest('details').open = true;
+    $('#add-prop').click();
+  } else $('#glb-file').click();
+};
 $('#glb-file').onchange = event => run(async () => {
   const file = event.target.files[0]; event.target.value = ''; if (!file) return;
   const asset = await upload(file), rollbackHistory = begin();
