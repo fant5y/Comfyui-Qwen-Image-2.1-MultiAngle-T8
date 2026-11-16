@@ -80,7 +80,7 @@ export function installCastTools(context) {
     }
     const prop = studio?.selectedModel();
     if (!prop) return;
-    const inspector = document.createElement('div'); inspector.className = 'model-inspector';
+    const inspector = document.createElement('div');
     const name = document.createElement('label'), nameInput = document.createElement('input');
     nameInput.value = prop.label; nameInput.maxLength = 255;
     nameInput.onchange = () => {

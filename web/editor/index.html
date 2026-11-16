@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AnyAngle Studio · T8</title><link rel="stylesheet" href="./style.css?v=20261116studiostart"><link rel="stylesheet" href="./references.css?v=20261116studiostart"><link rel="stylesheet" href="./pose-library.css?v=20261116studiostart"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AnyAngle Studio · T8</title><link rel="stylesheet" href="./style.css?v=20261116bodyrange"><link rel="stylesheet" href="./references.css?v=20261116sources"><link rel="stylesheet" href="./pose-library.css?v=20261029v180"></head>
 <body>
 <header class="topbar">
   <div class="brand"><img src="../icons/aperture.svg" alt=""><strong>ANYANGLE</strong><span>STUDIO</span><small title="Studio version">T8 · v1.8.0</small></div>
@@ -63,7 +63,7 @@
   <button type="button" class="sidebar-resize" data-sidebar="right" aria-label="Resize right sidebar" title="Drag or use arrow keys. Double-click to reset."></button>
   <aside class="right-panel">
     <details class="guide-mode-section" open>
-      <summary class="section-heading collapsible-heading"><h2>Guidance Strategy</h2></summary>
+      <summary class="section-heading collapsible-heading"><h2>Guidance Strategy</h2><span id="model-badge">ANYANGLE</span></summary>
       <div class="model-switch" role="group" aria-label="Generation Model"><button id="model-anyangle" class="active">AnyAngle LoRA</button><button id="model-base">Qwen Base Model</button></div>
       <p class="guide-label">Guide Image</p><div class="guide-choice-grid" role="group" aria-label="Guide Type"><button type="button" data-guide="coarse"><strong>Coarse 3D Render</strong><small>Reconstruction / Scene</small></button><button type="button" data-guide="pose"><strong>Pose</strong><small>Extract / Import</small></button><button type="button" data-guide="depth"><strong>Depth</strong><small>Estimate / Import</small></button><button type="button" data-guide="canny"><strong>Canny Edges</strong><small>Generate / Import</small></button></div>
       <div id="coarse-inputs" class="guide-actions"><button id="extract-coarse" class="wide-button accent-button">Rebuild 3D from Source</button><button id="preview-coarse" class="wide-button">Preview Current View</button><p id="coarse-status" class="hint">Rebuild the subject with TripoSplat, then adjust the camera.</p></div>
@@ -71,7 +71,7 @@
       <div id="map-inputs" class="guide-actions" hidden><button id="extract-depth" class="wide-button accent-button">Estimate Source Depth · DA3</button><button id="generate-scene-depth" class="wide-button">Render Depth from 3D View</button><label id="depth-invert-row" class="option-toggle"><input id="depth-invert" type="checkbox"><span>Invert Depth · Dark Near, Light Far</span></label><button id="generate-canny" class="wide-button accent-button" hidden>Generate Canny from Source</button><button id="generate-scene-canny" class="wide-button" hidden>Generate Canny from 3D View</button><button id="import-map" class="wide-button">Import Structure Guide</button><button id="read-map" class="wide-button" hidden>Read Connected Structure Guide</button><p id="map-status" class="hint">Estimate source depth, connect a Depth Anything 3 output, or import a PNG.</p></div>
       <div id="canny-options" hidden><label>Low Threshold <input id="canny-low" type="number" min="0" max="255" value="50"></label><label>High Threshold <input id="canny-high" type="number" min="0" max="255" value="150"></label></div><p id="guide-explanation" class="hint">Use a coarse render of the new view with the AnyAngle LoRA.</p>
     </details>
-    <div class="section-heading" id="camera-heading"><h2>Camera</h2><img class="heading-icon" src="../icons/camera.svg" alt=""></div><p class="eyebrow" id="camera-eyebrow">Scene Front · Y-Up · Perspective</p>
+    <div class="section-heading" id="camera-heading"><h1>Camera</h1><img class="heading-icon" src="../icons/camera.svg" alt=""></div><p class="eyebrow" id="camera-eyebrow">Scene Front · Y-Up · Perspective</p>
     <div id="camera-sliders"></div>
     <section id="lens-panel" class="lens-panel"><div class="section-heading"><h2>Lens Perspective</h2><span class="tag">LENS</span></div><label>Lens<select id="lens-mode"><option value="original">Original Lens · Default</option><option value="custom">Custom Focal Length</option></select></label><div id="lens-controls" hidden><div id="focal-sliders"></div><div class="three-buttons"><button data-focal="24">24 mm Wide</button><button data-focal="50">50 mm Standard</button><button data-focal="85">85 mm Telephoto</button></div></div><p class="hint">Wide lenses exaggerate perspective and telephoto lenses compress it. Camera distance adjusts to keep the subject at a similar size.</p></section>
     <section class="studio-options"><label class="option-toggle"><input id="mouse-pitch" type="checkbox" checked><span>Allow Mouse Pitch<small>Turn off to drag horizontally. The pitch slider still works.</small></span></label></section>
@@ -92,7 +92,7 @@
         <p id="image-wiring"></p><p id="lora-hint"></p><p class="hint" id="protocol-hint"></p>
       </details>
     </details>
-    <details class="studio-options"><summary>Studio Settings</summary><label class="quality-row">Preview Quality<select id="preview-quality"><option value="economy">Fast · 1×</option><option value="balanced" selected>Balanced · 1.5×</option><option value="sharp">Sharp · 2×</option></select></label><label class="option-toggle"><input id="live-preview" type="checkbox" checked><span>Auto-refresh Guide Preview<small>Turn off and refresh manually if the preview lags.</small></span></label><button id="refresh-guide" class="wide-button">Refresh Guide Preview</button><p class="hint">Studio redraws as needed while idle. Export keeps the selected output resolution.</p></details>
+    <details class="studio-options"><summary>Studio Performance</summary><label class="quality-row">Preview Quality<select id="preview-quality"><option value="economy">Fast · 1×</option><option value="balanced" selected>Balanced · 1.5×</option><option value="sharp">Sharp · 2×</option></select></label><label class="option-toggle"><input id="live-preview" type="checkbox" checked><span>Auto-refresh Guide Preview<small>Turn off and refresh manually if the preview lags.</small></span></label><button id="refresh-guide" class="wide-button">Refresh Guide Preview</button><p class="hint">Studio redraws as needed while idle. Export keeps the selected output resolution.</p></details>
   </aside>
 </main>
 <footer><div id="status" role="status">Preparing</div><span>IMAGE <b>·</b> PROMPT <b>·</b> SCENE JSON <b>·</b> LORA 0/1</span></footer>
@@ -122,5 +122,5 @@
 <input type="file" id="reference-file" accept="image/*" hidden><input type="file" id="glb-file" accept=".glb" hidden><input type="file" id="pose-file" accept=".json,application/json" hidden><input type="file" id="openpose-file" accept="image/png,image/jpeg,image/webp,.json,application/json" hidden><input type="file" id="map-file" accept="image/*" hidden>
 <input type="file" id="scene-file" accept=".zip,application/zip" hidden>
 <dialog id="people-dialog" class="people-dialog"><form method="dialog"><div class="section-heading"><h2>Copy Multiple Poses from a Photo</h2><button value="cancel" formnovalidate>Cancel</button></div><p id="people-count" class="hint"></p><div class="people-picker"><div class="people-image"><img id="people-photo" alt="Pose Source Photo"><div id="people-overlay"></div></div><div id="people-choices"></div></div><label class="option-toggle"><input id="people-match-layout" type="checkbox" checked><span>Match positions to the photo and fit the full scene</span></label><label class="option-toggle"><input id="people-bind-photo" type="checkbox"><span>Also assign this photo as an identity reference<small>Leave off to copy poses only</small></span></label><div class="compact-actions"><button value="current">Copy One Pose to Current Character</button><button value="all" class="primary">Create Selected Characters</button></div></form></dialog>
-<script type="module" src="./app.mjs?v=20261116studiostart"></script>
+<script type="module" src="./app.mjs?v=20261116stylerestore"></script>
 </body></html>

@@ -41,15 +41,6 @@ let batchRunning = false, batchController = null, batchViews = [], batchId = nul
 const batchReplies = new Map();
 const controls = new Map();
 
-if (embedded) {
-  const hostSize = params.get('hostTextSize');
-  const hostFont = params.get('hostFontFamily');
-  if (hostSize && /^\d+(?:\.\d+)?px$/.test(hostSize) && parseFloat(hostSize) > 0)
-    document.documentElement.style.setProperty('--studio-text-size', hostSize);
-  if (hostFont && CSS.supports('font-family', hostFont))
-    document.documentElement.style.setProperty('--studio-font-family', hostFont);
-}
-
 const workspace = $('#workspace');
 for (const handle of workspace.querySelectorAll('[data-sidebar]')) {
   const side = handle.dataset.sidebar;
@@ -368,6 +359,7 @@ function refresh() {
   $('#model-anyangle').classList.toggle('active', !base); $('#model-base').classList.toggle('active', base);
   $('#model-anyangle').disabled = promptMode === 'single';
   $('#model-anyangle').title = promptMode === 'single' ? 'Guide Image Only uses the Qwen Base Model.' : '';
+  $('#model-badge').textContent = base ? 'QWEN 2.1' : 'ANYANGLE';
   document.querySelectorAll('[data-guide]').forEach(button => {
     button.classList.toggle('active', button.dataset.guide === guide);
     button.setAttribute('aria-pressed', String(button.dataset.guide === guide));
