@@ -14,6 +14,7 @@
       <button id="reference-drop" class="reference-drop" aria-label="Choose a source image"><img id="reference" alt="Full source image" hidden><span id="reference-empty"><img src="../icons/photo.svg" alt=""><strong>Import Source Image</strong><small>Pose extraction / 3D reconstruction / image_1</small></span></button>
       <p id="reference-origin" class="hint">Connect an IMAGE input or upload a source image.</p>
       <button id="read-reference" hidden><img src="../icons/refresh.svg" alt="">Read Connected Image</button>
+      <button id="clear-reference" hidden>Remove Source Image</button>
       <label class="reconstruction-option"><input id="keep-background" type="checkbox" aria-describedby="keep-background-hint"><span>Include background in reconstruction <small class="tag amber">Experimental</small></span></label>
       <p id="keep-background-hint" class="hint">Reconstruct the full image. Results for large scenes depend on TripoSplat. Rebuild after changing this setting.</p>
       <button id="reconstruct" class="primary reconstruct-button" disabled>Rebuild 3D from Source</button>
@@ -105,5 +106,5 @@
 <input type="file" id="reference-file" accept="image/*" hidden><input type="file" id="glb-file" accept=".glb" hidden><input type="file" id="pose-file" accept=".json,application/json" hidden><input type="file" id="openpose-file" accept="image/png,image/jpeg,image/webp,.json,application/json" hidden><input type="file" id="map-file" accept="image/*" hidden>
 <input type="file" id="scene-file" accept=".zip,application/zip" hidden>
 <dialog id="people-dialog" class="people-dialog"><form method="dialog"><div class="section-heading"><h2>Copy Multiple Poses from a Photo</h2><button value="cancel" formnovalidate>Cancel</button></div><p id="people-count" class="hint"></p><div class="people-picker"><div class="people-image"><img id="people-photo" alt="Pose Source Photo"><div id="people-overlay"></div></div><div id="people-choices"></div></div><label class="option-toggle"><input id="people-match-layout" type="checkbox" checked><span>Match positions to the photo and fit the full scene</span></label><label class="option-toggle"><input id="people-bind-photo" type="checkbox"><span>Also assign this photo as an identity reference<small>Leave off to copy poses only</small></span></label><div class="compact-actions"><button value="current">Copy One Pose to Current Character</button><button value="all" class="primary">Create Selected Characters</button></div></form></dialog>
-<script type="module" src="./app.mjs?v=20261116pawdrag"></script>
+<script type="module" src="./app.mjs?v=20261116clearsource"></script>
 </body></html>

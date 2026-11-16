@@ -264,6 +264,9 @@ function refresh() {
   $('#reference-button').disabled = $('#reference-drop').disabled = linkedReference.connected;
   $('#read-reference').hidden = !linkedReference.connected;
   $('#read-reference').disabled = !!linkedReference.pending;
+  $('#clear-reference').hidden = !doc.reference;
+  $('#clear-reference').disabled = linkedReference.connected;
+  $('#clear-reference').title = linkedReference.connected ? 'Disconnect Scene Source Image on the node first.' : 'Remove the source image from this scene.';
   $('#reference-origin').textContent = linkedReference.connected ? linkedReference.message : 'Connect an IMAGE input on the node or upload a source image.';
   $('#reconstruction-state').hidden = !doc.reference;
   const keepBackground = doc.reconstruction.keepBackground;
@@ -903,6 +906,24 @@ $('#read-reference').onclick = () => {
   linkedReference = { ...linkedReference, connected: true, pending: true, message: 'Reading connected image…' };
   refresh(); send('anyangle-read-reference');
 };
+$('#clear-reference').onclick = () => run(async () => {
+  if (!doc.reference || linkedReference.connected) return;
+  studio.syncPose();
+  const previous = clone(doc), rollback = begin();
+  doc.reference = null;
+  const reconstructed = doc.source.kind === 'splat';
+  if (reconstructed) {
+    const actor = activeActor(doc) || doc.actors[0];
+    doc.source = { kind: actor ? 'human' : 'empty' };
+    if (actor) bindActor(doc, actor.id);
+  }
+  sourceChanged(doc, previous.reference);
+  if (reconstructed) {
+    try { await studio.restore(doc); }
+    catch (error) { doc = previous; rollback?.(); await studio.restore(doc); throw error; }
+  }
+  changed();
+});
 $('#reference-file').onchange = event => run(async () => {
   const file = event.target.files[0]; event.target.value = ''; if (!file) return; const asset = await upload(file);
   begin(); const previous = doc.reference; doc.reference = asset; sourceChanged(doc, previous);
