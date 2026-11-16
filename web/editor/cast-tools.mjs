@@ -19,7 +19,7 @@ export function installCastTools(context) {
     }
   });
   $('apply-layout').onclick = () => mutate(async () => {
-    const doc=context.doc(), roles=editableActors(doc,'selected');
+    const doc=context.doc(), roles=editableActors(doc,'selected').filter(role => role.source.kind !== 'animal');
     if(!roles.length) throw new Error('Select an unlocked character first.');
     const layout=$('cast-layout').value;if(layout!=='group'&&roles.length!==2)throw new Error('Select two unlocked characters for a conversation or handshake.');
     context.studio().syncPose(); const active=doc.activeActorId;
@@ -31,7 +31,7 @@ export function installCastTools(context) {
     if(layout==='handshake') await context.studio().alignHands(roles[0].id,'r',roles[1].id,'r');
     context.showScene();context.toast('Layout applied. You can adjust the camera, positions, and joints.');
   });
-  $('align-contact').onclick = () => mutate(async()=>{const roles=editableActors(context.doc(),'selected');if(roles.length!==2)throw new Error('Select two unlocked characters.');await context.studio().alignHands(roles[0].id,'r',roles[1].id,'r');});
+  $('align-contact').onclick = () => mutate(async()=>{const roles=editableActors(context.doc(),'selected').filter(role => role.source.kind !== 'animal');if(roles.length!==2)throw new Error('Select two unlocked characters.');await context.studio().alignHands(roles[0].id,'r',roles[1].id,'r');});
   $('release-contact').onclick = ()=>{context.begin();context.doc().contacts=[];context.changed(false);context.toast('Contact anchors cleared. The current pose is kept.');};
   $('add-prop').onclick = ()=>file.click();
   file.onchange = ()=>{const chosen=file.files[0];file.value='';if(!chosen)return;

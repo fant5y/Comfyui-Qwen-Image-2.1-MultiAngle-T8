@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.mjs';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { AnimalMannequin } from './animal-mannequin.mjs?v=20261116animals';
+import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116cast';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 import { PoseViewerCore } from '../vendor/vnccs_pose_studio_core.mjs?v=20261031resize';
 import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs';
@@ -10,7 +10,7 @@ import { HAND_PRESETS } from '../vendor/vnccs_hand_presets.mjs';
 import { SplatScene } from './splat.mjs?v=20261116en';
 import { capturePNG } from './capture.mjs?v=20261116en';
 import { liftOpenPose, copyVisiblePose, WORLD_KEYPOINT_NAMES, ORDER, LIMBS, COLORS } from './openpose.mjs?v=20261116en';
-import { ensureActors, activeActor, bindActor, saveActor, visibleActors } from './actors.mjs?v=20261116en';
+import { createActor, ensureActors, activeActor, bindActor, saveActor, visibleActors } from './actors.mjs?v=20261116en';
 import { loadProp, disposeProp, placeProp } from './props.mjs?v=20261116en';
 import { emptyLibrary } from './reference-library.mjs?v=20261116en';
 
@@ -88,6 +88,7 @@ export class StudioScene {
     this.rigPointerDown = false;
     this.rigHistory = null;
     this.actorRoots = new Map();
+    this.animalActors = new Map();
     this.propRoots = new Map();
     this.viewer = new PoseViewerCore(canvas, {
       skinMode: 'naked', enableTextureSkinning: true,
@@ -214,17 +215,23 @@ export class StudioScene {
     root.position.set(t.x, t.y, t.z); root.rotation.y = radians(t.yaw); root.scale.setScalar(t.scale);
     root.visible = this.doc.source.kind === 'human' && actor.visible !== false;
     root.updateMatrixWorld(true);
+    const animal = this.animalActors.get(actor.id);
+    if (animal) animal.update(this.animalSelection, actor.editorColor);
     root.traverse(object => { if (object.isSkinnedMesh) { object.skeleton.update(); object.computeBoundingBox(); object.computeBoundingSphere(); } });
-    if (actor.id === this.doc.activeActorId) { this.viewer.updateMarkers(); this.viewer.updateIKEffectorPositions?.(); }
+    if (!animal && actor.id === this.doc.activeActorId) { this.viewer.updateMarkers(); this.viewer.updateIKEffectorPositions?.(); }
     this.viewer.requestRender();
   }
 
-  actorMesh(id) { return id === this.doc.activeActorId ? this.viewer.skinnedMesh : this.viewer.passiveCharacters.get(id)?.mesh; }
-  actorBones(id) { return id === this.doc.activeActorId ? this.viewer.bones : this.viewer.passiveCharacters.get(id)?.bones; }
+  get animal() { return this.animalActors.get(this.doc?.activeActorId); }
+
+  actorMesh(id) { if (this.animalActors.has(id)) return null; return id === this.doc.activeActorId ? this.viewer.skinnedMesh : this.viewer.passiveCharacters.get(id)?.mesh; }
+  actorBones(id) { if (this.animalActors.has(id)) return null; return id === this.doc.activeActorId ? this.viewer.bones : this.viewer.passiveCharacters.get(id)?.bones; }
   humanBounds(selected = false) {
     const box = new THREE.Box3();
     for (const actor of selected ? this.doc.actors || [] : visibleActors(this.doc)) {
       if (selected && !(this.doc.selectedActorIds || [this.doc.activeActorId]).includes(actor.id)) continue;
+      const animal = this.animalActors.get(actor.id);
+      if (animal) { box.union(worldBounds(animal.root)); continue; }
       const mesh = this.actorMesh(actor.id);
       if (mesh) { mesh.updateMatrixWorld(true); mesh.skeleton.update(); mesh.computeBoundingBox(); box.union(mesh.boundingBox.clone().applyMatrix4(mesh.matrixWorld)); }
     }
@@ -250,7 +257,14 @@ export class StudioScene {
   async selectActor(id) {
     if (id === this.doc.activeActorId || this.doc.source.kind !== 'human') return;
     const actor = this.doc.actors.find(item => item.id === id); if (!actor) return;
-    this.syncPose(); this.restoring = true;
+    this.syncPose();
+    if (this.animal || actor.source.kind === 'animal') {
+      bindActor(this.doc, id);
+      await this.restore(this.doc);
+      this.callbacks.actor?.(id);
+      return;
+    }
+    this.restoring = true;
     try {
       const previous = activeActor(this.doc);
       if (previous && this.viewer.upsertPassiveCharacterFromActive(previous.id, { pose: previous.pose, color: previous.editorColor }))
@@ -276,6 +290,17 @@ export class StudioScene {
     this.restoring = true;
     try {
       this.doc = restoreSceneDefaults(doc);
+      if (doc.source.kind === 'animal') {
+        ensureActors(doc);
+        const { shape, pose } = doc.source;
+        const actor = createActor(doc.actors.length, {
+          label: ANIMAL_SHAPES[shape], source: { kind: 'animal', shape }, animalPose: pose,
+          transform: { x: 0, y: 0, z: 0, scale: doc.scale, yaw: doc.front },
+        });
+        doc.source = { kind: 'human' };
+        doc.actors.push(actor);
+        doc.activeActorId = actor.id; doc.selectedActorIds = [actor.id];
+      }
       ensureActors(doc, doc.source.kind === 'human');
       await this.restoreProps();
       this.updatePerformance();
@@ -285,22 +310,32 @@ export class StudioScene {
       });
       if (this.splat && doc.source.kind !== 'splat') { await this.splat.dispose(); this.splat = null; }
       if (this.glb && doc.source.kind !== 'glb') { disposeObject(this.glb); this.glb = null; this.glbName = null; }
-      if (this.animal && (doc.source.kind !== 'animal' || this.animalShape !== doc.source.shape)) {
-        this.animal.dispose(); this.animal = null; this.animalSelection = '';
-      }
+      for (const animal of this.animalActors.values()) animal.dispose();
+      this.animalActors.clear();
+      this.animalSelection = '';
       if (doc.source.kind === 'human') {
-        if (!this.pack) this.pack = await loadHumanPack();
+        const people = doc.actors.filter(actor => actor.source.kind !== 'animal');
+        if (people.length && !this.pack) this.pack = await loadHumanPack();
         this.viewer.clearPassiveCharacters();
         for (const root of this.actorRoots.values()) root.removeFromParent();
         this.actorRoots.clear();
         const selectedId = doc.activeActorId;
-        for (const actor of doc.actors.filter(item => item.id !== selectedId)) {
+        for (const actor of doc.actors.filter(item => item.source.kind === 'animal')) {
+          const rig = new AnimalMannequin(actor.source.shape);
+          rig.restore(actor.animalPose);
+          this.animalActors.set(actor.id, rig);
+          this.attachActor(actor, rig.root);
+          this.viewer.scene.add(rig.handles);
+        }
+        for (const actor of people.filter(item => item.id !== selectedId)) {
           bindActor(doc, actor.id); this.buildHuman(actor.pose, actor);
           this.viewer.upsertPassiveCharacterFromActive(actor.id, { pose: actor.pose, color: actor.editorColor });
           this.attachActor(actor, this.viewer.passiveCharacters.get(actor.id).mesh);
           await new Promise(resolve => setTimeout(resolve, 0));
         }
-        const actor = bindActor(doc, selectedId); this.buildHuman(actor.pose, actor);
+        const actor = bindActor(doc, selectedId);
+        if (this.animal) this.viewer.skinnedMesh?.removeFromParent();
+        else this.buildHuman(actor.pose, actor);
         this.baseTarget = Array.isArray(doc.cameraTarget) ? new THREE.Vector3(...doc.cameraTarget) : this.humanBounds().getCenter(new THREE.Vector3());
         if (!Number.isFinite(this.baseTarget.x)) this.baseTarget.set(0, 10, 0);
         doc.cameraTarget = this.baseTarget.toArray();
@@ -316,17 +351,6 @@ export class StudioScene {
         this.splat.root.rotation.y = radians(doc.front);
         this.splat.root.updateMatrixWorld(true);
         this.baseTarget = this.splat.target;
-      } else if (doc.source.kind === 'animal') {
-        if (!this.animal) {
-          this.animal = new AnimalMannequin(doc.source.shape);
-          this.animalShape = doc.source.shape;
-          this.viewer.scene.add(this.animal.root, this.animal.handles);
-        }
-        this.animal.root.scale.setScalar(doc.scale);
-        this.animal.root.rotation.y = radians(doc.front);
-        this.animal.restore(doc.source.pose);
-        this.animal.update(this.animalSelection);
-        this.baseTarget = this.animal.root.localToWorld(this.animal.center.clone());
       } else if (doc.source.kind === 'glb') {
         if (this.glbName !== doc.source.name) {
           const response = await fetch(assetURL(doc.source.name));
@@ -362,7 +386,7 @@ export class StudioScene {
       } else {
         this.baseTarget = new THREE.Vector3(0, 10, 0);
       }
-      this.viewer.setMannequinVisible(doc.source.kind === 'human');
+      this.viewer.setMannequinVisible(doc.source.kind === 'human' && !this.animal);
       for (const actor of doc.actors) this.updateActorTransform(actor);
       const bounds = doc.source.kind === 'splat' ? this.splat.bounds
         : doc.source.kind === 'empty' ? new THREE.Box3(new THREE.Vector3(-10, 0, -10), new THREE.Vector3(10, 20, 10))
@@ -386,8 +410,10 @@ export class StudioScene {
   }
 
   syncPose() {
-    if (this.doc.source.kind === 'animal') {
-      this.doc.source.pose = this.animal.pose();
+    if (this.animal) {
+      const actor = activeActor(this.doc);
+      actor.animalPose = this.animal.pose();
+      actor.transform.scale = this.doc.scale;
       return;
     }
     if (this.doc.source.kind !== 'human') return;
@@ -466,16 +492,16 @@ export class StudioScene {
   setMode(mode) {
     this.finishDrag?.();
     if (this.doc.source.kind === 'splat' || this.doc.source.kind === 'empty') mode = 'camera';
-    if (this.animal && mode === 'position') mode = 'edit';
     this.mode = mode;
-    if (this.animal) this.animal.handles.visible = mode === 'edit';
-    const human = this.doc.source.kind === 'human';
-    const editable = human && !activeActor(this.doc)?.locked && activeActor(this.doc)?.visible !== false;
-    this.viewer.setIKMode(mode === 'edit' && editable);
+    const actor = activeActor(this.doc);
+    const editable = this.doc.source.kind === 'human' && !actor?.locked && actor?.visible !== false;
+    for (const animal of this.animalActors.values()) animal.handles.visible = mode === 'edit' && animal === this.animal && editable;
+    const editHuman = editable && !this.animal;
+    this.viewer.setIKMode(mode === 'edit' && editHuman);
     this.viewer.transform.detach();
-    this.viewer.transform.visible = mode === 'edit' && editable;
+    this.viewer.transform.visible = mode === 'edit' && editHuman;
     this.viewer.skeletonHelper && (this.viewer.skeletonHelper.visible = false);
-    this.viewer.jointMarkers.forEach(marker => { marker.visible = mode === 'edit' && editable && this.viewer._shouldMarkerBeVisible(marker); });
+    this.viewer.jointMarkers.forEach(marker => { marker.visible = mode === 'edit' && editHuman && this.viewer._shouldMarkerBeVisible(marker); });
     this.viewer.orbit.enabled = mode === 'edit' || mode === 'position';
     this.shotHelper.visible = mode === 'edit';
     this.updateShot(mode === 'camera');
@@ -533,7 +559,7 @@ export class StudioScene {
       for (const [object] of nestedHelpers) object.visible = false;
       v.scene.background = new THREE.Color(this.doc.background);
       if (this.doc.source.kind === 'human' && this.doc.conditioning?.colorActors !== true) {
-        for (const actor of visibleActors(this.doc)) for (const material of [].concat(this.actorMesh(actor.id)?.material || [])) {
+        for (const actor of visibleActors(this.doc)) for (const material of this.animalActors.get(actor.id)?.colors.slice(0, 1) || [].concat(this.actorMesh(actor.id)?.material || [])) {
           if (material.color) { actorColors.push([material, material.color.clone()]); material.color.set('#e3e9ee'); }
         }
       }
@@ -606,6 +632,7 @@ export class StudioScene {
   }
 
   setPreset(preset) {
+    if (this.animal) return;
     if (!this.restoring && activeActor(this.doc)?.locked) throw new Error('Unlock the character first.');
     this.viewer.setPose({ bones: preset.bones }, true);
     if (!this.restoring) this.useRigPose();
@@ -702,7 +729,7 @@ export class StudioScene {
   projectPeople(width = this.doc.width, height = this.doc.height) {
     this.configureCapture(width, height); this.viewer.captureCamera.updateMatrixWorld(true);
     const camera = this.viewer.captureCamera;
-    const actors = this.doc.actors?.length ? visibleActors(this.doc) : [{ id: null }];
+    const actors = this.doc.actors?.length ? visibleActors(this.doc).filter(actor => actor.source.kind !== 'animal') : [{ id: null }];
     const names = { head: 'head', rs: 'upperarm_r', re: 'lowerarm_r', rw: 'hand_r', ls: 'upperarm_l', le: 'lowerarm_l', lw: 'hand_l',
       rh: 'thigh_r', rk: 'calf_r', ra: 'foot_r', lh: 'thigh_l', lk: 'calf_l', la: 'foot_l' };
     const meshes = actors.map(actor => actor.id ? this.actorMesh(actor.id) : this.viewer.skinnedMesh).filter(Boolean);
@@ -778,6 +805,12 @@ export class StudioScene {
     const floor = this.grid?.position ? this.grid.position.y + 0.03 : 0;
     this.viewer.scene.updateMatrixWorld(true);
     for (const actor of this.doc.actors || []) if (ids.includes(actor.id) && !actor.locked) {
+      const animal = this.animalActors.get(actor.id);
+      if (animal) {
+        actor.transform.y += floor - worldBounds(animal.root).min.y;
+        this.updateActorTransform(actor);
+        continue;
+      }
       const mesh = this.actorMesh(actor.id); if (!mesh) continue;
       mesh.skeleton.update();
       const index=mesh.geometry.index, seen=new Set(), point=new THREE.Vector3();
@@ -869,29 +902,38 @@ export class StudioScene {
         raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), this.viewer.camera);
         return raycaster;
       };
-      if (this.animal && this.mode === 'edit' && event.button === 0 && !event.shiftKey) {
+      if (this.animal?.handles.visible && this.mode === 'edit' && event.button === 0 && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
         const raycaster = ray();
-        const hits = raycaster.intersectObjects(this.animal.handles.children, false);
-        const hit = hits[0];
-        if (!hit) return;
-        event.stopImmediatePropagation(); event.preventDefault();
-        const { name, target } = hit.object.userData;
-        this.callbacks.select?.(target ? name + ' root' : name);
-        if (!target) return;
-        const center = hit.object.position.clone();
-        const normal = this.viewer.camera.getWorldDirection(new THREE.Vector3());
-        const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center);
-        const point = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
-        if (!point) return;
-        drag = { pointerId: event.pointerId, animalTarget: name, plane, offset: center.sub(point), pose: this.animal.pose() };
-        canvas.setPointerCapture(event.pointerId);
-        return;
+        const hit = raycaster.intersectObjects(this.animal.handles.children, false)[0];
+        if (hit) {
+          event.stopImmediatePropagation(); event.preventDefault();
+          const { name, target } = hit.object.userData;
+          this.callbacks.select?.(target ? name + ' root' : name);
+          const pose = this.animal.pose();
+          if (target) {
+            const center = hit.object.position.clone();
+            const normal = this.viewer.camera.getWorldDirection(new THREE.Vector3());
+            const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center);
+            const point = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+            if (!point) return;
+            drag = { pointerId: event.pointerId, animalTarget: name, plane, offset: center.sub(point), pose };
+          } else {
+            drag = { pointerId: event.pointerId, animalJoint: name, x: event.clientX, y: event.clientY, pose };
+          }
+          canvas.setPointerCapture(event.pointerId);
+          return;
+        }
       }
       if (this.mode !== 'camera' && event.button === 0 && !event.shiftKey && this.doc.source.kind === 'human') {
         const mesh = visibleActors(this.doc).map(actor => this.actorMesh(actor.id)).filter(Boolean);
         for (const item of mesh) { item.updateMatrixWorld(true); item.skeleton.update(); item.computeBoundingBox(); item.computeBoundingSphere(); }
-        const raycaster = ray(), hit = raycaster.intersectObjects(mesh, false)[0];
-        const id = hit?.object.userData.actorId;
+        const raycaster = ray();
+        const animals = visibleActors(this.doc).map(actor => this.animalActors.get(actor.id)?.root).filter(Boolean);
+        const hit = [...raycaster.intersectObjects(mesh, false), ...raycaster.intersectObjects(animals, true)]
+          .sort((first, second) => first.distance - second.distance)[0];
+        let object = hit?.object;
+        while (object && !object.userData.actorId) object = object.parent;
+        const id = object?.userData.actorId;
         if (id && (id !== this.doc.activeActorId || event.ctrlKey || event.metaKey)) {
           event.stopImmediatePropagation(); event.preventDefault(); this.callbacks.pick?.(id, event.ctrlKey || event.metaKey); return;
         }
@@ -918,6 +960,22 @@ export class StudioScene {
     canvas.addEventListener('pointermove', event => {
       if (this.mode === 'camera' || drag) event.stopImmediatePropagation();
       if (!drag || event.pointerId !== drag.pointerId) return;
+      if (drag.animalJoint) {
+        const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+        if (!drag.changed && Math.hypot(dx, dy) < 3) return;
+        beginChange();
+        const joint = this.animal.joints.get(drag.animalJoint);
+        const cameraRotation = this.viewer.camera.getWorldQuaternion(new THREE.Quaternion());
+        const parentInverse = joint.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+        const pitch = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraRotation).applyQuaternion(parentInverse);
+        const yaw = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraRotation).applyQuaternion(parentInverse);
+        joint.rotation.set(...drag.pose[drag.animalJoint]);
+        joint.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(pitch, dy * 0.012));
+        joint.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(yaw, dx * 0.012));
+        this.animal.update(this.animalSelection);
+        this.viewer.requestRender();
+        return;
+      }
       if (drag.animalTarget) {
         const rect = canvas.getBoundingClientRect(), raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), this.viewer.camera);
@@ -983,7 +1041,7 @@ export class StudioScene {
       if (!drag) return false;
       const cancelled = drag; drag = null;
       if (!cancelled.changed) return true;
-      if (cancelled.animalTarget) {
+      if (cancelled.animalTarget || cancelled.animalJoint) {
         this.animal.restore(cancelled.pose);
         this.animal.update(this.animalSelection);
       } else if (cancelled.actor) {
@@ -1000,7 +1058,8 @@ export class StudioScene {
     this.disposed = true;
     this.resizeObserver?.disconnect();
     this.splat?.dispose();
-    this.animal?.dispose();
+    for (const animal of this.animalActors.values()) animal.dispose();
+    this.animalActors.clear();
     this.actorRoots?.clear();
     this.morphCache?.clear(); this.morphCacheBytes = 0; this.humanStatic = null; this.cachedPack = null; this.pack = null;
     // GLB props, the main GLB and line helpers remain attached: the viewer owns

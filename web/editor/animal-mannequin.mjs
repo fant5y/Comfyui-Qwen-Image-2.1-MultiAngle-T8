@@ -29,7 +29,6 @@ export class AnimalMannequin {
     const bounds = new THREE.Box3().setFromObject(this.root);
     const center = bounds.getCenter(new THREE.Vector3());
     this.root.children[0].position.sub(new THREE.Vector3(center.x, bounds.min.y, center.z));
-    this.center = new THREE.Vector3(0, center.y - bounds.min.y, 0);
   }
 
   joint(name, parent, offset) {
@@ -64,7 +63,11 @@ export class AnimalMannequin {
       chain.push(joint);
     }
     this.volume(joint, foot.offset, foot.radii, foot.color ?? 2);
-    this.targets.set(name, { tip: chain.pop(), chain });
+    const tip = new THREE.Object3D();
+    tip.position.fromArray(foot.offset);
+    tip.position.z += foot.radii[2] * 0.65;
+    joint.add(tip);
+    this.targets.set(name, { tip, chain });
   }
 
   quadruped(feline) {
@@ -155,7 +158,8 @@ export class AnimalMannequin {
     this.markers.set(mesh, target ? this.targets.get(name).tip : this.joints.get(name));
   }
 
-  update(selected = '') {
+  update(selected = '', color) {
+    if (color) this.colors[0].color.set(color);
     this.root.updateMatrixWorld(true);
     for (const [marker, joint] of this.markers) {
       joint.getWorldPosition(marker.position);
@@ -166,6 +170,7 @@ export class AnimalMannequin {
   }
 
   restore(pose = {}) {
+    pose ||= {};
     for (const [name, joint] of this.joints) {
       const angles = Object.hasOwn(pose, name) ? pose[name] : null;
       joint.rotation.set(...(Array.isArray(angles) && angles.length === 3 && angles.every(Number.isFinite) ? angles : [0, 0, 0]));
@@ -174,6 +179,40 @@ export class AnimalMannequin {
 
   pose() {
     return Object.fromEntries(Array.from(this.joints, ([name, joint]) => [name, [joint.rotation.x, joint.rotation.y, joint.rotation.z]]));
+  }
+
+  applyAP10K(points, facing) {
+    const direction = (from, to) => points[from] && points[to]
+      ? new THREE.Vector3(0, points[from][1] - points[to][1], facing * (points[to][0] - points[from][0]))
+      : null;
+    const aim = (joint, rest, desired) => {
+      if (!joint || !desired || desired.lengthSq() < 1e-8) return;
+      desired.applyQuaternion(joint.parent.getWorldQuaternion(new THREE.Quaternion()).invert());
+      desired.x = 0;
+      if (desired.lengthSq() < 1e-8) return;
+      const angle = Math.atan2(rest.y * desired.z - rest.z * desired.y, rest.y * desired.y + rest.z * desired.z);
+      joint.rotation.set(angle, 0, 0);
+    };
+    const torso = this.joints.get('Torso');
+    const forward = direction(4, 3);
+    // Work in the mannequin's sagittal plane, independent of its scene placement.
+    const worldRotation = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const worldDirection = (from, to) => direction(from, to)?.applyQuaternion(worldRotation);
+    if (forward) aim(torso, new THREE.Vector3(0, 0, 1), forward.applyQuaternion(worldRotation));
+    const neck = this.joints.get('Neck'), head = this.joints.get('Head');
+    if (neck) aim(neck, head.position.clone(), worldDirection(3, 2));
+    else if (head) aim(head, new THREE.Vector3(0, 0.4, 1), worldDirection(3, 2));
+    // AP-10K supplies two segments per leg. Leave extra rig joints at their current angles.
+    for (const [name, start] of [['Left foreleg', 5], ['Right foreleg', 8], ['Left hind leg', 11], ['Right hind leg', 14]]) {
+      const { chain, tip } = this.targets.get(name);
+      // For digitigrade legs the labeled hip and knee correspond to the visible knee and hock.
+      const first = name.endsWith('hind leg') && chain.length >= 4 ? 1 : 0;
+      for (let segment = 0; segment < 2; segment++) {
+        const joint = chain[first + segment], child = chain[first + segment + 1] || tip;
+        if (joint) aim(joint, child.position.clone(), worldDirection(start + segment, start + segment + 1));
+      }
+    }
+    this.update();
   }
 
   drag(name, destination) {

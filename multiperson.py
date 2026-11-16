@@ -68,8 +68,19 @@ def canonical_scene(raw):
             if not isinstance(actor[key], bool):
                 raise ValueError(f"Invalid actor {key}")
         actor.setdefault("source", {"kind": "human"})
-        if not isinstance(actor["source"], dict) or actor["source"].get("kind") != "human":
-            raise ValueError("Editable actors require a human source")
+        source = actor["source"]
+        if not isinstance(source, dict) or source.get("kind") not in ("human", "animal"):
+            raise ValueError("Select a human or animal mannequin")
+        if source["kind"] == "animal":
+            if source.get("shape") not in ("canine", "feline", "bunny", "owl"):
+                raise ValueError("Select a supported animal mannequin")
+            animal_pose = actor.setdefault("animalPose", {})
+            if not isinstance(animal_pose, dict) or len(animal_pose) > 64 or any(
+                not isinstance(rotation, list) or len(rotation) != 3
+                or any(not finite(angle) or abs(angle) > math.pi for angle in rotation)
+                for rotation in animal_pose.values()
+            ):
+                raise ValueError("Invalid animal mannequin joint rotation")
         normalize_transform(actor)
         for key in ("pose", "mesh"):
             actor.setdefault(key, {})

@@ -1,5 +1,5 @@
-import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116animals';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116animals';
+import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116cast';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116cast';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116en';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116en';
@@ -12,8 +12,8 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116en';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116en';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116en';
-import { activeActor, saveActor } from './actors.mjs?v=20261116en';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116cast';
+import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116en';
 
 const $ = selector => document.querySelector(selector);
@@ -76,7 +76,7 @@ function hasGuide() {
   const source = guideSource(doc);
   return source.kind === 'image' || source.kind === 'canny-image' || source.kind === 'canny-scene'
     || source.kind === 'depth-scene'
-    || source.kind === 'pose' && doc.source.kind === 'human' || source.kind === 'scene' && doc.source.kind !== 'empty';
+    || source.kind === 'pose' && doc.source.kind === 'human' && doc.actors.some(actor => actor.visible !== false && actor.source.kind !== 'animal') || source.kind === 'scene' && doc.source.kind !== 'empty';
 }
 function setBusy(value) {
   busy = value; $('#workspace').inert = value; $('#apply').disabled = value || !ready || !hasGuide()
@@ -208,13 +208,13 @@ function refresh() {
   $('#mouse-pitch').closest('section').hidden = staticGuide;
   $('#lens-mode').value = doc.camera.focalLength ? 'custom' : 'original';
   $('#lens-controls').hidden = !doc.camera.focalLength;
-  $('#copy-photo-pose').disabled = !doc.reference?.name || !!linkedReference.pending;
+  $('#copy-photo-pose').disabled = !!studio?.animal || !doc.reference?.name || !!linkedReference.pending;
   $('#pose-category').value = (doc.randomMaster || doc.poseRandom)?.category || 'mixed';
   if (document.activeElement !== $('#pose-seed')) $('#pose-seed').value = (doc.randomMaster || doc.poseRandom)?.seed || 0;
   for (const id of ['camera-heading', 'camera-eyebrow', 'camera-sliders', 'view-presets', 'shot-shelf', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
   $('#stage-help').textContent = previewVisible ? staticGuide ? 'Source composition and structure · Apply to output this guide' : 'Guide from the current camera · Switch to 3D Workspace to adjust the view'
     : studio?.mode === 'position' ? 'Select a character · Drag to place · Right-drag to orbit · Middle-drag to pan'
-    : studio?.mode === 'edit' && doc.source.kind === 'animal' ? 'Select a joint or drag a gold limb handle · Right-drag to orbit · Middle-drag to pan'
+    : studio?.mode === 'edit' && studio.animal ? 'Drag blue joints to rotate · Drag gold handles to pose limbs · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan'
       : 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom';
   for (const control of controls.values()) control.refresh();
@@ -223,12 +223,13 @@ function refresh() {
   const ratio = ['1:1', '16:9', '9:16', '4:3'].find(value => { const [w, h] = value.split(':').map(Number); return Math.abs(doc.width / doc.height - w / h) < 0.015; });
   $('#ratio').value = ratio || 'custom';
   $('#guide-size').textContent = `${doc.width} × ${doc.height}`;
-  const human = doc.source.kind === 'human';
-  const animal = doc.source.kind === 'animal';
+  const mannequinScene = doc.source.kind === 'human';
+  const animal = mannequinScene && activeActor(doc)?.source.kind === 'animal';
+  const human = mannequinScene && !animal;
   const splat = doc.source.kind === 'splat', empty = doc.source.kind === 'empty';
-  $('#front').disabled = $('#front-number').disabled = human || splat || empty;
-  $('#scale').disabled = $('#scale-number').disabled = splat || empty || human && !!activeActor(doc)?.locked;
-  $('#front').closest('.control').hidden = human || splat || empty;
+  $('#front').disabled = $('#front-number').disabled = mannequinScene || splat || empty;
+  $('#scale').disabled = $('#scale-number').disabled = splat || empty || mannequinScene && !!activeActor(doc)?.locked;
+  $('#front').closest('.control').hidden = mannequinScene || splat || empty;
   $('#scale').closest('.control').hidden = splat || empty;
   $('#calibration-hint').textContent = splat
     ? 'The reconstructed subject is aligned with the estimated source camera. Use the camera to adjust the angle, zoom, and composition.'
@@ -236,13 +237,13 @@ function refresh() {
       : human ? 'Adjust mannequin scale here. Use Edit Scene to change poses, hand poses, and joints.'
         : animal ? 'Use Edit Scene to rotate joints or drag the gold limb handles.'
         : 'GLB uses Y-up by default. Rotate the asset to align its front. Asset scale and camera zoom adjust independently.';
-  $('#asset-label').textContent = empty ? 'Waiting for source reconstruction' : human ? 'MakeHuman · Posable Mannequin' : animal ? ANIMAL_SHAPES[doc.source.shape] + ' · Posable Mannequin' : doc.source.label || 'GLB Scene';
-  $('#source-badge').textContent = empty ? 'PHOTO → 3D' : splat ? doc.source.keep_background ? 'TRIPOSPLAT · Background Included' : 'TRIPOSPLAT · Source Subject' : human ? 'HUMAN · Posable Mannequin' : animal ? ANIMAL_SHAPES[doc.source.shape] + ' · Mannequin' : 'GLB · Scene';
+  $('#asset-label').textContent = empty ? 'Waiting for source reconstruction' : human ? 'MakeHuman · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Posable Mannequin' : doc.source.label || 'GLB Scene';
+  $('#source-badge').textContent = empty ? 'PHOTO → 3D' : splat ? doc.source.keep_background ? 'TRIPOSPLAT · Background Included' : 'TRIPOSPLAT · Source Subject' : human ? 'HUMAN · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Mannequin' : 'GLB · Scene';
   for (const id of ['pose-panel', 'hands-panel', 'body-panel', 'joint-panel']) {
     const available = human || animal && id === 'joint-panel';
     const panel = document.getElementById(id);
     panel.classList.toggle('disabled-panel', !available);
-    panel.inert = !available || human && id !== 'pose-panel' && !!activeActor(doc)?.locked;
+    panel.inert = !available || mannequinScene && id !== 'pose-panel' && !!activeActor(doc)?.locked;
     panel.hidden = !available || staticGuide;
   }
   for (const id of ['presets', 'pose-actions', 'saved-poses']) $(`#${id}`).inert = !human || !!activeActor(doc)?.locked;
@@ -388,7 +389,7 @@ function refresh() {
   $('#apply').disabled = busy || !ready || !hasGuide() || (linkedReference.connected && (!linkedReference.asset || linkedReference.pending))
     || (linkedStructure.connected && !!linkedStructure.pending && !usesLocalGuide(guide));
   $('#edit-mode').disabled = splat || empty;
-  $('#position-mode').disabled = !human;
+  $('#position-mode').disabled = !mannequinScene;
   $('#edit-mode').title = splat ? 'Use Camera mode to change the view of a reconstructed subject.' : empty ? 'Load a 3D subject first.' : '';
   $('#mode-hint').hidden = !splat;
   $('#fit-frame').textContent = splat ? 'Return to Source Camera' : 'Fit to Frame';
@@ -402,9 +403,9 @@ function refresh() {
     boneSelect.dataset.bones = boneList;
   }
   if (!bones.includes(selectedBone)) selectedBone = '';
-  $('#animal-shape').value = animal ? doc.source.shape : '';
+  $('#animal-shape').value = '';
   $('#joint-hint').textContent = animal
-    ? 'Open Edit Scene to show the joints. Rotate a selected joint below or drag a gold limb handle.'
+    ? 'Drag a blue joint to rotate it or drag a gold handle to pose the limb.'
     : 'Switch to Edit Scene, then select a joint or drag an IK hand or foot control.';
   $('#bone-name').textContent = selectedBone || 'None Selected';
   $('#bone-select').value = selectedBone;
@@ -498,7 +499,7 @@ function setMode(mode) {
   $('#use-view').hidden = mode !== 'edit';
   $('#stage-help').textContent = mode === 'camera' ? 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom'
     : mode === 'position' ? 'Select a character · Drag to place · Right-drag to orbit · Middle-drag to pan'
-    : doc.source.kind === 'animal' ? 'Select a joint or drag a gold limb handle · Right-drag to orbit · Middle-drag to pan'
+    : studio.animal ? 'Drag blue joints to rotate · Drag gold handles to pose limbs · Right-drag to orbit · Middle-drag to pan'
     : doc.source.kind === 'human' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan · Camera stays in place'
       : 'Right-drag to orbit · Middle-drag to pan · Set this view as the camera';
 }
@@ -627,6 +628,7 @@ async function applyOpenPoseAsset(asset, detectedPoints = null, fullBody = null,
   previewGuide = 'pose'; previewVisible = true; changed();
 }
 async function retargetPose() {
+  if (studio.animal) throw new Error('To pose this animal, import an AP-10K JSON file from AnimalPose Estimator.');
   if (doc.openpose?.people?.length) return chooseDetectedPeople(doc.openpose.people, doc.openpose.rawAsset, { reference: doc.openpose.origin === 'dwpose' ? doc.reference : null, origin: doc.openpose.origin });
   const mode = doc.openpose?.retargetMode || (doc.openpose?.origin === 'dwpose' ? 'conservative' : 'estimated');
   if (doc.openpose?.origin === 'dwpose' && doc.openpose.fullBody === false
@@ -745,10 +747,45 @@ $('#generate-scene-depth').onclick = () => { begin(); doc.conditioning.map = nul
 $('#depth-invert').onchange = event => { begin(); doc.conditioning.depthInvert = event.target.checked; changed(); };
 $('#pose-occlusion').onchange = event => { begin(); doc.conditioning.poseOcclusion = event.target.value; changed(); };
 $('#pose-hands').onchange = event => { begin(); doc.conditioning.poseHands = event.target.checked; changed(); };
+function applyAnimalKeypoints(frame) {
+  const actor = activeActor(doc);
+  if (!studio.animal || actor.source.shape === 'owl')
+    throw new Error('Select an unlocked Canine, Feline, or Bunny mannequin before importing AP-10K.');
+  if (actor.locked || actor.visible === false) throw new Error('Show and unlock the selected animal before importing its pose.');
+  if (!Array.isArray(frame.animals) || frame.animals.length !== 1)
+    throw new Error('Choose an AP-10K frame with one detected animal.');
+  const values = frame.animals[0];
+  if (!Array.isArray(values) || values.length !== 51 || !values.every(Number.isFinite))
+    throw new Error('Invalid AP-10K pose. Expected 17 x, y, confidence triplets.');
+  const points = Array.from({ length: 17 }, (_, index) => {
+    const [x, y, confidence] = values.slice(index * 3, index * 3 + 3);
+    return confidence > 0.2 ? [x, y] : null;
+  });
+  if (!points[3] || !points[4] || Math.hypot(points[3][0] - points[4][0], points[3][1] - points[4][1]) < 1)
+    throw new Error('The AP-10K pose needs a visible neck and tail root.');
+  const facing = points[3][0] < points[4][0] ? -1 : 1;
+  begin();
+  studio.animal.applyAP10K(points, facing);
+  doc.conditioning.guide = 'coarse';
+  doc.conditioning.map = null; doc.conditioning.mapKind = null; doc.conditioning.mapOrigin = 'auto';
+  doc.camera.azimuth = ((actor.transform.yaw - facing * 75 + 540) % 360) - 180;
+  doc.camera.elevation = 5;
+  previewVisible = false;
+  setMode('edit');
+  studio.fit(true);
+  $('#joint-panel').open = true;
+  changed();
+  toast('AP-10K pose applied. Drag the joints to refine it.');
+}
 $('#openpose-file').onchange = event => run(async () => {
   const file = event.target.files[0]; event.target.value = ''; if (!file) return;
   if (file.name.toLowerCase().endsWith('.json')) {
     const keypoints = JSON.parse(await file.text());
+    const firstFrame = Array.isArray(keypoints) ? keypoints[0] : keypoints;
+    if (firstFrame?.version === 'ap10k') {
+      applyAnimalKeypoints(firstFrame);
+      return;
+    }
     const photoCanvas = doc.reference?.width && doc.reference?.height;
     const canvasWidth = photoCanvas ? doc.reference.width : doc.width, canvasHeight = photoCanvas ? doc.reference.height : doc.height;
     const frame = Array.isArray(keypoints) ? keypoints[0] : keypoints;
@@ -773,6 +810,7 @@ $('#read-map').onclick = $('#read-openpose').onclick = () => {
 };
 document.querySelectorAll('[data-flip]').forEach(button => {
   button.onclick = () => {
+    if (studio.animal) return;
     const actor = activeActor(doc), source = actor?.poseSource ?? (doc.actors?.length > 1 ? null : doc.openpose);
     if (!source?.points || source.fullBody === false || source.retargetMode === 'conservative' || actor?.locked || doc.source.kind !== 'human') return;
     begin(); const key = button.dataset.flip;
@@ -898,29 +936,39 @@ $('#glb-file').onchange = event => run(async () => {
   changed(); toast('GLB loaded. Adjust its front alignment and scale under Scene and Composition.');
 });
 for (const [shape, label] of Object.entries(ANIMAL_SHAPES)) $('#animal-shape').append(new Option(label, shape));
-$('#animal-shape').onchange = event => run(async () => {
+$('#animal-shape').onchange = event => {
   const shape = event.target.value;
-  if (!Object.hasOwn(ANIMAL_SHAPES, shape)) return;
-  const rollbackHistory = begin();
-  const previous = clone(doc);
-  doc.source = { kind: 'animal', shape, pose: {} }; doc.front = 0; doc.scale = 1;
-  if (doc.conditioning.guide === 'pose') doc.conditioning.guide = 'coarse';
-  try { await studio.restore(doc); studio.fit(); }
-  catch (error) {
-    doc = previous; rollbackHistory?.();
-    await studio.restore(doc);
-    throw error;
-  }
-  selectedBone = '';
-  previewVisible = false;
-  setMode('edit');
-  $('#joint-panel').open = true;
-  changed();
-});
+  return run(async () => {
+    if (!Object.hasOwn(ANIMAL_SHAPES, shape)) return;
+    const rollbackHistory = begin();
+    const previous = clone(doc);
+    studio.syncPose();
+    const actor = createActor(doc.actors.length, { label: ANIMAL_SHAPES[shape], source: { kind: 'animal', shape }, animalPose: {} });
+    doc.actors.push(actor);
+    doc.source = { kind: 'human' };
+    bindActor(doc, actor.id); doc.selectedActorIds = [actor.id];
+    if (doc.conditioning.guide === 'pose') doc.conditioning.guide = 'coarse';
+    try { await studio.restore(doc); studio.fit(); }
+    catch (error) {
+      doc = previous; rollbackHistory?.();
+      await studio.restore(doc);
+      throw error;
+    }
+    selectedBone = '';
+    previewVisible = false;
+    setMode('edit');
+    $('#joint-panel').open = true;
+    changed();
+  });
+};
 $('#human').onclick = () => run(async () => {
   const rollbackHistory = begin();
   const previous = clone(doc);
-  doc.source = { kind: 'human' }; doc.front = 0; doc.scale = 1;
+  studio.syncPose();
+  let person = doc.actors.find(actor => actor.source.kind === 'human');
+  if (!person) { person = createActor(doc.actors.length); doc.actors.push(person); }
+  doc.source = { kind: 'human' };
+  bindActor(doc, person.id); doc.selectedActorIds = [person.id];
   try { await studio.restore(doc); await ensureHumanTools(); }
   catch (e) {
     doc = previous; rollbackHistory?.();
@@ -1199,7 +1247,7 @@ async function buildPresetCards() {
 }
 
 async function ensureHumanTools() {
-  if (humanToolsReady) return;
+  if (humanToolsReady || studio.animal || doc.source.kind !== 'human') return;
   // Pose thumbnails require the human rig; never load it just to open a photo scene.
   await buildPresetCards();
   humanToolsReady = true;
@@ -1235,7 +1283,7 @@ async function start(token, reference = { connected: false }, structure = { conn
       if (updateControls) refresh();
     }, error });
     await studio.init(doc);
-    if (doc.source.kind === 'human') await ensureHumanTools();
+    if (doc.actors.some(actor => actor.source.kind === 'human')) await ensureHumanTools();
     if (structure.asset && doc.conditioning.model === 'base' && ['pose', 'depth', 'canny'].includes(doc.conditioning.guide)
         && !usesLocalGuide())
       await applyStructureAsset(structure.asset);

@@ -71,6 +71,8 @@ button{white-space:nowrap}input[type=range]{appearance:none;height:3px;border-ra
 .stage.previewing-guide>.stage-toolbar,.stage.previewing-guide>.stage-meta,.stage.previewing-guide>.reference-overlay,.stage.previewing-guide>.mode-hint,.stage.previewing-guide>.fit-frame,.stage.previewing-guide>.use-view,.stage.previewing-guide>.empty-scene{display:none}
 .guide-actions .wide-button{white-space:normal;font-size:11px;line-height:1.45;min-height:38px}
 .guide-actions .pose-select-field{display:grid;grid-template-columns:minmax(0,1fr);justify-content:stretch;align-items:stretch;gap:8px;margin:12px 0;color:#b9cbd7;font-size:11px}
+.animal-mannequin-field{display:grid;gap:7px;margin:13px 0 14px;color:#b9cbd7;font-size:12px}
+.animal-mannequin-field select{min-height:38px}
 .pose-select-field select{width:100%;min-width:0;max-width:100%;font-size:11px;text-overflow:ellipsis}
 .guide-actions .option-toggle{align-items:flex-start}
 .guide-actions .option-toggle input{margin-top:3px}

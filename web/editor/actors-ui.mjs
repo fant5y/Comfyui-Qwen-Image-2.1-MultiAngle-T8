@@ -1,7 +1,7 @@
 import { createActor, activeActor, ensureActors, bindActor, cloneActor, removeActor, moveActor, editableActors, actorSeed, applySceneTemplate } from './actors.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { installCastTools } from './cast-tools.mjs?v=20261116en';
+import { installCastTools } from './cast-tools.mjs?v=20261116cast';
 import { poseCopyIssue, ORDER } from './openpose.mjs?v=20261116en';
 import { guideSource } from './guides.mjs?v=20261116en';
 import { addReference, newUse } from './reference-library.mjs?v=20261116en';
@@ -60,7 +60,9 @@ export function installActorsUI(options) {
   $('actor-label').onchange = () => { const actor = activeActor(context.doc()); if (!actor) return; context.begin(); actor.label = $('actor-label').value.trim() || 'Character'; context.changed(); };
   $('actor-color').onchange = () => {
     const actor = activeActor(context.doc()); if (!actor) return; context.begin(); actor.editorColor = $('actor-color').value;
-    context.studio().viewer.setActiveCharacterAppearance({ color: actor.editorColor }); context.changed();
+    if (actor.source.kind === 'animal') context.studio().updateActorTransform(actor);
+    else context.studio().viewer.setActiveCharacterAppearance({ color: actor.editorColor });
+    context.changed();
   };
   $('actor-plane').onchange = () => { context.begin(); context.doc().interaction.movePlane = $('actor-plane').value; context.changed(false); };
   $('ground-actors').onclick = () => { context.begin(); context.studio().groundActors(context.doc().selectedActorIds); context.changed(); };
@@ -128,6 +130,7 @@ export async function selectRole(id, additive = false) {
     if (additive) doc.selectedActorIds = doc.selectedActorIds?.includes(id) ? doc.selectedActorIds.filter(value => value !== id) : [...doc.selectedActorIds || [], id];
     else doc.selectedActorIds = [id];
     await context.studio().selectActor(id);
+    await context.ensureHumanTools();
     context.refresh();
   });
 }
@@ -175,16 +178,16 @@ export function refreshActorsUI() {
   $('actor-plane').value = doc.interaction?.movePlane || 'screen'; $('actor-identities').checked = doc.conditioning.identityMode === 'actors'; $('color-actors').checked = !!doc.conditioning.colorActors;
   $('actor-identities').disabled = staticGuide;
   $('random-scope').value = doc.randomScope || 'current';
-  for (const id of ['random-pose', 'repeat-pose']) $(id).disabled = !human || !editableActors(doc, doc.randomScope || 'current').length;
+  for (const id of ['random-pose', 'repeat-pose']) $(id).disabled = !human || !editableActors(doc, doc.randomScope || 'current').filter(role => role.source.kind !== 'animal').length;
   const templateKey = JSON.stringify(doc.compositionTemplates?.map(item => [item.id, item.name]));
   if ($('composition-list').dataset.key !== templateKey) { $('composition-list').dataset.key = templateKey; $('composition-list').replaceChildren(new Option('Choose Scene Template', '')); for (const template of doc.compositionTemplates || []) $('composition-list').append(new Option(template.name, template.id)); }
   const staticOutput = ['image', 'canny-image'].includes(guideSource(doc).kind);
-  $('export-keypoints').disabled = !human || staticOutput;
+  $('export-keypoints').disabled = !human || staticOutput || !doc.actors.some(role => role.visible !== false && role.source.kind !== 'animal');
   $('export-keypoints').title = staticOutput ? 'Studio is outputting the source skeleton. Switch to a 3D mannequin pose to export its JSON.' : 'Export the 3D skeleton from the current camera.';
 }
 export async function randomRoles(seed, category) {
   return editTransaction(async () => {
-    const doc = context.doc(), roles = editableActors(doc, doc.randomScope || 'current');
+    const doc = context.doc(), roles = editableActors(doc, doc.randomScope || 'current').filter(role => role.source.kind !== 'animal');
     if (!roles.length) throw new Error('Unlock at least one character to randomize its pose.');
     context.studio().syncPose(); const active = doc.activeActorId;
     for (const role of roles) {
