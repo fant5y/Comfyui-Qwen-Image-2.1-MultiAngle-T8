@@ -7,7 +7,7 @@ import { promptForSnapshot } from './batch-queue.mjs?v=20261116en';
 let graphRevision = 0;
 let closeActive = null;
 const extensionURL = new URL('./editor/index.html', import.meta.url);
-extensionURL.searchParams.set('v', '20261116posefit');
+extensionURL.searchParams.set('v', '20261116jointdrag');
 
 function openEditor(node, widget) {
   closeActive?.();
@@ -299,11 +299,13 @@ app.registerExtension({
     nodeType.prototype.onNodeCreated = function () {
       created?.apply(this, arguments);
       const widget = this.widgets.find(w => w.name === 'snapshot');
-      widget.type = 'converted-widget'; widget.computeSize = () => [0, -4];
-      if (widget.inputEl) widget.inputEl.style.display = 'none';
+      // The workflow still serializes this value, but it has no visible widget row.
+      widget.hidden = true;
       this.addWidget('button', 'Open AnyAngle Studio', null, () => openEditor(this, widget));
-      this.color = '#173847'; this.bgcolor = '#111e28'; this.size = [345, 130];
+      this.color = '#173847'; this.bgcolor = '#111e28';
       labelStudioSockets(this);
+      const [width, height] = this.computeSize();
+      this.setSize([Math.max(345, width), height]);
       const connectionsChanged = this.onConnectionsChange;
       this.onConnectionsChange = function () { const result = connectionsChanged?.apply(this, arguments); queueMicrotask(() => labelStudioSockets(this)); return result; };
       const removed = this.onRemoved;

@@ -926,7 +926,6 @@ export class StudioScene {
       if (this.animal?.handles.visible && this.mode === 'edit' && event.button === 0 && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
         const transform = this.viewer.transform;
         transform.pointerHover(transform._getPointer(event));
-        if (transform.object && transform.axis) return;
         const raycaster = ray();
         const hit = raycaster.intersectObjects(this.animal.handles.children, false)[0];
         if (hit) {
@@ -940,11 +939,15 @@ export class StudioScene {
             const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center);
             const point = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
             if (!point) return;
-            drag = { pointerId: event.pointerId, animalTarget: name, plane, offset: center.sub(point), pose };
-          } else return;
+            drag = { pointerId: event.pointerId, animal: this.animal, animalTarget: name, plane, offset: center.sub(point), pose, x: event.clientX, y: event.clientY };
+          } else {
+            drag = { pointerId: event.pointerId, animal: this.animal, joint: this.animal.joints.get(name), pose, x: event.clientX, y: event.clientY };
+          }
           canvas.setPointerCapture(event.pointerId);
           return;
         }
+        if (transform.object && transform.axis) return;
+        if (this.animalSelection) this.callbacks.select?.('');
       }
       if (this.mode !== 'camera' && event.button === 0 && !event.shiftKey && this.doc.source.kind === 'human') {
         const mesh = visibleActors(this.doc).map(actor => this.actorMesh(actor.id)).filter(Boolean);
@@ -982,15 +985,30 @@ export class StudioScene {
     canvas.addEventListener('pointermove', event => {
       if (this.mode === 'camera' || drag) event.stopImmediatePropagation();
       if (!drag || event.pointerId !== drag.pointerId) return;
+      if (drag.animal && !drag.changed && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 3) return;
+      if (drag.joint) {
+        const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+        beginChange();
+        drag.animal.restore(drag.pose);
+        const axis = new THREE.Vector3(dy, dx, 0).applyQuaternion(this.viewer.camera.quaternion);
+        const angle = axis.length() * 0.01;
+        if (angle) {
+          axis.normalize().applyQuaternion(drag.joint.parent.getWorldQuaternion(new THREE.Quaternion()).invert());
+          drag.joint.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, angle)).normalize();
+        }
+        drag.animal.update(this.animalSelection);
+        this.viewer.requestRender();
+        return;
+      }
       if (drag.animalTarget) {
         const rect = canvas.getBoundingClientRect(), raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), this.viewer.camera);
         const point = raycaster.ray.intersectPlane(drag.plane, new THREE.Vector3());
         if (!point) return;
         beginChange();
-        this.animal.restore(drag.pose);
-        this.animal.drag(drag.animalTarget, point.add(drag.offset));
-        this.animal.update(this.animalSelection);
+        drag.animal.restore(drag.pose);
+        drag.animal.drag(drag.animalTarget, point.add(drag.offset));
+        drag.animal.update(this.animalSelection);
         this.viewer.requestRender();
         return;
       }
@@ -1047,9 +1065,9 @@ export class StudioScene {
       if (!drag) return false;
       const cancelled = drag; drag = null;
       if (!cancelled.changed) return true;
-      if (cancelled.animalTarget) {
-        this.animal.restore(cancelled.pose);
-        this.animal.update(this.animalSelection);
+      if (cancelled.animal) {
+        cancelled.animal.restore(cancelled.pose);
+        cancelled.animal.update(this.animalSelection);
       } else if (cancelled.actor) {
         const actor = this.doc.actors.find(item => item.id === cancelled.actor);
         if (actor) { actor.transform = cancelled.transform; this.updateActorTransform(actor); }

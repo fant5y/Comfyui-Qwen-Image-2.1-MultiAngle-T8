@@ -32,7 +32,7 @@ class AnyAngleStudio(comfy_io.ComfyNode):
     @classmethod
     def define_schema(cls):
         return comfy_io.Schema(node_id="AnyAngleStudioT8", display_name="Comfyui-Qwen-Image-2.1-MultiAngle-T8", category="T8/AnyAngle",
-            inputs=[comfy_io.String.Input("snapshot", default="", multiline=True),
+            inputs=[comfy_io.String.Input("snapshot", default=""),
                     comfy_io.Image.Input("reference_image", optional=True, display_name="Scene Source Image (Optional)"), comfy_io.Image.Input("structure_image", optional=True, display_name="External Guide Image (Optional)"),
                     comfy_io.Autogrow.Input("actor_references", template=comfy_io.Autogrow.TemplateNames(
                         comfy_io.Image.Input("actor_reference", tooltip="General reference for identity, clothing, accessories, setting, or style. Assign its role in Studio."), names=[f"actor_reference_{index}" for index in range(1, 101)], min=0), optional=True),
