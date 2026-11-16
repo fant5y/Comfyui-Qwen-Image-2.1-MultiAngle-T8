@@ -15,6 +15,7 @@ export class AnimalMannequin {
     this.handles = new THREE.Group();
     this.joints = new Map();
     this.bodyVolumes = [];
+    this.skins = [];
     this.targets = new Map();
     this.markers = new Map();
     this.sphere = new THREE.SphereGeometry(1, 20, 14);
@@ -37,6 +38,7 @@ export class AnimalMannequin {
     else this.quadruped(shape === 'feline');
     for (const [name] of this.joints) this.marker(name, false);
     for (const [name] of this.targets) this.marker(name, true);
+    this.update();
     const bounds = new THREE.Box3().setFromObject(this.root);
     const center = bounds.getCenter(new THREE.Vector3());
     this.root.children[0].position.sub(new THREE.Vector3(center.x, bounds.min.y, center.z));
@@ -67,15 +69,63 @@ export class AnimalMannequin {
     mesh.quaternion.setFromUnitVectors(Y, offset.normalize());
   }
 
-  limb(name, body, origin, offsets, widths, foot, colors = [0, 0]) {
+  skin(joints, radii, flatten = 1, body = false) {
+    const sides = 12, slices = (joints.length - 1) * 6;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array((slices + 1) * sides * 3), 3));
+    const indices = [];
+    for (let row = 0; row < slices; row++) for (let side = 0; side < sides; side++) {
+      const a = row * sides + side, b = row * sides + (side + 1) % sides;
+      indices.push(a, b, a + sides, b, b + sides, a + sides);
+    }
+    geometry.setIndex(indices);
+    const mesh = new THREE.Mesh(geometry, this.colors[0]);
+    mesh.frustumCulled = false;
+    joints[0].add(mesh);
+    this.skins.push({ joints, radii, flatten, body, sides, slices, geometry });
+  }
+
+  updateSkins() {
+    for (const { joints, radii, flatten, body, sides, slices, geometry } of this.skins) {
+      const origin = joints[0];
+      const curve = new THREE.CatmullRomCurve3(joints.map(joint => origin.worldToLocal(joint.getWorldPosition(new THREE.Vector3()))));
+      const position = geometry.attributes.position;
+      const normal = new THREE.Vector3(1, 0, 0);
+      for (let row = 0; row <= slices; row++) {
+        const progress = row / slices;
+        const center = curve.getPoint(progress), tangent = curve.getTangent(progress);
+        const direction = Math.abs(tangent.dot(Y)) > 0.96 ? new THREE.Vector3(1, 0, 0) : Y;
+        normal.addScaledVector(tangent, -normal.dot(tangent));
+        if (normal.lengthSq() < 1e-6) normal.crossVectors(tangent, direction);
+        normal.normalize();
+        const binormal = new THREE.Vector3().crossVectors(tangent, normal);
+        const jointIndex = progress * (radii.length - 1);
+        const before = Math.min(radii.length - 2, Math.floor(jointIndex));
+        const radius = THREE.MathUtils.lerp(radii[before], radii[before + 1], jointIndex - before) * (body ? this.build ?? 1 : 1);
+        for (let side = 0; side < sides; side++) {
+          const angle = side * 2 * Math.PI / sides;
+          const point = center.clone().addScaledVector(normal, radius * Math.cos(angle))
+            .addScaledVector(binormal, radius * flatten * Math.sin(angle));
+          position.setXYZ(row * sides + side, point.x, point.y, point.z);
+        }
+      }
+      position.needsUpdate = true;
+      geometry.computeVertexNormals();
+      geometry.computeBoundingBox();
+      geometry.computeBoundingSphere();
+    }
+  }
+
+  limb(name, body, origin, offsets, widths, foot) {
     let joint = this.joint(name + ' root', body, origin);
     const chain = [joint];
     for (const [index, offset] of offsets.entries()) {
-      this.segment(joint, offset, widths[index], colors[index] ?? 0);
       joint = this.joint(name + (index === offsets.length - 1 ? ' tip' : ' joint ' + (index + 1)), joint, offset);
       chain.push(joint);
     }
-    this.volume(joint, foot.offset, foot.radii, foot.color ?? 2);
+    const radii = [widths[0], ...widths.slice(1).map(width => width * 0.9), Math.min(foot.radii[0], widths.at(-1)) * 0.85];
+    this.skin(chain, radii, name.endsWith('wing') ? 0.68 : 0.88);
+    this.volume(joint, foot.offset, foot.radii, foot.color ?? 0);
     const tip = new THREE.Object3D();
     tip.position.fromArray(foot.offset);
     tip.position.z += foot.radii[2] * 0.65;
@@ -87,13 +137,21 @@ export class AnimalMannequin {
     const body = this.joint('Torso', this.root, [0, 0, 0]);
     const chest = this.joint('Chest', body, [0, 0, 1.37]);
     const pelvis = this.joint('Pelvis', body, [0, 0, -1.39]);
-    this.volume(body, [0, 0, 0], feline ? [1.04, 1.22, 2.25] : [1.3, 1.58, 2.34]);
-    this.volume(chest, [0, 0.04, 0.16], feline ? [1.16, 1.44, 1.82] : [1.58, 1.91, 1.89]);
-    this.volume(pelvis, [0, 0.04, -0.55], feline ? [1.19, 1.34, 1.83] : [1.41, 1.60, 1.83]);
+    const torsoSections = [
+      [pelvis, [0, 0.04, -2.1]], [pelvis, [0, 0.08, -1.43]], [pelvis, [0, 0.04, -0.63]],
+      [body, [0, 0.07, 0.2]], [chest, [0, 0.02, 0.4]], [chest, [0, -0.09, 1.28]], [chest, [0, 0.18, 1.85]],
+    ].map(([parent, position]) => {
+      const section = new THREE.Object3D();
+      section.position.fromArray(position);
+      parent.add(section);
+      return section;
+    });
+    this.skin(torsoSections, feline ? [0.05, 0.91, 1.2, 0.94, 1.17, 0.91, 0.06]
+      : [0.05, 1.08, 1.42, 1.28, 1.57, 1.22, 0.06], 1.2, true);
     const neck = this.joint('Neck', chest, [0, 0.62, 1.18]);
     const neckEnd = feline ? [0, 0.77, 1.22] : [0, 1.8, 1.28];
-    this.segment(neck, neckEnd, feline ? 0.9 : 1.18);
     const head = this.joint('Head', neck, neckEnd);
+    this.skin([neck, head], feline ? [0.82, 0.63] : [1.18, 0.88], 0.9);
     this.volume(head, [0, 0.15, 0.32], feline ? [1.05, 0.91, 0.9] : [1.26, 1.15, 1.25]);
     this.volume(head, [0, -0.27, feline ? 0.91 : 1.58], [feline ? 0.51 : 0.69, feline ? 0.28 : 0.55, feline ? 0.27 : 1.08], 1);
     this.volume(head, [0, -0.18, feline ? 1.14 : 2.48], feline ? [0.2, 0.12, 0.12] : [0.33, 0.24, 0.24], 2);
@@ -114,12 +172,20 @@ export class AnimalMannequin {
         { offset: [0, 0, 0.29], radii: [0.48, 0.33, 0.71] });
     }
     let tail = this.joint('Tail base', pelvis, [0, 0.58, -1.66]);
+    const tailJoints = [tail];
     const offsets = feline ? [[0, 0.5, -1.51], [0, 1.11, -1.39], [0, 0.95, -0.78]]
       : [[0, -0.31, -1.56], [0, -0.45, -1.65], [0, 0.11, -1.25]];
     for (const [index, offset] of offsets.entries()) {
-      this.segment(tail, offset, (feline ? 0.43 : 0.72) * (1 - index * 0.23), index === 2 ? 1 : 0);
       if (index < offsets.length - 1) tail = this.joint('Tail joint ' + (index + 1), tail, offset);
+      else {
+        const end = new THREE.Object3D();
+        end.position.fromArray(offset);
+        tail.add(end);
+        tail = end;
+      }
+      tailJoints.push(tail);
     }
+    this.skin(tailJoints, feline ? [0.44, 0.36, 0.27, 0.025] : [0.63, 0.49, 0.33, 0.025]);
   }
 
   bunny() {
@@ -173,7 +239,7 @@ export class AnimalMannequin {
         { offset: [sign * 0.31, -0.13, -0.23], radii: [0.72, 0.29, 0.44], color: 0 });
       this.limb(side + ' leg', pelvis, [sign * 0.83, -1.18, 0.08],
         [[0, -0.85, -0.15], [0, -0.69, 0.35]], [0.4, 0.27],
-        { offset: [0, 0, 0.25], radii: [0.38, 0.22, 0.63] }, [0, 2]);
+        { offset: [0, 0, 0.25], radii: [0.38, 0.22, 0.63], color: 2 });
     }
   }
 
@@ -187,12 +253,15 @@ export class AnimalMannequin {
   }
 
   setBuild(build = 1) {
+    this.build = build;
     for (const { mesh, scale } of this.bodyVolumes) mesh.scale.set(scale.x * build, scale.y * build, scale.z);
+    this.updateSkins();
   }
 
   update(selected = '', color) {
     if (color) this.colors[0].color.set(color);
     this.root.updateMatrixWorld(true);
+    this.updateSkins();
     for (const [marker, joint] of this.markers) {
       joint.getWorldPosition(marker.position);
       marker.material = marker.userData.target ? this.targetMaterial
@@ -232,10 +301,20 @@ export class AnimalMannequin {
     const worldDirection = (from, to) => direction(from, to)?.applyQuaternion(worldRotation);
     if (forward) aim(torso, new THREE.Vector3(0, 0, 1), forward.applyQuaternion(worldRotation));
     const neck = this.joints.get('Neck'), head = this.joints.get('Head');
-    if (neck) aim(neck, head.position.clone(), worldDirection(3, 2));
-    else if (head) aim(head, new THREE.Vector3(0, 0.4, 1), worldDirection(3, 2));
-    // AP-10K supplies two segments per leg. Leave extra rig joints at their current angles.
-    for (const [name, start] of [['Left foreleg', 5], ['Right foreleg', 8], ['Left hind leg', 11], ['Right hind leg', 14]]) {
+    if (neck) {
+      aim(neck, head.position.clone(), worldDirection(3, 2));
+      neck.rotation.x = THREE.MathUtils.clamp(neck.rotation.x, -0.55, 0.4);
+    }
+    if (head && points[0] && points[1] && points[2]) {
+      const eyeSpan = Math.hypot(points[0][0] - points[1][0], points[0][1] - points[1][1]);
+      const eyeY = (points[0][1] + points[1][1]) / 2;
+      const frontality = THREE.MathUtils.clamp(eyeSpan / (Math.abs(points[2][1] - eyeY) * 1.6 + 1), 0, 1);
+      head.rotation.y = -facing * frontality * 1.52;
+      head.rotation.x = THREE.MathUtils.clamp(-0.12 - (neck?.rotation.x || 0), -0.55, 0.4);
+    }
+    const legs = [['Left foreleg', 5], ['Right foreleg', 8], ['Left hind leg', 11], ['Right hind leg', 14]];
+    // First match visible segment directions, then align the paws relative to the source floor.
+    for (const [name, start] of legs) {
       const { chain, tip } = this.targets.get(name);
       // For digitigrade legs the labeled hip and knee correspond to the visible knee and hock.
       const first = name.endsWith('hind leg') && chain.length >= 4 ? 1 : 0;
@@ -244,13 +323,27 @@ export class AnimalMannequin {
         if (joint) aim(joint, child.position.clone(), worldDirection(start + segment, start + segment + 1));
       }
     }
+    const paws = legs.filter(([, start]) => points[start + 2]);
+    if (paws.length >= 2) {
+      const floorInImage = Math.max(...paws.map(([, start]) => points[start + 2][1]));
+      const floor = Math.min(...paws.map(([name]) => this.targets.get(name).tip.getWorldPosition(new THREE.Vector3()).y));
+      const averageHeight = paws.reduce((total, [, start]) => total + (points[start] ? Math.abs(points[start + 2][1] - points[start][1]) : 0), 0) / paws.length;
+      const units = this.root.getWorldScale(new THREE.Vector3()).y;
+      const scale = units * 3.8 / Math.max(averageHeight, 1);
+      const side = new THREE.Vector3(1, 0, 0).applyQuaternion(worldRotation);
+      for (const [name, start] of paws) {
+        const destination = this.targets.get(name).tip.getWorldPosition(new THREE.Vector3());
+        destination.y = floor + Math.min(2.2 * units, (floorInImage - points[start + 2][1]) * scale);
+        this.drag(name, destination, side);
+      }
+    }
     this.update();
   }
 
-  drag(name, destination) {
+  drag(name, destination, planeNormal = null) {
     const { chain, tip } = this.targets.get(name);
     const origin = new THREE.Vector3(), current = new THREE.Vector3(), wanted = new THREE.Vector3();
-    const parentInverse = new THREE.Quaternion(), delta = new THREE.Quaternion();
+    const parentInverse = new THREE.Quaternion(), delta = new THREE.Quaternion(), identity = new THREE.Quaternion();
     for (let iteration = 0; iteration < 10; iteration++) {
       if (tip.getWorldPosition(current).distanceToSquared(destination) < 0.0004) break;
       for (let index = chain.length - 1; index >= 0; index--) {
@@ -258,11 +351,18 @@ export class AnimalMannequin {
         joint.getWorldPosition(origin);
         tip.getWorldPosition(current).sub(origin);
         wanted.copy(destination).sub(origin);
+        if (planeNormal) {
+          current.addScaledVector(planeNormal, -current.dot(planeNormal));
+          wanted.addScaledVector(planeNormal, -wanted.dot(planeNormal));
+        }
         if (current.lengthSq() < 1e-8 || wanted.lengthSq() < 1e-8) continue;
         joint.parent.getWorldQuaternion(parentInverse).invert();
         current.applyQuaternion(parentInverse).normalize();
         wanted.applyQuaternion(parentInverse).normalize();
-        joint.quaternion.premultiply(delta.setFromUnitVectors(current, wanted)).normalize();
+        delta.setFromUnitVectors(current, wanted);
+        // Small steps retain the current knee bend and reduce sudden flips near full extension.
+        delta.slerp(identity, 0.42);
+        joint.quaternion.premultiply(delta).normalize();
         joint.updateMatrixWorld(true);
       }
     }
@@ -272,6 +372,7 @@ export class AnimalMannequin {
     this.root.removeFromParent();
     this.handles.removeFromParent();
     this.sphere.dispose();
+    for (const { geometry } of this.skins) geometry.dispose();
     this.catEarGeometry?.dispose();
     for (const material of [...this.colors, this.jointMaterial, this.targetMaterial, this.selectedMaterial]) material.dispose();
   }

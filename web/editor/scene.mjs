@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.mjs';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116rig';
+import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116posefit';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 import { PoseViewerCore } from '../vendor/vnccs_pose_studio_core.mjs?v=20261031resize';
 import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs';
@@ -103,7 +103,7 @@ export class StudioScene {
       // FK marks itself as dragging before requesting its initial history entry.
       this.beginningRigGesture = true;
       try {
-        const pose = this.rigPointerDown ? JSON.stringify(this.viewer.getPose()) : null;
+        const pose = this.rigPointerDown ? JSON.stringify(this.animal?.pose() ?? this.viewer.getPose()) : null;
         const rollback = callbacks.begin();
         if (pose !== null) this.rigHistory = { pose, rollback };
       }
@@ -113,7 +113,7 @@ export class StudioScene {
       const history = this.rigHistory; this.rigHistory = null;
       if (this.restoring) return;
       // Selecting an IK marker or FK ring without moving leaves history intact.
-      if (history && history.pose === JSON.stringify(this.viewer.getPose())) history.rollback?.();
+      if (history && history.pose === JSON.stringify(this.animal?.pose() ?? this.viewer.getPose())) history.rollback?.();
       else callbacks.change(true, this.interactionControls !== false);
     };
     const requestRender = this.viewer.requestRender.bind(this.viewer);
@@ -124,6 +124,7 @@ export class StudioScene {
     this.doc = doc;
     await this.viewer.init();
     if (!this.viewer.initialized) throw new Error('WebGL initialization failed. Enable hardware acceleration in your browser.');
+    this.viewer.transform.addEventListener('objectChange', () => this.animal?.update(this.animalSelection));
     this.cameraClips = [this.viewer.camera, this.viewer.captureCamera].map(camera => ({ near: camera.near, far: camera.far }));
     this.viewer.setDirectionalSkydomeVisible(false);
     this.viewer.scene.background = new THREE.Color('#171f28');
@@ -479,13 +480,15 @@ export class StudioScene {
       this.viewer.captureFrame.visible = true;
     }
     this.shotHelper.update();
-    this.shotHelper.visible = this.mode === 'edit';
+    this.shotHelper.visible = this.mode === 'edit' && !this.animal;
+    if (this.animal && this.mode === 'edit') this.viewer.captureFrame.visible = false;
     this.viewer.requestRender();
   }
 
   configureCapture(width, height) {
     const v = this.viewer, c = this.doc.camera;
     v.updateCaptureCamera(width, height, c.zoom, c.offsetX, c.offsetY, c.azimuth, -c.elevation);
+    if (this.animal && this.mode === 'edit') v.captureFrame.visible = false;
     const target = (v.sceneCameraTarget || v.meshCenter || new THREE.Vector3(0, 10, 0)).clone().add(new THREE.Vector3(-c.offsetX, -c.offsetY, 0));
     applyLens(v.captureCamera, target, c.focalLength || 0);
   }
@@ -500,12 +503,29 @@ export class StudioScene {
     const editHuman = editable && !this.animal;
     this.viewer.setIKMode(mode === 'edit' && editHuman);
     this.viewer.transform.detach();
+    this.viewer.transform.setSize(this.animal ? 0.46 : 0.8);
     this.viewer.transform.visible = mode === 'edit' && editHuman;
+    if (this.animal) this.selectAnimalJoint(this.animalSelection);
     this.viewer.skeletonHelper && (this.viewer.skeletonHelper.visible = false);
     this.viewer.jointMarkers.forEach(marker => { marker.visible = mode === 'edit' && editHuman && this.viewer._shouldMarkerBeVisible(marker); });
     this.viewer.orbit.enabled = mode === 'edit' || mode === 'position';
     this.shotHelper.visible = mode === 'edit';
     this.updateShot(mode === 'camera');
+  }
+
+  selectAnimalJoint(name) {
+    const rig = this.animal;
+    if (!rig) return;
+    this.animalSelection = name;
+    const joint = rig.handles.visible && rig.joints.get(name);
+    const transform = this.viewer.transform;
+    if (!transform.dragging) {
+      if (joint) {
+        transform.setMode('rotate'); transform.setSpace('local'); transform.attach(joint);
+      } else transform.detach();
+    }
+    rig.update(name);
+    this.viewer.requestRender();
   }
 
   currentViewAsShot() {
@@ -904,6 +924,9 @@ export class StudioScene {
         return raycaster;
       };
       if (this.animal?.handles.visible && this.mode === 'edit' && event.button === 0 && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+        const transform = this.viewer.transform;
+        transform.pointerHover(transform._getPointer(event));
+        if (transform.object && transform.axis) return;
         const raycaster = ray();
         const hit = raycaster.intersectObjects(this.animal.handles.children, false)[0];
         if (hit) {
@@ -918,9 +941,7 @@ export class StudioScene {
             const point = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
             if (!point) return;
             drag = { pointerId: event.pointerId, animalTarget: name, plane, offset: center.sub(point), pose };
-          } else {
-            drag = { pointerId: event.pointerId, animalJoint: name, x: event.clientX, y: event.clientY, pose };
-          }
+          } else return;
           canvas.setPointerCapture(event.pointerId);
           return;
         }
@@ -961,22 +982,6 @@ export class StudioScene {
     canvas.addEventListener('pointermove', event => {
       if (this.mode === 'camera' || drag) event.stopImmediatePropagation();
       if (!drag || event.pointerId !== drag.pointerId) return;
-      if (drag.animalJoint) {
-        const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
-        if (!drag.changed && Math.hypot(dx, dy) < 3) return;
-        beginChange();
-        const joint = this.animal.joints.get(drag.animalJoint);
-        const cameraRotation = this.viewer.camera.getWorldQuaternion(new THREE.Quaternion());
-        const parentInverse = joint.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
-        const pitch = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraRotation).applyQuaternion(parentInverse);
-        const yaw = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraRotation).applyQuaternion(parentInverse);
-        joint.rotation.set(...drag.pose[drag.animalJoint]);
-        joint.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(pitch, dy * 0.012));
-        joint.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(yaw, dx * 0.012));
-        this.animal.update(this.animalSelection);
-        this.viewer.requestRender();
-        return;
-      }
       if (drag.animalTarget) {
         const rect = canvas.getBoundingClientRect(), raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), this.viewer.camera);
@@ -1042,7 +1047,7 @@ export class StudioScene {
       if (!drag) return false;
       const cancelled = drag; drag = null;
       if (!cancelled.changed) return true;
-      if (cancelled.animalTarget || cancelled.animalJoint) {
+      if (cancelled.animalTarget) {
         this.animal.restore(cancelled.pose);
         this.animal.update(this.animalSelection);
       } else if (cancelled.actor) {

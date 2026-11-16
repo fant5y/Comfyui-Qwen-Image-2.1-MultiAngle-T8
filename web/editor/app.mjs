@@ -1,5 +1,5 @@
-import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116rig';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116rig';
+import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116posefit';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116posefit';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116en';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116en';
@@ -9,7 +9,7 @@ import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges }
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116rig';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116posefit';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
 import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116rig';
@@ -208,13 +208,17 @@ function refresh() {
   $('#mouse-pitch').closest('section').hidden = staticGuide;
   $('#lens-mode').value = doc.camera.focalLength ? 'custom' : 'original';
   $('#lens-controls').hidden = !doc.camera.focalLength;
-  $('#copy-photo-pose').disabled = !!studio?.animal || !doc.reference?.name || !!linkedReference.pending;
+  const poseAnimal = studio?.animal && activeActor(doc);
+  $('#copy-photo-pose').textContent = poseAnimal ? 'Apply AnimalPose to Mannequin' : 'Copy Source Pose to Mannequin';
+  $('#copy-photo-pose').disabled = poseAnimal
+    ? poseAnimal.source.shape === 'owl' || poseAnimal.locked || poseAnimal.visible === false
+    : !doc.reference?.name || !!linkedReference.pending;
   $('#pose-category').value = (doc.randomMaster || doc.poseRandom)?.category || 'mixed';
   if (document.activeElement !== $('#pose-seed')) $('#pose-seed').value = (doc.randomMaster || doc.poseRandom)?.seed || 0;
   for (const id of ['camera-heading', 'camera-eyebrow', 'camera-sliders', 'view-presets', 'shot-shelf', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
   $('#stage-help').textContent = previewVisible ? staticGuide ? 'Source composition and structure · Apply to output this guide' : 'Guide from the current camera · Switch to 3D Workspace to adjust the view'
     : studio?.mode === 'position' ? 'Select a character · Drag to place · Right-drag to orbit · Middle-drag to pan'
-    : studio?.mode === 'edit' && studio.animal ? 'Drag blue joints to rotate · Drag gold handles to pose limbs · Right-drag to orbit · Middle-drag to pan'
+    : studio?.mode === 'edit' && studio.animal ? 'Select a blue joint for rotation rings · Drag gold handles to pose limbs · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan'
       : 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom';
   for (const control of controls.values()) control.refresh();
@@ -363,10 +367,10 @@ function refresh() {
   $('#openpose-status').textContent = doc.openpose ? poseImage ? doc.openpose.fullBody === false
     ? 'Visible joints extracted. Cropped or occluded photos can output the source pose directly.' : 'Source skeleton ready. Output it directly or edit the pose in 3D.'
     : 'Outputting the 3D mannequin skeleton · Adjust the pose and camera as needed.' : 'Extract a pose from the source or import a skeleton. You can also pose the mannequin by hand.';
-  $('#retarget-pose').hidden = animal || !doc.openpose?.rawAsset && !doc.conditioning.map;
-  $('#retarget-pose').textContent = poseImage ? 'Adjust Pose on 3D Mannequin' : 'Copy Photo Pose Again';
+  $('#retarget-pose').hidden = animal ? activeActor(doc).source.shape === 'owl' : !doc.openpose?.rawAsset && !doc.conditioning.map;
+  $('#retarget-pose').textContent = animal ? 'Apply AnimalPose to Mannequin' : poseImage ? 'Adjust Pose on 3D Mannequin' : 'Copy Photo Pose Again';
   $('#retarget-pose').disabled = false;
-  $('#retarget-pose').title = 'Copy visible joints. Extract older partial-body skeletons again.';
+  $('#retarget-pose').title = animal ? 'Use AnimalPose keypoints to pose the selected animal' : 'Copy visible joints. Extract older partial-body skeletons again.';
   $('#pose-copy-mode').value = doc.openpose?.retargetMode || (doc.openpose?.origin === 'import' ? 'estimated' : 'conservative');
   $('#pose-copy-mode').querySelector('[value="estimated"]').disabled = doc.openpose?.fullBody === false;
   $('#pose-original').hidden = !doc.openpose?.rawAsset || poseImage;
@@ -402,19 +406,25 @@ function refresh() {
   const bones = animal ? [...(studio?.animal?.joints.keys() || [])] : human ? studio?.viewer.boneList?.map(bone => bone.name) || [] : [];
   const boneList = JSON.stringify(bones);
   if (boneSelect.dataset.bones !== boneList) {
-    boneSelect.replaceChildren(new Option('Choose Joint', ''), ...bones.map(name => new Option(animal && name === 'Torso' ? 'Spine (Torso)' : name, name)));
+    boneSelect.replaceChildren(new Option('Choose Joint', ''), ...bones.map(name => new Option(animal ? animalJointLabel(name) : name, name)));
     boneSelect.dataset.bones = boneList;
   }
   if (!bones.includes(selectedBone)) selectedBone = '';
   $('#animal-shape').value = '';
   $('#joint-hint').textContent = animal
-    ? 'Drag a blue joint to rotate it or drag a gold handle to pose the limb.'
+    ? 'Select a joint to show its rotation rings, or choose it below. Drag a gold handle to move the whole limb.'
     : 'Switch to Edit Scene, then select a joint or drag an IK hand or foot control.';
-  $('#bone-name').textContent = selectedBone || 'None Selected';
+  $('#bone-name').textContent = selectedBone ? animal ? animalJointLabel(selectedBone) : selectedBone : 'None Selected';
   $('#bone-select').value = selectedBone;
   for (const axis of ['x', 'y', 'z']) controls.get(`bone-${axis}`)?.refresh();
   refreshActorsUI();
   refreshReferencesUI();
+}
+
+function animalJointLabel(name) {
+  if (name === 'Torso') return 'Spine (Torso)';
+  return name.replace(/foreleg joint 1$/, 'elbow').replace(/foreleg joint 2$/, 'wrist')
+    .replace(/hind leg joint 1$/, 'knee').replace(/hind leg joint 2$/, 'hock');
 }
 
 function makeControl(container, { id, label, min, max, step = 1, unit = '', read, write, commit }) {
@@ -519,7 +529,7 @@ function setMode(mode) {
   $('#use-view').hidden = mode !== 'edit';
   $('#stage-help').textContent = mode === 'camera' ? 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom'
     : mode === 'position' ? 'Select a character · Drag to place · Right-drag to orbit · Middle-drag to pan'
-    : studio.animal ? 'Drag blue joints to rotate · Drag gold handles to pose limbs · Right-drag to orbit · Middle-drag to pan'
+    : studio.animal ? 'Select a blue joint for rotation rings · Drag gold handles to pose limbs · Right-drag to orbit · Middle-drag to pan'
     : doc.source.kind === 'human' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan · Camera stays in place'
       : 'Right-drag to orbit · Middle-drag to pan · Set this view as the camera';
 }
@@ -534,9 +544,7 @@ $('#reset-camera').onclick = () => { begin(); doc.camera = doc.source.kind === '
 $('#bone-select').onchange = event => {
   studio.finishDrag(false); selectedBone = event.target.value;
   if (studio.animal) {
-    studio.animalSelection = selectedBone;
-    studio.animal.update(selectedBone);
-    studio.viewer.requestRender();
+    studio.selectAnimalJoint(selectedBone);
   } else studio.viewer.selectBoneByName(selectedBone);
   refresh();
 };
@@ -698,7 +706,7 @@ async function retargetPose() {
     throw error;
   }
 }
-$('#retarget-pose').onclick = () => run(retargetPose);
+$('#retarget-pose').onclick = () => studio.animal ? applySourceAnimalPose() : run(retargetPose);
 $('#pose-copy-mode').onchange = event => {
   if (!doc.openpose) return;
   begin(); doc.openpose.retargetMode = event.target.value; changed(false);
@@ -733,7 +741,7 @@ async function extractPhotoPose(copyToHuman = false) {
   } finally { $('#loading').hidden = true; }
 }
 $('#extract-pose').onclick = () => run(() => extractPhotoPose());
-$('#copy-photo-pose').onclick = () => run(() => extractPhotoPose(true));
+$('#copy-photo-pose').onclick = () => studio.animal ? applySourceAnimalPose() : run(() => extractPhotoPose(true));
 $('#import-map').onclick = () => $('#map-file').click();
 $('#extract-depth').onclick = () => run(async () => {
   if (!doc.reference?.name) throw new Error('Connect or import a source image first.');
@@ -775,6 +783,12 @@ $('#animal-pose-file').onchange = event => run(async () => {
   const data = JSON.parse(await file.text());
   applyAnimalKeypoints(Array.isArray(data) ? data[0] : data);
 });
+let latestAnimalKeypoints = null;
+function applySourceAnimalPose() {
+  if (!$('#read-animal-keypoints').hidden) send('anyangle-read-keypoints');
+  else if (latestAnimalKeypoints) return run(() => applyAnimalKeypoints(latestAnimalKeypoints));
+  else $('#animal-pose-file').click();
+}
 function applyAnimalKeypoints(frame) {
   if (frame?.version !== 'ap10k') throw new Error('Choose an AP-10K JSON file from AnimalPose Estimator.');
   const actor = activeActor(doc);
@@ -794,11 +808,13 @@ function applyAnimalKeypoints(frame) {
     throw new Error('The AP-10K pose needs a visible neck and tail root.');
   const facing = points[3][0] < points[4][0] ? -1 : 1;
   begin();
+  latestAnimalKeypoints = frame;
   studio.animal.applyAP10K(points, facing);
+  studio.groundActors([actor.id]);
   doc.conditioning.guide = 'coarse';
   doc.conditioning.map = null; doc.conditioning.mapKind = null; doc.conditioning.mapOrigin = 'auto';
-  doc.camera.azimuth = ((actor.transform.yaw - facing * 75 + 540) % 360) - 180;
-  doc.camera.elevation = 5;
+  doc.camera.azimuth = ((actor.transform.yaw - facing * 87 + 540) % 360) - 180;
+  doc.camera.elevation = 2;
   previewVisible = false;
   setMode('edit');
   studio.fit(true);
@@ -1306,9 +1322,7 @@ async function start(token, reference = { connected: false }, structure = { conn
     studio = new StudioScene($('#viewport'), { begin, change: changed, camera: () => { revision++; refresh(); schedulePreview(); $('#status').textContent = 'Camera draft · Apply to save'; $('#status').dataset.state = 'dirty'; }, pick: selectRole, select: (name, updateControls = true) => {
       selectedBone = name || '';
       if (studio.animal) {
-        studio.animalSelection = selectedBone;
-        studio.animal.update(selectedBone);
-        studio.viewer.requestRender();
+        studio.selectAnimalJoint(selectedBone);
       }
       if (updateControls) refresh();
     }, error });
