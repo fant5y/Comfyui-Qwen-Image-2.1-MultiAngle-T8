@@ -1,4 +1,4 @@
-import { StudioScene, defaultScene } from './scene.mjs?v=20261116anatomypivot';
+import { StudioScene, defaultScene } from './scene.mjs?v=20261116shaperange';
 import { activeActor, createActor, bindActor, editableActors } from './actors.mjs?v=20261116en';
 import { applyCatalogTransaction, catalogPoseTargets, filterCatalog, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
 import { installPoseGallery, galleryImage, galleryLabel } from './pose-gallery-ui.mjs?v=20261116canvas';

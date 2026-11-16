@@ -1,5 +1,5 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116anatomypivot';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116shaperange';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116en';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116en';
@@ -9,7 +9,7 @@ import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges }
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116anatomypivot';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116shaperange';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
 import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116rig';
@@ -497,11 +497,11 @@ $('#show-genitals').onchange = event => run(async () => {
   begin(); doc.mesh.show_genitals = visible;
   await studio.morph(); changed();
 });
-for (const [key, label] of [['penis_len', 'Penis Length'], ['penis_circ', 'Penis Girth'], ['penis_test', 'Testicle Size']])
-  makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min: 0, max: 1, step: 0.01,
+for (const [key, label, max] of [['penis_len', 'Penis Length', 2.5], ['penis_circ', 'Penis Girth', 2.5], ['penis_test', 'Testicle Size', 1]])
+  makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min: 0, max, step: 0.01,
     read: () => doc.mesh[key] ?? (key === 'penis_len' ? doc.mesh.genital_size : undefined) ?? 0.5,
     write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
-for (const [key, label, min, max] of [['penis_tilt', 'Penis Tilt', -45, 175], ['penis_turn', 'Penis Left / Right', -30, 30]])
+for (const [key, label, min, max] of [['penis_tilt', 'Penis Tilt', -45, 175], ['penis_turn', 'Penis Left / Right', -90, 90]])
   makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min, max, unit: '°',
     read: () => doc.mesh[key] ?? 0,
     write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
