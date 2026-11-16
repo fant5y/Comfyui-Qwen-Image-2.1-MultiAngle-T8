@@ -1,6 +1,7 @@
 import io
 import json
 import hashlib
+from pathlib import Path
 
 import folder_paths
 import numpy as np
@@ -18,14 +19,15 @@ from .optional_lora import AnyAngleOptionalLoRA
 
 
 def store():
-    return StudioStore(folder_paths.get_input_directory() + "/anyangle_studio")
+    return StudioStore(Path(folder_paths.get_input_directory()) / "anyangle_studio",
+                       Path(folder_paths.get_temp_directory()) / "anyangle_studio")
 
 
 def image_asset(image, index=0, preserve_alpha=False):
     pixels = np.clip(image[index].cpu().float().numpy()[..., :4 if preserve_alpha else 3] * 255, 0, 255).astype(np.uint8)
     buffer = io.BytesIO()
     Image.fromarray(pixels).save(buffer, format="PNG")
-    return store().asset(buffer.getvalue(), "png", preserve_alpha=preserve_alpha)
+    return store().asset(buffer.getvalue(), "png", preserve_alpha=preserve_alpha, temporary=True)
 
 
 class AnyAngleStudio(comfy_io.ComfyNode):
@@ -65,7 +67,7 @@ class AnyAngleStudio(comfy_io.ComfyNode):
             pixels = np.clip(reference_image[0].cpu().float().numpy() * 255, 0, 255).astype(np.uint8)
             buffer = io.BytesIO()
             Image.fromarray(pixels).save(buffer, format="PNG")
-            reference = store().asset(buffer.getvalue(), "png")
+            reference = store().asset(buffer.getvalue(), "png", temporary=True)
             source = document["scene"]["source"]
             if not no_guide and source["kind"] == "splat" and source["reference"]["name"] != reference["name"]:
                 raise ValueError("The reference image changed. Open AnyAngle Studio, rebuild the scene, and apply the camera view.")
@@ -82,7 +84,7 @@ class AnyAngleStudio(comfy_io.ComfyNode):
             pixels = np.clip(structure_image[0].cpu().float().numpy() * 255, 0, 255).astype(np.uint8)
             buffer = io.BytesIO()
             Image.fromarray(pixels).save(buffer, format="PNG")
-            connected = store().asset(buffer.getvalue(), "png")
+            connected = store().asset(buffer.getvalue(), "png", temporary=True)
             expected = (document["scene"].get("openpose") or {}).get("sourceName") if guide_mode == "pose" else (conditioning.get("map") or {}).get("name")
             if connected["name"] != expected:
                 raise ValueError("The structure guide changed. Open Studio, read it again, and apply.")

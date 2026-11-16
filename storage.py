@@ -120,9 +120,10 @@ def _png(data, preserve_alpha=False):
 class StudioStore:
     _write_lock = threading.Lock()
 
-    def __init__(self, root):
+    def __init__(self, root, preview_root=None):
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        self.previews = StudioStore(preview_root) if preview_root is not None else None
 
     def path(self, name):
         if not isinstance(name, str) or (not ASSET.fullmatch(name) and not re.fullmatch(r"[a-f0-9]{64}\.json", name)):
@@ -148,7 +149,7 @@ class StudioStore:
             finally:
                 temporary.unlink(missing_ok=True)
 
-    def asset(self, data, kind, preserve_alpha=False):
+    def asset(self, data, kind, preserve_alpha=False, temporary=False):
         if kind == "ply":
             end = data.find(b"end_header\n")
             if end < 0 or end > 16384 or not data.startswith(b"ply\nformat binary_little_endian 1.0\n"):
@@ -195,7 +196,11 @@ class StudioStore:
             raise ValueError("Only GLB, Gaussian PLY and images are supported")
         digest = hashlib.sha256(data).hexdigest()
         name = f"{digest}.{kind}"
-        self.write(name, data)
+        if temporary and self.previews is not None:
+            if not self.path(name).is_file():
+                self.previews.write(name, data)
+        else:
+            self.write(name, data)
         return {"name": name, "sha256": digest, **meta}
 
     def read_asset(self, name):
@@ -203,6 +208,8 @@ class StudioStore:
         try:
             data = path.read_bytes()
         except FileNotFoundError as error:
+            if self.previews is not None and name.endswith(".png"):
+                return self.previews.read_asset(name)
             raise ValueError("AnyAngle asset is missing; reopen the editor and import/apply it again") from error
         if hashlib.sha256(data).hexdigest() != name.split(".")[0]:
             raise ValueError("AnyAngle asset failed its integrity check; reimport and apply it again")
@@ -310,6 +317,10 @@ class StudioStore:
         digest = hashlib.sha256(encoded).hexdigest()
         if guide is not None:
             self.write(guide["name"], data)
+        if self.previews is not None:
+            for name in asset_names(scene):
+                if not self.path(name).is_file():
+                    self.write(name, self.previews.read_asset(name))
         self.write(f"{digest}.json", encoded)
         return {"version": 1, "id": digest}
 

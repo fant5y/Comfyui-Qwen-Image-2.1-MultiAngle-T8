@@ -101,12 +101,19 @@ class NodeOutputTests(unittest.TestCase):
         read = self.module.AnyAngleReferenceRead.execute(images).ui["anyangle_reference_batch"][0]
         self.assertEqual(read["batchCount"], 2)
         self.assertNotEqual(read["assets"][0]["name"], read["assets"][1]["name"])
+        store = self.module.store()
+        unselected, selected = (asset["name"] for asset in read["assets"])
+        for name in (unselected, selected):
+            self.assertTrue(store.previews.path(name).is_file())
+            self.assertFalse(store.path(name).exists())
         scene = library_scene()
         item = reference(read["assets"][1])
         item.update(inputKey="actor_reference_1", batchIndex=1)
         scene["referenceLibrary"]["items"] = [item]
         token = self.module.store().save_scene(scene)
-        with self.assertRaisesRegex(ValueError, "缺少参考连线"):
+        self.assertTrue(store.path(selected).is_file())
+        self.assertFalse(store.path(unselected).exists())
+        with self.assertRaisesRegex(ValueError, "Missing reference connections"):
             self.module.AnyAngleStudio().render(json.dumps(token))
         studio = self.module.AnyAngleStudio().render(json.dumps(token), actor_references={"actor_reference_1": images})["result"]
         self.assertEqual(json.loads(studio[2])["referenceLibrary"]["items"][0]["asset"]["name"], read["assets"][1]["name"])
@@ -159,6 +166,7 @@ class NodeOutputTests(unittest.TestCase):
         self.module = importlib.util.module_from_spec(spec)
         paths = ModuleType("folder_paths")
         paths.get_input_directory = lambda: self.directory.name
+        paths.get_temp_directory = lambda: str(Path(self.directory.name) / "temp")
         routes = ModuleType(package + ".routes")
         routes.register_routes = lambda store: None
         reconstruction = ModuleType(package + ".reconstruction")

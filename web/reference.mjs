@@ -36,7 +36,7 @@ export async function importReference(url) {
   const image = await fetch(target.href, { cache: 'no-store', mode: 'same-origin', redirect: 'error' });
   if (!image.ok) throw new Error('Could not read the connected source image. Check the upstream file.');
   const form = new FormData(); form.append('file', await image.blob(), 'reference.png');
-  const response = await fetch('/anyangle-studio/assets', { method: 'POST', body: form });
+  const response = await fetch('/anyangle-studio/assets?temporary=true', { method: 'POST', body: form });
   const asset = await response.json();
   if (!response.ok) throw new Error(asset.error || 'Reference image import failed');
   return asset;

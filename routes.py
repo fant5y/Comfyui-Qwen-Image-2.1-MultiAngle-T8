@@ -153,7 +153,9 @@ def register_routes(store_factory):
                 if len(data) > 256 * 1024 * 1024:
                     raise ValueError("Asset upload exceeds 256 MB")
             kind = "glb" if (part.filename or "").lower().endswith(".glb") else "png"
-            asset = await asyncio.to_thread(store_factory().asset, bytes(data), kind, request.query.get("alpha") == "preserve")
+            temporary = kind == "png" and request.query.get("temporary") == "true"
+            asset = await asyncio.to_thread(store_factory().asset, bytes(data), kind,
+                                            request.query.get("alpha") == "preserve", temporary=temporary)
             asset["label"] = (part.filename or "Imported asset")[:160]
             return web.json_response(asset)
         except (ValueError, OSError, UnidentifiedImageError) as error:

@@ -1,7 +1,7 @@
 import { app } from '../../scripts/app.js';
 import { api } from '../../scripts/api.js';
 import { uuid } from './uuid.mjs?v=20261116en';
-import { referencePlan, executeReference } from './reference.mjs?v=20261116en';
+import { referencePlan, executeReference } from './reference.mjs?v=20261116tempreferences';
 import { promptForSnapshot } from './batch-queue.mjs?v=20261116en';
 
 let graphRevision = 0;
