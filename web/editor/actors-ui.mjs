@@ -176,6 +176,7 @@ export function importModel() {
 }
 export function selectModel(id) {
   const studio = context.studio();
+  studio.selectedPlacementAsset = null;
   if (studio.selectedModelId !== id) {
     studio.finishDrag();
     studio.modelJoint = null;
@@ -188,7 +189,8 @@ export function selectModel(id) {
 }
 export function clearSelection() {
   const doc = context.doc(), studio = context.studio();
-  if (!studio.selectedModelId && !doc.selectedActorIds?.length) return;
+  if (!studio.selectedPlacementAsset && !studio.selectedModelId && !doc.selectedActorIds?.length) return;
+  studio.selectedPlacementAsset = null;
   doc.selectedActorIds = [];
   studio.selectedModelId = null;
   studio.modelJoint = null;
@@ -201,6 +203,7 @@ export async function selectRole(id, additive = false) {
     if (additive) doc.selectedActorIds = doc.selectedActorIds?.includes(id) ? doc.selectedActorIds.filter(value => value !== id) : [...doc.selectedActorIds || [], id];
     else doc.selectedActorIds = [id];
     const studio = context.studio();
+    studio.selectedPlacementAsset = null;
     const updateMode = id === doc.activeActorId || !!studio.selectedModel();
     studio.finishDrag();
     studio.selectedModelId = null; studio.modelJoint = null;

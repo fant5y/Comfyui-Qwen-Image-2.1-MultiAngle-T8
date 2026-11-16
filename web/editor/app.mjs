@@ -1,5 +1,5 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116scenebackdrop';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116movegizmo';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261116canvasprompt';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116scenebackdrop';
@@ -12,7 +12,7 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116canvasprompt';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116canvasprompt';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116movegizmo';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116canvasprompt';
 
@@ -234,7 +234,7 @@ async function renderPreview() {
 }
 function refresh() {
   if (studio && (doc.source.kind === 'splat' || doc.source.kind === 'empty') &&
-      (studio.mode !== 'camera' || $('#edit-mode').classList.contains('active'))) setMode('camera');
+      (studio.mode === 'edit' || $('#edit-mode').classList.contains('active') || studio.mode === 'position' && !studio.canPlaceScene())) setMode('camera');
   if (linkedReference.asset) doc.reference = linkedReference.asset;
   const guide = currentGuide(), base = doc.conditioning.model === 'base', input = guideSource(doc);
   const manifest = buildManifest(doc), multi = actorMode(doc);
@@ -272,7 +272,7 @@ function refresh() {
   if (document.activeElement !== $('#pose-seed')) $('#pose-seed').value = (doc.randomMaster || doc.poseRandom)?.seed || 0;
   for (const id of ['shot-shelf', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
   $('#stage-help').textContent = previewVisible ? staticGuide ? 'Source composition and structure · Apply to output this guide' : 'Guide from the current camera · Switch to 3D Workspace to adjust the view'
-    : studio?.mode === 'position' ? 'Select a character or model · Drag to place · Right-drag to orbit · Middle-drag to pan'
+    : studio?.mode === 'position' ? 'Select an object · Drag an axis to move it · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' && studio.selectedModel() ? 'Drag the rotation rings · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' && studio.animal ? 'Select a blue joint for rotation rings · Drag gold handles to pose limbs · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan'
@@ -281,7 +281,6 @@ function refresh() {
   $('#width').value = doc.width; $('#height').value = doc.height;
   $('#background').value = doc.background;
   $('#scene-background-options').hidden = !canvasBackgroundAsset(doc);
-  updateBackgroundPlacement();
   $('#scene-background-visible').checked = doc.sceneBackground?.visible !== false;
   $('#scene-background-scale').value = doc.sceneBackground?.scale ?? 1;
   for (const axis of ['x', 'y', 'z']) $(`#scene-background-${axis}`).value = doc.sceneBackground?.[axis] ?? 0;
@@ -482,7 +481,7 @@ function refresh() {
   $('#apply').disabled = applyDisabled();
   $('#clear-canvas').disabled = busy || !ready || !canvasHasObjects();
   $('#edit-mode').disabled = splat || empty;
-  $('#position-mode').disabled = !mannequinScene;
+  $('#position-mode').disabled = !studio?.canPlaceScene();
   $('#edit-mode').title = splat ? 'Use Camera mode to change the view of a reconstructed subject.' : empty ? 'Load a 3D subject first.' : '';
   $('#mode-hint').hidden = !splat;
   $('#fit-frame').textContent = splat ? 'Return to Source Camera' : 'Fit to Frame';
@@ -505,6 +504,7 @@ function refresh() {
   refreshActorsUI();
   refreshReferencesUI();
   studio?.loadSceneBackground();
+  studio?.updatePlacementGizmo();
 }
 
 function animalJointLabel(name) {
@@ -659,25 +659,15 @@ for (const [side, label] of [['l', 'Left Hand'], ['r', 'Right Hand']]) {
   row.append(title, buttons); $('#hands').append(row);
 }
 
-function updateBackgroundPlacement() {
-  const placement = $('#scene-background-placement');
-  placement.hidden = previewVisible || studio?.mode !== 'position' || !canvasBackgroundAsset(doc)
-    || (doc.referenceLibrary && doc.referenceLibrary.mode !== 'guided');
-  const parent = placement.hidden ? $('#scene-background-options') : placement;
-  const fields = $('#scene-background-position');
-  if (fields.parentElement !== parent) parent.append(fields);
-}
-
 function setMode(mode) {
   studio.setMode(mode);
   mode = studio.mode;
-  updateBackgroundPlacement();
   $('#camera-mode').classList.toggle('active', mode === 'camera'); $('#edit-mode').classList.toggle('active', mode === 'edit');
   $('#position-mode').classList.toggle('active', mode === 'position'); $('#position-mode').setAttribute('aria-pressed', String(mode === 'position'));
   $('#camera-mode').setAttribute('aria-pressed', String(mode === 'camera')); $('#edit-mode').setAttribute('aria-pressed', String(mode === 'edit'));
   $('#use-view').hidden = mode !== 'edit';
   $('#stage-help').textContent = mode === 'camera' ? 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom'
-    : mode === 'position' ? 'Select a character or model · Drag to place · Right-drag to orbit · Middle-drag to pan'
+    : mode === 'position' ? 'Select an object · Drag an axis to move it · Right-drag to orbit · Middle-drag to pan'
     : studio.selectedModel() ? 'Drag the rotation rings · Right-drag to orbit · Middle-drag to pan'
     : studio.animal ? 'Drag Pelvis to lower the hips · Drag knees or elbows to steer the bend · Click a joint for rotation rings'
     : doc.source.kind === 'human' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan · Camera stays in place'

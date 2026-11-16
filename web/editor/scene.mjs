@@ -128,7 +128,7 @@ export class StudioScene {
     this.viewer = new PoseViewerCore(canvas, {
       skinMode: 'naked', enableTextureSkinning: true,
       showSkeletonHelper: false, showCaptureFrame: false, useHandControlPopover: false,
-      onPoseChange: () => { if (!this.restoring) callbacks.change(true, this.interactionControls !== false); },
+      onPoseChange: () => { if (!this.restoring && this.mode !== 'position') callbacks.change(true, this.interactionControls !== false); },
       onBoneSelectionChange: ({ boneName }) => callbacks.select(boneName, this.interactionControls !== false),
       onError: error => callbacks.error(error),
     });
@@ -138,7 +138,7 @@ export class StudioScene {
       // FK marks itself as dragging before requesting its initial history entry.
       this.beginningRigGesture = true;
       try {
-        const pose = this.rigPointerDown ? JSON.stringify(this.modelRotation() ?? this.animal?.pose() ?? this.viewer.getPose()) : null;
+        const pose = this.rigPointerDown ? this.interactionSnapshot() : null;
         const rollback = callbacks.begin();
         if (pose !== null) this.rigHistory = { pose, rollback };
       }
@@ -148,7 +148,7 @@ export class StudioScene {
       const history = this.rigHistory; this.rigHistory = null;
       if (this.restoring) return;
       // Selecting an IK marker or FK ring without moving leaves history intact.
-      if (history && history.pose === JSON.stringify(this.modelRotation() ?? this.animal?.pose() ?? this.viewer.getPose())) history.rollback?.();
+      if (history && history.pose === this.interactionSnapshot()) history.rollback?.();
       else callbacks.change(true, this.interactionControls !== false);
     };
     const requestRender = this.viewer.requestRender.bind(this.viewer);
@@ -160,6 +160,10 @@ export class StudioScene {
     await this.viewer.init();
     if (!this.viewer.initialized) throw new Error('WebGL initialization failed. Enable hardware acceleration in your browser.');
     this.viewer.transform.addEventListener('objectChange', () => {
+      if (this.mode === 'position') {
+        this.savePlacementPosition();
+        return;
+      }
       const model = this.selectedModel();
       const rotation = this.modelRotation();
       if (!rotation) { this.animal?.update(this.animalSelection); return; }
@@ -500,9 +504,10 @@ export class StudioScene {
           this.glbName = doc.source.name;
           this.viewer.scene.add(group);
         }
+        this.glb.position.fromArray(doc.source.position || [0, 0, 0]);
         this.glb.scale.setScalar(doc.scale);
         this.glb.rotation.y = radians(doc.front);
-        this.baseTarget = worldBounds(this.glb).getCenter(new THREE.Vector3());
+        this.baseTarget = worldBounds(this.glb).getCenter(new THREE.Vector3()).sub(this.glb.position);
       } else {
         this.baseTarget = new THREE.Vector3(0, 10, 0);
       }
@@ -628,9 +633,61 @@ export class StudioScene {
     return [target.rotation.x, target.rotation.y, target.rotation.z].map(degrees);
   }
 
+  canPlaceScene() {
+    return ['human', 'glb'].includes(this.doc?.source.kind)
+      || (this.doc?.sceneBackground?.visible !== false && !!canvasBackgroundAsset(this.doc || {}));
+  }
+
+  placementTarget() {
+    if (this.selectedPlacementAsset === 'background') {
+      return this.sceneBackground?.visible ? { root: this.sceneBackground } : null;
+    }
+    if (this.selectedPlacementAsset === 'glb') {
+      return this.doc.source.kind === 'glb' ? { root: this.glb } : null;
+    }
+    const model = this.selectedModel();
+    if (model) return !model.locked && model.visible !== false ? { item: model, root: this.propRoots.get(model.id), model: true } : null;
+    const actor = activeActor(this.doc);
+    if (this.doc.source.kind !== 'human' || !this.doc.selectedActorIds?.includes(actor?.id) || actor.locked || actor.visible === false) return null;
+    return { item: actor, root: this.actorRoots.get(actor.id), model: false };
+  }
+
+  updatePlacementGizmo() {
+    const transform = this.viewer.transform;
+    if (this.mode !== 'position' || !transform || transform.dragging) return;
+    const root = this.placementTarget()?.root;
+    if (root && transform.object !== root) {
+      transform.setMode('translate');
+      transform.setSpace('world');
+      transform.attach(root);
+    } else if (!root && transform.object) transform.detach();
+    this.viewer.requestRender();
+  }
+
+  interactionSnapshot() {
+    if (this.mode === 'position') return JSON.stringify(this.viewer.transform.object?.position.toArray());
+    return JSON.stringify(this.modelRotation() ?? this.animal?.pose() ?? this.viewer.getPose());
+  }
+
+  savePlacementPosition() {
+    const target = this.placementTarget();
+    if (!target?.root || target.root !== this.viewer.transform.object) return;
+    const { x, y, z } = target.root.position;
+    if (target.item) {
+      Object.assign(target.item.transform, { x, y, z });
+      if (target.model) this.updateProp(target.item);
+      else this.updateActorTransform(target.item);
+    } else if (this.selectedPlacementAsset === 'background') {
+      const settings = this.doc.sceneBackground;
+      const [centerX, centerY, centerZ] = settings.frame.center;
+      Object.assign(settings, { x: x - centerX, y: y - centerY, z: z - centerZ });
+    } else this.doc.source.position = [x, y, z];
+    this.viewer.requestRender();
+  }
+
   setMode(mode) {
     this.finishDrag?.();
-    if (this.doc.source.kind === 'splat' || this.doc.source.kind === 'empty') mode = 'camera';
+    if ((mode === 'position' && !this.canPlaceScene()) || (mode === 'edit' && ['splat', 'empty'].includes(this.doc.source.kind))) mode = 'camera';
     this.mode = mode;
     const actor = activeActor(this.doc);
     const model = this.selectedModel();
@@ -647,7 +704,8 @@ export class StudioScene {
         this.viewer.transform.setMode('rotate'); this.viewer.transform.setSpace('local');
         this.viewer.transform.attach(target);
       }
-    } else if (this.animal) this.selectAnimalJoint(editable ? this.animalSelection : '');
+    } else if (mode === 'position') this.updatePlacementGizmo();
+    else if (this.animal) this.selectAnimalJoint(editable ? this.animalSelection : '');
     this.viewer.skeletonHelper && (this.viewer.skeletonHelper.visible = false);
     this.viewer.jointMarkers.forEach(marker => { marker.visible = mode === 'edit' && editHuman && this.viewer._shouldMarkerBeVisible(marker); });
     this.viewer.orbit.enabled = mode === 'edit' || mode === 'position';
@@ -1113,8 +1171,8 @@ export class StudioScene {
     canvas.addEventListener('pointerdown', event => {
       if (event.button !== 0 && event.button !== 1) return;
       if (drag) { event.stopImmediatePropagation(); event.preventDefault(); return; }
-      if (this.mode === 'edit' && event.button === 0) { rigPointerId = event.pointerId; this.rigPointerDown = true; }
-      if (this.mode === 'edit' && event.button === 0 && !event.shiftKey) {
+      if (this.mode !== 'camera' && event.button === 0) { rigPointerId = event.pointerId; this.rigPointerDown = true; }
+      if (this.mode !== 'camera' && event.button === 0 && !event.shiftKey) {
         const transform = this.viewer.transform;
         if (transform.object) {
           transform.pointerHover(transform._getPointer(event));
@@ -1151,13 +1209,26 @@ export class StudioScene {
         if (transform.object && transform.axis) return;
         if (this.animalSelection) this.callbacks.select?.('');
       }
-      if (this.mode !== 'camera' && event.button === 0 && !event.shiftKey && this.doc.source.kind === 'human') {
+      if (this.mode !== 'camera' && event.button === 0 && !event.shiftKey) {
         const raycaster = pickRay(event);
-        if (this.mode === 'edit' && !this.animal && this.doc.selectedActorIds?.includes(this.doc.activeActorId)) {
+        const humanScene = this.doc.source.kind === 'human';
+        if (this.mode === 'edit' && humanScene && !this.animal && this.doc.selectedActorIds?.includes(this.doc.activeActorId)) {
           const handles = [...this.viewer._getRaycastableJointMarkers(), ...Object.values(this.viewer.ikController?.poleTargets || {}).filter(handle => handle.visible)];
           if (raycaster.intersectObjects(handles, false).length) return;
         }
-        const hit = pickScene(raycaster);
+        const hit = humanScene && pickScene(raycaster);
+        if (this.mode === 'position' && !hit) {
+          const glbHit = this.doc.source.kind === 'glb' && this.glb && raycaster.intersectObject(this.glb, true).length;
+          const backgroundHit = this.sceneBackground?.visible && raycaster.intersectObject(this.sceneBackground).length;
+          if (glbHit || backgroundHit) {
+            this.callbacks.clearSelection?.();
+            this.selectedPlacementAsset = glbHit ? 'glb' : 'background';
+            this.updatePlacementGizmo();
+            event.stopImmediatePropagation(); event.preventDefault();
+            return;
+          }
+        }
+        if (!humanScene && this.mode !== 'position') return;
         if (!hit) {
           this.callbacks.clearSelection?.();
           return;
@@ -1166,7 +1237,7 @@ export class StudioScene {
         while (object && !object.userData.actorId && !object.userData.modelId) object = object.parent;
         const modelId = object?.userData.modelId;
         const id = object?.userData.actorId;
-        if (id && (id !== this.doc.activeActorId || !this.doc.selectedActorIds?.includes(id) || this.selectedModelId || event.ctrlKey || event.metaKey)) {
+        if (id && (id !== this.doc.activeActorId || !this.doc.selectedActorIds?.includes(id) || this.selectedModelId || this.selectedPlacementAsset || event.ctrlKey || event.metaKey)) {
           event.stopImmediatePropagation(); event.preventDefault(); this.callbacks.pick?.(id, event.ctrlKey || event.metaKey); return;
         }
         if (this.mode === 'edit' && (modelId || this.selectedModel())) {
