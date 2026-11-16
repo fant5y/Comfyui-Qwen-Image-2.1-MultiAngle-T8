@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three.module.mjs';
 import { uuid } from '../uuid.mjs?v=20261116en';
+import { AnimalMannequin } from './animal-mannequin.mjs?v=20261116animals';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 import { PoseViewerCore } from '../vendor/vnccs_pose_studio_core.mjs?v=20261031resize';
 import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs';
@@ -284,6 +285,9 @@ export class StudioScene {
       });
       if (this.splat && doc.source.kind !== 'splat') { await this.splat.dispose(); this.splat = null; }
       if (this.glb && doc.source.kind !== 'glb') { disposeObject(this.glb); this.glb = null; this.glbName = null; }
+      if (this.animal && (doc.source.kind !== 'animal' || this.animalShape !== doc.source.shape)) {
+        this.animal.dispose(); this.animal = null; this.animalSelection = '';
+      }
       if (doc.source.kind === 'human') {
         if (!this.pack) this.pack = await loadHumanPack();
         this.viewer.clearPassiveCharacters();
@@ -312,6 +316,17 @@ export class StudioScene {
         this.splat.root.rotation.y = radians(doc.front);
         this.splat.root.updateMatrixWorld(true);
         this.baseTarget = this.splat.target;
+      } else if (doc.source.kind === 'animal') {
+        if (!this.animal) {
+          this.animal = new AnimalMannequin(doc.source.shape);
+          this.animalShape = doc.source.shape;
+          this.viewer.scene.add(this.animal.root, this.animal.handles);
+        }
+        this.animal.root.scale.setScalar(doc.scale);
+        this.animal.root.rotation.y = radians(doc.front);
+        this.animal.restore(doc.source.pose);
+        this.animal.update(this.animalSelection);
+        this.baseTarget = this.animal.root.localToWorld(this.animal.center.clone());
       } else if (doc.source.kind === 'glb') {
         if (this.glbName !== doc.source.name) {
           const response = await fetch(assetURL(doc.source.name));
@@ -351,7 +366,7 @@ export class StudioScene {
       for (const actor of doc.actors) this.updateActorTransform(actor);
       const bounds = doc.source.kind === 'splat' ? this.splat.bounds
         : doc.source.kind === 'empty' ? new THREE.Box3(new THREE.Vector3(-10, 0, -10), new THREE.Vector3(10, 20, 10))
-        : doc.source.kind === 'human' ? this.humanBounds() : worldBounds(this.glb);
+        : doc.source.kind === 'human' ? this.humanBounds() : worldBounds(this.animal?.root || this.glb);
       if (bounds.isEmpty()) bounds.set(new THREE.Vector3(-10, 0, -10), new THREE.Vector3(10, 20, 10));
       this.grid.position.y = bounds.min.y - 0.03;
       this.ring.position.copy(this.baseTarget);
@@ -371,6 +386,10 @@ export class StudioScene {
   }
 
   syncPose() {
+    if (this.doc.source.kind === 'animal') {
+      this.doc.source.pose = this.animal.pose();
+      return;
+    }
     if (this.doc.source.kind !== 'human') return;
     const pose = this.pose();
     if (!this.restoring && JSON.stringify(pose) !== JSON.stringify(this.doc.pose)) this.useRigPose();
@@ -447,7 +466,9 @@ export class StudioScene {
   setMode(mode) {
     this.finishDrag?.();
     if (this.doc.source.kind === 'splat' || this.doc.source.kind === 'empty') mode = 'camera';
+    if (this.animal && mode === 'position') mode = 'edit';
     this.mode = mode;
+    if (this.animal) this.animal.handles.visible = mode === 'edit';
     const human = this.doc.source.kind === 'human';
     const editable = human && !activeActor(this.doc)?.locked && activeActor(this.doc)?.visible !== false;
     this.viewer.setIKMode(mode === 'edit' && editable);
@@ -478,7 +499,7 @@ export class StudioScene {
     if (this.doc.source.kind === 'empty') throw new Error('Rebuild the source subject or import its 3D scene first.');
     await this.waitForCaptureReady();
     const v = this.viewer;
-    const content = this.splat ? this.splat.root : this.doc.source.kind === 'glb' ? this.glb : v.skinnedMesh;
+    const content = this.splat?.root || this.animal?.root || (this.doc.source.kind === 'glb' ? this.glb : v.skinnedMesh);
     if (!content) throw new Error('The scene has no renderable assets.');
     const contents = this.doc.source.kind === 'human' && this.actorRoots?.size
       ? [...(options.actorIds ? this.doc.actors.filter(actor => options.actorIds.includes(actor.id)) : visibleActors(this.doc)).map(actor => this.actorRoots.get(actor.id)),
@@ -565,7 +586,7 @@ export class StudioScene {
       this.updateShot(true); return;
     }
     if (this.doc.source.kind === 'empty') return;
-    const content = this.doc.source.kind === 'glb' ? this.glb : this.viewer.skinnedMesh;
+    const content = this.animal?.root || (this.doc.source.kind === 'glb' ? this.glb : this.viewer.skinnedMesh);
     const bounds = this.doc.source.kind === 'human' && this.actorRoots?.size ? this.humanBounds(selected) : worldBounds(content);
     if (bounds.isEmpty()) return;
     this.doc.camera.zoom = 1;
@@ -848,6 +869,24 @@ export class StudioScene {
         raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), this.viewer.camera);
         return raycaster;
       };
+      if (this.animal && this.mode === 'edit' && event.button === 0 && !event.shiftKey) {
+        const raycaster = ray();
+        const hits = raycaster.intersectObjects(this.animal.handles.children, false);
+        const hit = hits[0];
+        if (!hit) return;
+        event.stopImmediatePropagation(); event.preventDefault();
+        const { name, target } = hit.object.userData;
+        this.callbacks.select?.(target ? name + ' root' : name);
+        if (!target) return;
+        const center = hit.object.position.clone();
+        const normal = this.viewer.camera.getWorldDirection(new THREE.Vector3());
+        const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center);
+        const point = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+        if (!point) return;
+        drag = { pointerId: event.pointerId, animalTarget: name, plane, offset: center.sub(point), pose: this.animal.pose() };
+        canvas.setPointerCapture(event.pointerId);
+        return;
+      }
       if (this.mode !== 'camera' && event.button === 0 && !event.shiftKey && this.doc.source.kind === 'human') {
         const mesh = visibleActors(this.doc).map(actor => this.actorMesh(actor.id)).filter(Boolean);
         for (const item of mesh) { item.updateMatrixWorld(true); item.skeleton.update(); item.computeBoundingBox(); item.computeBoundingSphere(); }
@@ -879,6 +918,18 @@ export class StudioScene {
     canvas.addEventListener('pointermove', event => {
       if (this.mode === 'camera' || drag) event.stopImmediatePropagation();
       if (!drag || event.pointerId !== drag.pointerId) return;
+      if (drag.animalTarget) {
+        const rect = canvas.getBoundingClientRect(), raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), this.viewer.camera);
+        const point = raycaster.ray.intersectPlane(drag.plane, new THREE.Vector3());
+        if (!point) return;
+        beginChange();
+        this.animal.restore(drag.pose);
+        this.animal.drag(drag.animalTarget, point.add(drag.offset));
+        this.animal.update(this.animalSelection);
+        this.viewer.requestRender();
+        return;
+      }
       if (drag.actor) {
         const actor = this.doc.actors.find(item => item.id === drag.actor); if (!actor || actor.locked) return;
         const rect = canvas.getBoundingClientRect(), raycaster = new THREE.Raycaster();
@@ -932,7 +983,10 @@ export class StudioScene {
       if (!drag) return false;
       const cancelled = drag; drag = null;
       if (!cancelled.changed) return true;
-      if (cancelled.actor) {
+      if (cancelled.animalTarget) {
+        this.animal.restore(cancelled.pose);
+        this.animal.update(this.animalSelection);
+      } else if (cancelled.actor) {
         const actor = this.doc.actors.find(item => item.id === cancelled.actor);
         if (actor) { actor.transform = cancelled.transform; this.updateActorTransform(actor); }
       } else this.doc.camera = cancelled.camera;
@@ -946,6 +1000,7 @@ export class StudioScene {
     this.disposed = true;
     this.resizeObserver?.disconnect();
     this.splat?.dispose();
+    this.animal?.dispose();
     this.actorRoots?.clear();
     this.morphCache?.clear(); this.morphCacheBytes = 0; this.humanStatic = null; this.cachedPack = null; this.pack = null;
     // GLB props, the main GLB and line helpers remain attached: the viewer owns

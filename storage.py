@@ -229,8 +229,19 @@ class StudioStore:
         if not no_guide and scene.get("version") == 3 and guide_is_stale(scene):
             raise ValueError("The source image changed. Extract the structure again or choose to reuse the saved guide.")
         source_kind = scene.get("source", {}).get("kind")
-        if source_kind not in ("human", "glb", "splat", "empty"):
-            raise ValueError("Select a reconstructed scene, human or GLB source")
+        if source_kind not in ("human", "animal", "glb", "splat", "empty"):
+            raise ValueError("Select a reconstruction, mannequin, or GLB source")
+        if source_kind == "animal":
+            source = scene["source"]
+            if source.get("shape") not in ("canine", "feline", "bunny", "owl"):
+                raise ValueError("Select a supported animal mannequin")
+            pose = source.get("pose", {})
+            if not isinstance(pose, dict) or len(pose) > 64 or any(
+                not isinstance(angles, list) or len(angles) != 3
+                or any(type(angle) not in (int, float) or not -math.pi <= angle <= math.pi for angle in angles)
+                for angles in pose.values()
+            ):
+                raise ValueError("Animal mannequin pose contains invalid joint rotations")
         if not no_guide and model == "base" and guide_mode == "depth" and not conditioning.get("map") and conditioning.get("mapOrigin") != "scene":
             raise ValueError("Import a Depth Anything map before applying")
         if not no_guide and model == "base" and guide_mode == "pose" and source_kind != "human" and not (

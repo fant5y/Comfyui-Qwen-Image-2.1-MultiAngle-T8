@@ -1,4 +1,4 @@
-import { guideSource } from './guides.mjs?v=20261116en';
+import { guideSource } from './guides.mjs?v=20261116animals';
 
 export function supportsCameraBatch(scene) {
   const kind = guideSource(scene).kind;
