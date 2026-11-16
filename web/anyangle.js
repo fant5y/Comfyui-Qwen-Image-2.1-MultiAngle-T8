@@ -7,7 +7,7 @@ import { promptForSnapshot } from './batch-queue.mjs?v=20261116en';
 let graphRevision = 0;
 let closeActive = null;
 const extensionURL = new URL('./editor/index.html', import.meta.url);
-extensionURL.searchParams.set('v', '20261116manualread');
+extensionURL.searchParams.set('v', '20261116animalbuttons');
 
 function openEditor(node, widget) {
   closeActive?.();
@@ -196,7 +196,8 @@ function openEditor(node, widget) {
       try { await readActors(true); send('anyangle-actors', { actorReferences }); }
       catch (error) { send('anyangle-actors', { actorReferences, error: error.message }); }
     } else if (event.data.type === 'anyangle-read-keypoints') {
-      try { await readKeypoints(true); send('anyangle-keypoints', { posePeople }); }
+      try { await readKeypoints(true); send('anyangle-keypoints', { posePeople,
+        animalActorId: event.data.animalActorId, sourceName: event.data.sourceName }); }
       catch (error) { send('anyangle-keypoints', { error: error.message }); }
     } else if (event.data.type === 'anyangle-close') close();
     else if (event.data.type === 'anyangle-batch-request') {

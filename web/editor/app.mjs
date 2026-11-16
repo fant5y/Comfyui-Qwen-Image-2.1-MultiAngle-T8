@@ -208,7 +208,7 @@ function refresh() {
   $('#mouse-pitch').closest('section').hidden = staticGuide;
   $('#lens-mode').value = doc.camera.focalLength ? 'custom' : 'original';
   $('#lens-controls').hidden = !doc.camera.focalLength;
-  const poseAnimal = studio?.animal && activeActor(doc);
+  const poseAnimal = studio?.animal ? activeActor(doc) : doc.source.kind === 'splat' ? animalPoseTarget() : null;
   $('#copy-photo-pose').textContent = poseAnimal ? 'Apply AnimalPose to Mannequin' : 'Copy Source Pose to Mannequin';
   $('#copy-photo-pose').disabled = poseAnimal
     ? poseAnimal.source.shape === 'owl' || poseAnimal.locked || poseAnimal.visible === false
@@ -410,7 +410,6 @@ function refresh() {
     boneSelect.dataset.bones = boneList;
   }
   if (!bones.includes(selectedBone)) selectedBone = '';
-  $('#animal-shape').value = '';
   $('#joint-hint').textContent = animal
     ? 'Select a joint to show its rotation rings, or choose it below. Drag a gold handle to move the whole limb.'
     : 'Switch to Edit Scene, then select a joint or drag an IK hand or foot control.';
@@ -741,7 +740,23 @@ async function extractPhotoPose(copyToHuman = false) {
   } finally { $('#loading').hidden = true; }
 }
 $('#extract-pose').onclick = () => run(() => extractPhotoPose());
-$('#copy-photo-pose').onclick = () => studio.animal ? applySourceAnimalPose() : run(() => extractPhotoPose(true));
+$('#copy-photo-pose').onclick = () => {
+  const actor = studio.animal ? activeActor(doc) : doc.source.kind === 'splat' ? animalPoseTarget() : null;
+  if (actor) return applySourceAnimalPose(actor.id);
+  return run(async () => {
+    try { await extractPhotoPose(true); }
+    catch (error) {
+      if (!/detected no people|could not extract a clear body skeleton/i.test(error.message)) throw error;
+      const target = animalPoseTarget();
+      if (target && (!$('#read-animal-keypoints').hidden || cachedAnimalPose())) {
+        if (cachedAnimalPose()) await applyAnimalKeypoints(cachedAnimalPose(), target.id);
+        else requestAnimalPose(target.id);
+      } else if (!$('#read-animal-keypoints').hidden) {
+        throw new Error('DWPose found no person. Select a Canine, Feline, or Bunny mannequin to apply the connected AnimalPose.');
+      } else throw error;
+    }
+  });
+};
 $('#import-map').onclick = () => $('#map-file').click();
 $('#extract-depth').onclick = () => run(async () => {
   if (!doc.reference?.name) throw new Error('Connect or import a source image first.');
@@ -775,24 +790,36 @@ $('#generate-scene-depth').onclick = () => { begin(); doc.conditioning.map = nul
 $('#depth-invert').onchange = event => { begin(); doc.conditioning.depthInvert = event.target.checked; changed(); };
 $('#pose-occlusion').onchange = event => { begin(); doc.conditioning.poseOcclusion = event.target.value; changed(); };
 $('#pose-hands').onchange = event => { begin(); doc.conditioning.poseHands = event.target.checked; changed(); };
-$('#import-animal-pose').onclick = () => $('#animal-pose-file').click();
+$('#import-animal-pose').onclick = () => { animalFileTarget = null; $('#animal-pose-file').click(); };
 $('#read-animal-keypoints').onclick = () => send('anyangle-read-keypoints');
 $('#animal-pose-file').onchange = event => run(async () => {
   const file = event.target.files[0]; event.target.value = '';
+  const actorId = animalFileTarget; animalFileTarget = null;
   if (!file) return;
   const data = JSON.parse(await file.text());
-  applyAnimalKeypoints(Array.isArray(data) ? data[0] : data);
+  await applyAnimalKeypoints(Array.isArray(data) ? data[0] : data, actorId);
 });
 let latestAnimalKeypoints = null;
-function applySourceAnimalPose() {
-  if (!$('#read-animal-keypoints').hidden) send('anyangle-read-keypoints');
-  else if (latestAnimalKeypoints) return run(() => applyAnimalKeypoints(latestAnimalKeypoints));
-  else $('#animal-pose-file').click();
+let animalFileTarget = null;
+function animalPoseTarget() {
+  const candidates = doc.actors.filter(actor => actor.source.kind === 'animal' && actor.source.shape !== 'owl' && !actor.locked && actor.visible !== false);
+  return candidates.find(actor => actor.id === doc.activeActorId) || (candidates.length === 1 ? candidates[0] : null);
 }
-function applyAnimalKeypoints(frame) {
+function cachedAnimalPose() {
+  return latestAnimalKeypoints?.reference === (doc.reference?.name || null) ? latestAnimalKeypoints.frame : null;
+}
+function requestAnimalPose(actorId) {
+  send('anyangle-read-keypoints', { animalActorId: actorId, sourceName: doc.reference?.name || null });
+}
+function applySourceAnimalPose(actorId) {
+  if (!$('#read-animal-keypoints').hidden) requestAnimalPose(actorId);
+  else if (cachedAnimalPose()) return run(() => applyAnimalKeypoints(cachedAnimalPose(), actorId));
+  else { animalFileTarget = actorId; $('#animal-pose-file').click(); }
+}
+async function applyAnimalKeypoints(frame, actorId = null) {
   if (frame?.version !== 'ap10k') throw new Error('Choose an AP-10K JSON file from AnimalPose Estimator.');
-  const actor = activeActor(doc);
-  if (!studio.animal || actor.source.shape === 'owl')
+  const actor = actorId ? doc.actors.find(item => item.id === actorId) : studio.animal ? activeActor(doc) : null;
+  if (actor?.source.kind !== 'animal' || actor.source.shape === 'owl')
     throw new Error('Select an unlocked Canine, Feline, or Bunny mannequin before importing AP-10K.');
   if (actor.locked || actor.visible === false) throw new Error('Show and unlock the selected animal before importing its pose.');
   if (!Array.isArray(frame.animals) || frame.animals.length !== 1)
@@ -807,8 +834,16 @@ function applyAnimalKeypoints(frame) {
   if (!points[3] || !points[4] || Math.hypot(points[3][0] - points[4][0], points[3][1] - points[4][1]) < 1)
     throw new Error('The AP-10K pose needs a visible neck and tail root.');
   const facing = points[3][0] < points[4][0] ? -1 : 1;
-  begin();
-  latestAnimalKeypoints = frame;
+  const rollback = begin();
+  if (!studio.animal || actor.id !== doc.activeActorId) {
+    const previous = clone(doc);
+    doc.source = { kind: 'human' };
+    bindActor(doc, actor.id); doc.selectedActorIds = [actor.id];
+    try { await studio.restore(doc); }
+    catch (error) { doc = previous; rollback?.(); await studio.restore(doc); throw error; }
+    selectedBone = '';
+  }
+  latestAnimalKeypoints = { frame, reference: doc.reference?.name || null };
   studio.animal.applyAP10K(points, facing);
   studio.groundActors([actor.id]);
   doc.conditioning.guide = 'coarse';
@@ -828,7 +863,7 @@ $('#openpose-file').onchange = event => run(async () => {
     const keypoints = JSON.parse(await file.text());
     const firstFrame = Array.isArray(keypoints) ? keypoints[0] : keypoints;
     if (firstFrame?.version === 'ap10k') {
-      applyAnimalKeypoints(firstFrame);
+      await applyAnimalKeypoints(firstFrame);
       return;
     }
     const photoCanvas = doc.reference?.width && doc.reference?.height;
@@ -980,9 +1015,8 @@ $('#glb-file').onchange = event => run(async () => {
   }
   changed(); toast('GLB loaded. Adjust its front alignment and scale under Scene and Composition.');
 });
-for (const [shape, label] of Object.entries(ANIMAL_SHAPES)) $('#animal-shape').append(new Option(label, shape));
-$('#animal-shape').onchange = event => {
-  const shape = event.target.value;
+$('#animal-shapes').onclick = event => {
+  const shape = event.target.closest('button[data-shape]')?.dataset.shape;
   return run(async () => {
     if (!Object.hasOwn(ANIMAL_SHAPES, shape)) return;
     const rollbackHistory = begin();
@@ -1387,7 +1421,10 @@ function readPendingKeypoints() {
   run(async () => {
     if (message.error) { toast(message.error); return; }
     const result = message.posePeople;
-    if (result?.animalFrame) { applyAnimalKeypoints(result.animalFrame); return; }
+    if (message.animalActorId && message.sourceName !== (doc.reference?.name || null))
+      throw new Error('The source image changed. Read AnimalPose again.');
+    if (result?.animalFrame) { await applyAnimalKeypoints(result.animalFrame, message.animalActorId); return; }
+    if (message.animalActorId) throw new Error('Connect the AP-10K AnimalPose Estimator to Pose Keypoints.');
     if (!result || doc.openpose?.origin === 'keypoints' && !doc.openpose.useRig && doc.openpose.inputSignature === result.signature && doc.openpose.inputPlanSignature === result.planSignature && doc.openpose.sourceName === result.asset?.name) return;
     await applyOpenPoseAsset(result.asset, result.people?.[0]?.points, result.people?.[0]?.fullBody);
     doc.openpose.people = result.people; doc.openpose.origin = 'keypoints'; doc.openpose.inputSignature = result.signature; doc.openpose.inputPlanSignature = result.planSignature; changed();
