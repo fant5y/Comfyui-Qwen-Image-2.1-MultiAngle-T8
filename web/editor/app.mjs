@@ -501,8 +501,8 @@ for (const [key, label] of [['penis_len', 'Penis Length'], ['penis_circ', 'Penis
   makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min: 0, max: 1, step: 0.01,
     read: () => doc.mesh[key] ?? (key === 'penis_len' ? doc.mesh.genital_size : undefined) ?? 0.5,
     write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
-for (const [key, label, range] of [['penis_tilt', 'Penis Tilt', 45], ['penis_turn', 'Penis Left / Right', 30]])
-  makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min: -range, max: range, unit: '°',
+for (const [key, label, min, max] of [['penis_tilt', 'Penis Tilt', -45, 175], ['penis_turn', 'Penis Left / Right', -30, 30]])
+  makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min, max, unit: '°',
     read: () => doc.mesh[key] ?? 0,
     write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
 makeControl('#animal-body-sliders', { id: 'animal-size', label: 'Size', min: 0.25, max: 4, step: 0.01, unit: '×',
