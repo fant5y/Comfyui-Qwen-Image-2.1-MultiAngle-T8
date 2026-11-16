@@ -151,8 +151,11 @@ export function calculateMorphFactors(params = {}) {
 function targetWeight(target, factors) {
     let weight = 1.0;
     for (const factor of target.factorValues) {
-        weight *= factors[factor] ?? 0.0;
-        if (weight < 0.001) return 0.0;
+        const value = factors[factor] ?? 0.0;
+        // Outside the weight and muscle preset ranges, the average corner has a signed weight.
+        if (value < 0 && factor !== "averageweight" && factor !== "averagemuscle") return 0.0;
+        weight *= value;
+        if (Math.abs(weight) < 0.001) return 0.0;
     }
     return weight;
 }
@@ -285,7 +288,7 @@ export function solveMorph(data, params = {}) {
     const vertices = new Float32Array(data.baseVertices);
     for (const target of data.targets) {
         const weight = targetWeight(target, factors);
-        if (weight <= 0) continue;
+        if (weight === 0) continue;
         for (let i = 0; i < target.count; i++) {
             const vertexOffset = target.indices[i] * 3;
             const deltaOffset = i * 3;

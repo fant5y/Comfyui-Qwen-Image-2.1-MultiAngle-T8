@@ -88,6 +88,14 @@ button{white-space:nowrap}input[type=range]{appearance:none;height:3px;border-ra
 .reconstruction-option{display:flex;align-items:center;gap:10px;padding:12px;margin-top:14px;border:1px solid #315765;border-radius:8px;background:#112c38;cursor:pointer}.reconstruction-option input{width:16px;height:16px;flex:none;accent-color:var(--cyan)}.reconstruction-option span{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}.reconstruction-option .tag{margin:0}#keep-background-hint{margin:8px 0 4px;line-height:1.7}
 .workspace .sidebar-resize{min-width:0;min-height:0;padding:0;border:0;border-radius:0;background:var(--bg);cursor:col-resize;touch-action:none}
 .workspace .sidebar-resize:hover,.workspace .sidebar-resize:active,.workspace .sidebar-resize:focus-visible{background:#317282;outline-offset:-2px}
+.control-value .control-reset{width:24px;min-height:24px;padding:4px;margin-left:4px}
+.control-value .control-reset img{width:14px;height:14px}
+.collapsible-heading{justify-content:flex-start;cursor:pointer;list-style:none}
+.collapsible-heading::-webkit-details-marker{display:none}
+.collapsible-heading::before{content:"";width:6px;height:6px;border-right:1px solid currentColor;border-bottom:1px solid currentColor;transform:rotate(-45deg);flex:none}
+details[open]>.collapsible-heading::before{transform:rotate(45deg)}
+details:not([open])>.collapsible-heading{margin-bottom:0}
+.collapsible-heading>span{margin-left:auto}
 .prompt-options #reset-prompt{justify-self:start}
 .prompt-connections{margin-top:10px}
 .prompt-connections label{display:grid;gap:6px;margin-bottom:8px}

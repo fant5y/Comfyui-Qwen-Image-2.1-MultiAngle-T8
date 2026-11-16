@@ -1,5 +1,5 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116shaperange';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116bodyrange';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116en';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116en';
@@ -9,10 +9,10 @@ import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges }
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116shaperange';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116bodyrange';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116rig';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116bodyrange';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116en';
 
@@ -476,7 +476,7 @@ function animalJointLabel(name) {
     .replace(/hind leg joint 1$/, 'knee').replace(/hind leg joint 2$/, 'hock');
 }
 
-function makeControl(container, { id, label, min, max, step = 1, unit = '', read, write, commit }) {
+function makeControl(container, { id, label, min, max, step = 1, unit = '', resetValue, read, write, commit }) {
   const wrap = document.createElement('div'); wrap.className = 'control';
   const top = document.createElement('div'); top.className = 'control-top';
   const title = document.createElement('label'); title.textContent = label; title.htmlFor = `${id}-number`;
@@ -486,6 +486,22 @@ function makeControl(container, { id, label, min, max, step = 1, unit = '', read
   const range = document.createElement('input'); Object.assign(range, { id, type: 'range', min, max, step }); range.setAttribute('aria-label', label);
   const endpoints = document.createElement('div'); endpoints.className = 'control-range-labels';
   for (const text of [`${min}${unit}`, `${max}${unit}`]) { const span = document.createElement('span'); span.textContent = text; endpoints.append(span); }
+  if (resetValue !== undefined) {
+    const reset = document.createElement('button');
+    Object.assign(reset, { type: 'button', className: 'icon-button control-reset', title: `Reset ${label}` });
+    reset.setAttribute('aria-label', reset.title);
+    const icon = document.createElement('img');
+    Object.assign(icon, { src: '../icons/refresh.svg', alt: '' });
+    reset.append(icon);
+    value.append(reset);
+    reset.onclick = () => run(async () => {
+      if (Number(read()) === resetValue) return;
+      begin();
+      write(resetValue);
+      if (commit) await commit();
+      changed();
+    });
+  }
   wrap.append(top, range, endpoints); $(container).append(wrap);
   let gesture = false;
   const start = () => { if (!gesture) { begin(); gesture = true; } };
@@ -524,17 +540,17 @@ for (const button of document.querySelectorAll('[data-body-shape]')) button.oncl
   begin(); doc.mesh.gender = gender;
   await studio.morph(); changed();
 });
+const defaultBodyShape = defaultScene().mesh;
 for (const [key, label, min, max, step] of [
   ['age', 'Age', 18, 75, 1], ['gender', 'Female to Male', 0, 1, 0.01], ['breast_size', 'Breast Size', 0, 1.5, 0.01],
-  ['weight', 'Weight', 0, 1, 0.01], ['muscle', 'Muscle', 0, 1, 0.01], ['height', 'Height', 0, 1, 0.01],
-]) makeControl('#body-sliders', { id: `body-${key}`, label, min, max, step,
+  ['weight', 'Weight', -0.15, 1.5, 0.01], ['muscle', 'Muscle', -0.15, 1.5, 0.01], ['height', 'Height', 0, 1, 0.01],
+]) makeControl('#body-sliders', { id: `body-${key}`, label, min, max, step, resetValue: defaultBodyShape[key],
   read: () => doc.mesh[key], write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
 $('#reset-body-shape').onclick = () => run(async () => {
   const actor = activeActor(doc);
   if (doc.source.kind !== 'human' || actor?.locked) return;
   begin();
-  const defaults = defaultScene().mesh;
-  for (const key of ['age', 'gender', 'breast_size', 'weight', 'muscle', 'height']) doc.mesh[key] = defaults[key];
+  for (const key of ['age', 'gender', 'breast_size', 'weight', 'muscle', 'height']) doc.mesh[key] = defaultBodyShape[key];
   await studio.morph();
   changed();
 });
@@ -552,11 +568,11 @@ $('#show-genitals').onchange = event => run(async () => {
   await studio.morph(); changed();
 });
 for (const [key, label, max] of [['penis_len', 'Penis Length', 2.5], ['penis_circ', 'Penis Girth', 2.5], ['penis_test', 'Testicle Size', 1]])
-  makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min: 0, max, step: 0.01,
+  makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min: 0, max, step: 0.01, resetValue: 0.5,
     read: () => doc.mesh[key] ?? (key === 'penis_len' ? doc.mesh.genital_size : undefined) ?? 0.5,
     write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
 for (const [key, label, min, max] of [['penis_tilt', 'Penis Tilt', -45, 175], ['penis_turn', 'Penis Left / Right', -90, 90]])
-  makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min, max, unit: '°',
+  makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min, max, unit: '°', resetValue: 0,
     read: () => doc.mesh[key] ?? 0,
     write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
 makeControl('#animal-body-sliders', { id: 'animal-size', label: 'Size', min: 0.25, max: 4, step: 0.01, unit: '×',

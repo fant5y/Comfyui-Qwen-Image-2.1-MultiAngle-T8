@@ -3,7 +3,7 @@ import { uuid } from '../uuid.mjs?v=20261116en';
 import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 import { PoseViewerCore } from '../vendor/vnccs_pose_studio_core.mjs?v=20261031resize';
-import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs';
+import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs?v=20261116bodyrange';
 import { loadHumanPack, HumanAssetError } from './human.mjs?v=20261116en';
 import { applyLens } from './lens.mjs?v=20261116en';
 import { HAND_PRESETS } from '../vendor/vnccs_hand_presets.mjs';

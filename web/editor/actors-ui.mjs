@@ -26,7 +26,7 @@ async function editTransaction(action) {
 }
 export function installActorsUI(options) {
   context = options;
-  $('actors-panel').innerHTML = `<div class="section-heading"><h2>Scene Characters <small id="actor-count">0</small></h2><span class="tag">CAST</span></div>
+  $('actors-panel').innerHTML = `<summary class="section-heading collapsible-heading"><h2>Scene Characters <small id="actor-count">0</small></h2><span class="tag">CAST</span></summary>
     <div class="actor-toolbar"><button id="add-actor" class="accent-button">＋ Add Character</button><button id="clone-actor">Duplicate</button><button id="delete-actor">Delete</button></div>
     <p class="hint">Select a character to edit. Ctrl-click to select multiple. Visibility controls output. Locking protects poses and positions.</p><div id="actor-list" class="actor-list"></div>
     <div id="active-actor-controls"><label>Name<input id="actor-label" maxlength="48"></label><label>Character Color<input id="actor-color" type="color"></label>
