@@ -31,7 +31,7 @@ export function installReferencesUI(value) {
   materials.setAttribute('role', 'tabpanel'); materials.setAttribute('aria-labelledby', 'tab-materials');
   materials.innerHTML = `<div class="section-heading"><h2>References <small>REFERENCE LIBRARY</small></h2><span id="reference-count"></span></div>
     <p class="hint">Use images for characters, clothing, products, settings, or styles. Expand a reference to assign its role and target.</p>
-    <div class="reference-source"><img id="library-source-image" alt="Scene Source Image" hidden><div><strong>Scene Source Image</strong><p id="library-source-state" class="hint"></p><button id="source-tools">Rebuild / Extract / Replace</button><button id="source-to-library">Add to References</button></div></div>
+    <div class="reference-source"><img id="library-source-image" alt="Scene Source Image" hidden><div><strong>Scene Source Image</strong><p id="library-source-state" class="hint"></p><button id="source-tools">Rebuild / Extract / Replace</button><button id="source-to-library">Add to References</button><button id="library-clear-source" hidden>Remove Source Image</button></div></div>
     <div class="compact-actions"><button id="add-reference" class="primary">＋ Add Reference</button><button id="read-references">Read Connections</button></div>
     <div id="legacy-references"><p class="hint">This scene uses legacy image rules. Upgrade to assign multiple roles to each image. You can undo the upgrade.</p><button id="upgrade-references">Upgrade References</button></div>
     <div id="reference-cards"></div><p id="reference-empty-note" class="empty-note">Add a reference and choose its role. Characters are optional.</p>
@@ -54,6 +54,7 @@ export function installReferencesUI(value) {
   $('read-references').onclick = () => context.send('anyangle-read-actors');
   $('upgrade-references').onclick = () => edit(() => upgradeReferences(context.doc()));
   $('source-tools').onclick = () => chooseTab('objects');
+  $('library-clear-source').onclick = () => context.clearSource();
   $('source-to-library').onclick = () => edit(() => { const scene = context.doc(); if (scene.version !== 3) upgradeReferences(scene); if (scene.reference) addReference(scene, scene.reference); });
   $('save-reference-template').onclick = async () => { const name = await context.askName('Save Reference Set', 'My Reference Set'); if (!name) return;
     edit(() => { const library = context.doc().referenceLibrary; library.templates ||= []; library.templates.push({ id: uuid(), name, items: copy(library.items) }); });
@@ -131,12 +132,12 @@ function card(scene, item, manifest) {
   if (item.reviewSource) details.append(el('p', 'The connected image changed. Check the source region and role description.', 'reference-review'));
   for (const use of item.usages) details.append(useControls(scene, item, use));
   const actions = el('div', '', 'reference-card-actions');
-  const source = button('Use as Source Image', () => edit(() => { const previous = scene.reference; scene.reference = copy(item.asset); context.sourceChanged(previous); }));
+  const source = button('Use as Scene Source', () => context.setSource(copy(item.asset)));
   source.disabled = !item.asset || context.sourceConnected();
   source.title = context.sourceConnected() ? 'Replace the upstream image or disconnect the source input.' : !item.asset ? 'Read or import this reference first.' : 'Use this reference for pose extraction or 3D reconstruction.';
   const crop = button('Crop Reference', () => cropReference(item)); crop.disabled = !item.asset;
   actions.append(button('＋ Add Role', () => edit(() => { item.usages.push(newUse('identity', { kind: 'scene', ids: [], text: '' })); })),
-    source, crop, button('↑', () => moveReference(scene, item, -1)), button('↓', () => moveReference(scene, item, 1)));
+    crop, button('↑', () => moveReference(scene, item, -1)), button('↓', () => moveReference(scene, item, 1)));
   if (item.inputKey) actions.append(button('Use Saved Version', () => edit(() => { item.inputKey = null; item.missing = false; })));
   if (item.inputKey && item.batchCount > 1) actions.append(button('Split Batch into References', () => splitBatch(scene, item)));
   if (item.reviewSource) actions.append(button('Confirm Updated Source', () => edit(() => { item.reviewSource = false; })));
@@ -151,7 +152,7 @@ function card(scene, item, manifest) {
     if (openId === item.id) openId = null;
   }));
   remove.title = 'Remove from the library. You can undo this. The scene source and characters are kept.';
-  tools.append(replace, remove); entry.append(details, tools); return entry;
+  tools.append(source, replace, remove); entry.append(details, tools); return entry;
 }
 function replaceReference(scene, item) {
   const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.hidden = true; document.body.append(file);
@@ -186,6 +187,9 @@ export function refreshReferencesUI(force = false) {
   for (const value of ['materials', 'objects']) { $(`tab-${value}`).classList.toggle('active', tab === value); $(`tab-${value}`).setAttribute('aria-selected', String(tab === value)); $(`tab-${value}`).tabIndex = tab === value ? 0 : -1; }
   $('legacy-references').hidden = modern; $('reference-workflow').value = modern ? library.mode : 'guided';
   const source = scene.reference; $('source-to-library').disabled = !source;
+  $('library-clear-source').hidden = !source;
+  $('library-clear-source').disabled = context.sourceConnected();
+  $('library-clear-source').title = context.sourceConnected() ? 'Disconnect Scene Source Image on the node first.' : 'Remove the source image and keep its library reference.';
   $('reference-source-warning').hidden = !scene.sourceStale && !scene.derivedGuideStale && !staleGuide(scene);
   $('reference-source-warning-text').textContent = scene.sourceStale ? 'The source changed. Rebuild to update the 3D scene. References and camera settings are kept.' : 'The source changed. Extract the pose or depth again, or choose to keep the saved guide.';
   $('keep-derived-guide').hidden = !scene.derivedGuideStale && !staleGuide(scene);

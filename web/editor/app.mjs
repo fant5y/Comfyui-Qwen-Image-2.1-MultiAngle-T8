@@ -2,7 +2,7 @@ import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
 import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116bodyrange';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116en';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116en';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116sources';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
@@ -315,8 +315,13 @@ function refresh() {
   $('#keep-background').disabled = !doc.reference || !!linkedReference.pending;
   const reconstructionChanged = splat && !!doc.source.keep_background !== keepBackground;
   $('#reconstruction-state').textContent = splat ? 'The reconstruction keeps its source pose. Move the camera for a different view or switch to a mannequin to edit the pose.' : 'Rebuild the subject from the source image, then adjust the camera.';
-  $('#reconstruct').disabled = !doc.reference;
+  $('#return-to-cast').hidden = !splat || !doc.actors.length;
+  $('#reconstruct').disabled = !doc.reference || !!linkedReference.pending;
   if (reconstructionChanged) $('#reconstruction-state').textContent = 'Background setting changed · Rebuild to apply it. The preview shows the last result.';
+  if (doc.reference && doc.actors.length) {
+    $('#reconstruction-state').textContent += splat ? ' Your characters are saved. Choose Return to Mannequins to edit them.'
+      : ' Rebuilding switches the canvas to the reconstruction. Your characters are saved.';
+  }
   $('#reconstruct').textContent = reconstructionChanged ? 'Rebuild 3D with New Settings' : keepBackground ? 'Rebuild 3D with Background' : splat ? 'Reload Source Reconstruction' : 'Rebuild 3D from Source';
   $('#empty-scene').hidden = !empty;
   $('#coarse-inputs').hidden = guide !== 'coarse';
@@ -1020,7 +1025,7 @@ $('#read-reference').onclick = () => {
   linkedReference = { ...linkedReference, connected: true, pending: true, message: 'Reading connected image…' };
   refresh(); send('anyangle-read-reference');
 };
-$('#clear-reference').onclick = () => run(async () => {
+async function clearSourceImage() {
   if (!doc.reference || linkedReference.connected) return;
   studio.syncPose();
   const previous = clone(doc), rollback = begin();
@@ -1030,12 +1035,28 @@ $('#clear-reference').onclick = () => run(async () => {
     const actor = activeActor(doc) || doc.actors[0];
     doc.source = { kind: actor ? 'human' : 'empty' };
     if (actor) bindActor(doc, actor.id);
+    doc.sourceStale = false;
   }
   sourceChanged(doc, previous.reference);
   if (reconstructed) {
     try { await studio.restore(doc); }
     catch (error) { doc = previous; rollback?.(); await studio.restore(doc); throw error; }
   }
+  changed();
+}
+$('#clear-reference').onclick = () => run(clearSourceImage);
+$('#return-to-cast').onclick = () => run(async () => {
+  if (doc.source.kind !== 'splat' || !doc.actors.length) return;
+  const previous = clone(doc), rollback = begin();
+  const actor = activeActor(doc) || doc.actors[0];
+  doc.source = { kind: 'human' };
+  doc.sourceStale = false;
+  doc.camera = defaultScene().camera;
+  bindActor(doc, actor.id);
+  try { await studio.restore(doc); studio.fit(); }
+  catch (error) { doc = previous; rollback?.(); await studio.restore(doc); throw error; }
+  previewVisible = false;
+  setMode('position');
   changed();
 });
 $('#reference-file').onchange = event => run(async () => {
@@ -1584,7 +1605,16 @@ installActorsUI({ doc: () => doc, replace: value => { doc = value; }, studio: ()
   ensureHumanTools, askName, upload, captureGuide, toast, send, downloadURL: download, downloadBlob: download,
   showScene: () => { previewVisible = false; setMode('camera'); } });
 installReferencesUI({ doc: () => doc, sourceConnected: () => linkedReference.connected, run, begin, changed, askName, upload, send, toast,
-  sourceChanged: previous => sourceChanged(doc, previous) });
+  clearSource: () => run(clearSourceImage),
+  setSource: asset => run(async () => {
+    if (linkedReference.connected || !asset?.name || doc.reference?.name === asset.name) return;
+    begin();
+    const previous = doc.reference;
+    doc.reference = asset;
+    sourceChanged(doc, previous);
+    changed();
+    toast('Scene Source Image set. Open Scene Objects to rebuild or extract its pose.');
+  }) });
 if (embedded) {
   let started = false;
   window.addEventListener('message', async event => {
