@@ -74,6 +74,9 @@ def canonical_scene(raw):
         if source["kind"] == "animal":
             if source.get("shape") not in ("canine", "feline", "bunny", "owl"):
                 raise ValueError("Select a supported animal mannequin")
+            build = actor.setdefault("animalBuild", 1)
+            if type(build) not in (int, float) or not 0.65 <= build <= 1.45:
+                raise ValueError("Animal build must be between 0.65 and 1.45")
             animal_pose = actor.setdefault("animalPose", {})
             if not isinstance(animal_pose, dict) or len(animal_pose) > 64 or any(
                 not isinstance(rotation, list) or len(rotation) != 3

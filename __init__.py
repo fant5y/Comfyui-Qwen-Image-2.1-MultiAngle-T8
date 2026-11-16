@@ -11,7 +11,7 @@ from comfy_api.latest import io as comfy_io
 from .storage import StudioStore, conditioning_for, prompt_for
 from .multiperson import canonical_scene, build_manifest
 from .reference_library import encoder_prompt, guide_is_stale
-from .dwpose import people_from_keypoints, keypoints_signature
+from .dwpose import animal_keypoint_frame, people_from_keypoints, keypoints_signature
 from .routes import register_routes
 from .reconstruction import AnyAngleReconstructionOutput
 from .optional_lora import AnyAngleOptionalLoRA
@@ -127,9 +127,13 @@ class AnyAngleStudio(comfy_io.ComfyNode):
                     and not pose_source.get("useRig") and pose_source.get("inputSignature")
                     and pose_source["inputSignature"] != signature):
                 raise ValueError("Pose keypoints changed. Open Studio, read them again, and apply.")
-            people, detected_png = people_from_keypoints(pose_keypoints)
-            pose_asset = store().asset(detected_png, "png")
-            ui["anyangle_pose_people"] = [{"people": people, "asset": pose_asset, "signature": signature}]
+            animal_frame = animal_keypoint_frame(pose_keypoints)
+            if animal_frame is not None:
+                ui["anyangle_pose_people"] = [{"animalFrame": animal_frame, "signature": signature}]
+            else:
+                people, detected_png = people_from_keypoints(pose_keypoints)
+                pose_asset = store().asset(detected_png, "png")
+                ui["anyangle_pose_people"] = [{"people": people, "asset": pose_asset, "signature": signature}]
         guide_image = None
         if png is not None:
             with Image.open(io.BytesIO(png)) as image:
@@ -206,6 +210,11 @@ class AnyAnglePoseRead(comfy_io.ComfyNode):
 
     @classmethod
     def execute(cls, keypoints):
+        animal_frame = animal_keypoint_frame(keypoints)
+        if animal_frame is not None:
+            return comfy_io.NodeOutput(ui={"anyangle_pose_people": [{
+                "animalFrame": animal_frame, "signature": keypoints_signature(keypoints),
+            }]})
         people, png = people_from_keypoints(keypoints)
         asset = store().asset(png, "png")
         return comfy_io.NodeOutput(ui={"anyangle_pose_people": [{"people": people, "asset": asset,

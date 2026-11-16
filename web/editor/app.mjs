@@ -1,5 +1,5 @@
-import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116cast';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116cast';
+import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116rig';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116rig';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116en';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116en';
@@ -9,10 +9,10 @@ import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges }
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116en';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116rig';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
-import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116en';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116cast';
+import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116rig';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116en';
 
@@ -240,12 +240,15 @@ function refresh() {
   $('#asset-label').textContent = empty ? 'Waiting for source reconstruction' : human ? 'MakeHuman · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Posable Mannequin' : doc.source.label || 'GLB Scene';
   $('#source-badge').textContent = empty ? 'PHOTO → 3D' : splat ? doc.source.keep_background ? 'TRIPOSPLAT · Background Included' : 'TRIPOSPLAT · Source Subject' : human ? 'HUMAN · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Mannequin' : 'GLB · Scene';
   for (const id of ['pose-panel', 'hands-panel', 'body-panel', 'joint-panel']) {
-    const available = human || animal && id === 'joint-panel';
+    const available = human || animal && ['joint-panel', 'body-panel'].includes(id);
     const panel = document.getElementById(id);
     panel.classList.toggle('disabled-panel', !available);
     panel.inert = !available || mannequinScene && id !== 'pose-panel' && !!activeActor(doc)?.locked;
     panel.hidden = !available || staticGuide;
   }
+  $('#body-sliders').hidden = animal;
+  $('#animal-body-sliders').hidden = !animal;
+  $('#import-animal-pose').hidden = !animal || activeActor(doc)?.source.shape === 'owl';
   for (const id of ['presets', 'pose-actions', 'saved-poses']) $(`#${id}`).inert = !human || !!activeActor(doc)?.locked;
   $('#reference').hidden = !doc.reference; $('#reference-empty').hidden = !!doc.reference;
   if (doc.reference) $('#reference').src = assetURL(doc.reference.name);
@@ -360,7 +363,7 @@ function refresh() {
   $('#openpose-status').textContent = doc.openpose ? poseImage ? doc.openpose.fullBody === false
     ? 'Visible joints extracted. Cropped or occluded photos can output the source pose directly.' : 'Source skeleton ready. Output it directly or edit the pose in 3D.'
     : 'Outputting the 3D mannequin skeleton · Adjust the pose and camera as needed.' : 'Extract a pose from the source or import a skeleton. You can also pose the mannequin by hand.';
-  $('#retarget-pose').hidden = !doc.openpose?.rawAsset && !doc.conditioning.map;
+  $('#retarget-pose').hidden = animal || !doc.openpose?.rawAsset && !doc.conditioning.map;
   $('#retarget-pose').textContent = poseImage ? 'Adjust Pose on 3D Mannequin' : 'Copy Photo Pose Again';
   $('#retarget-pose').disabled = false;
   $('#retarget-pose').title = 'Copy visible joints. Extract older partial-body skeletons again.';
@@ -399,7 +402,7 @@ function refresh() {
   const bones = animal ? [...(studio?.animal?.joints.keys() || [])] : human ? studio?.viewer.boneList?.map(bone => bone.name) || [] : [];
   const boneList = JSON.stringify(bones);
   if (boneSelect.dataset.bones !== boneList) {
-    boneSelect.replaceChildren(new Option('Choose Joint', ''), ...bones.map(name => new Option(name, name)));
+    boneSelect.replaceChildren(new Option('Choose Joint', ''), ...bones.map(name => new Option(animal && name === 'Torso' ? 'Spine (Torso)' : name, name)));
     boneSelect.dataset.bones = boneList;
   }
   if (!bones.includes(selectedBone)) selectedBone = '';
@@ -460,6 +463,23 @@ for (const [key, label, min, max, step] of [
   ['age', 'Age', 18, 75, 1], ['gender', 'Body Shape', 0, 1, 0.01], ['weight', 'Weight', 0, 1, 0.01], ['muscle', 'Muscle', 0, 1, 0.01], ['height', 'Height', 0, 1, 0.01],
 ]) makeControl('#body-sliders', { id: `body-${key}`, label, min, max, step,
   read: () => doc.mesh[key], write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
+makeControl('#animal-body-sliders', { id: 'animal-size', label: 'Size', min: 0.25, max: 4, step: 0.01, unit: '×',
+  read: () => activeActor(doc)?.transform.scale ?? 1,
+  write: value => {
+    const actor = activeActor(doc);
+    if (!studio.animal || !actor || actor.locked) return;
+    doc.scale = actor.transform.scale = value;
+    studio.updateActorTransform(actor);
+  } });
+makeControl('#animal-body-sliders', { id: 'animal-build', label: 'Body Build · Lean to Stocky', min: 0.65, max: 1.45, step: 0.01,
+  read: () => activeActor(doc)?.animalBuild ?? 1,
+  write: value => {
+    const actor = activeActor(doc);
+    if (!studio.animal || !actor || actor.locked) return;
+    actor.animalBuild = value;
+    studio.animal.setBuild(value);
+    studio.viewer.requestRender();
+  } });
 for (const axis of ['x', 'y', 'z']) makeControl('#bone-sliders', { id: `bone-${axis}`, label: `Rotate ${axis.toUpperCase()}`, min: -180, max: 180, step: 1, unit: '°',
   read: () => ((studio?.animal ? studio.animal.joints.get(selectedBone) : studio?.viewer.bones[selectedBone])?.rotation[axis] || 0) * 180 / Math.PI,
   write: value => {
@@ -628,7 +648,7 @@ async function applyOpenPoseAsset(asset, detectedPoints = null, fullBody = null,
   previewGuide = 'pose'; previewVisible = true; changed();
 }
 async function retargetPose() {
-  if (studio.animal) throw new Error('To pose this animal, import an AP-10K JSON file from AnimalPose Estimator.');
+  if (studio.animal) throw new Error('AnimalPose needs AP-10K keypoints. Import its JSON or connect the POSE_KEYPOINT output.');
   if (doc.openpose?.people?.length) return chooseDetectedPeople(doc.openpose.people, doc.openpose.rawAsset, { reference: doc.openpose.origin === 'dwpose' ? doc.reference : null, origin: doc.openpose.origin });
   const mode = doc.openpose?.retargetMode || (doc.openpose?.origin === 'dwpose' ? 'conservative' : 'estimated');
   if (doc.openpose?.origin === 'dwpose' && doc.openpose.fullBody === false
@@ -747,7 +767,16 @@ $('#generate-scene-depth').onclick = () => { begin(); doc.conditioning.map = nul
 $('#depth-invert').onchange = event => { begin(); doc.conditioning.depthInvert = event.target.checked; changed(); };
 $('#pose-occlusion').onchange = event => { begin(); doc.conditioning.poseOcclusion = event.target.value; changed(); };
 $('#pose-hands').onchange = event => { begin(); doc.conditioning.poseHands = event.target.checked; changed(); };
+$('#import-animal-pose').onclick = () => $('#animal-pose-file').click();
+$('#read-animal-keypoints').onclick = () => send('anyangle-read-keypoints');
+$('#animal-pose-file').onchange = event => run(async () => {
+  const file = event.target.files[0]; event.target.value = '';
+  if (!file) return;
+  const data = JSON.parse(await file.text());
+  applyAnimalKeypoints(Array.isArray(data) ? data[0] : data);
+});
 function applyAnimalKeypoints(frame) {
+  if (frame?.version !== 'ap10k') throw new Error('Choose an AP-10K JSON file from AnimalPose Estimator.');
   const actor = activeActor(doc);
   if (!studio.animal || actor.source.shape === 'owl')
     throw new Error('Select an unlocked Canine, Feline, or Bunny mannequin before importing AP-10K.');
@@ -958,6 +987,7 @@ $('#animal-shape').onchange = event => {
     previewVisible = false;
     setMode('edit');
     $('#joint-panel').open = true;
+    $('#body-panel').open = true;
     changed();
   });
 };
@@ -1344,6 +1374,7 @@ function readPendingKeypoints() {
   run(async () => {
     if (message.error) { toast(message.error); return; }
     const result = message.posePeople;
+    if (result?.animalFrame) { applyAnimalKeypoints(result.animalFrame); return; }
     if (!result || doc.openpose?.origin === 'keypoints' && !doc.openpose.useRig && doc.openpose.inputSignature === result.signature && doc.openpose.inputPlanSignature === result.planSignature && doc.openpose.sourceName === result.asset?.name) return;
     await applyOpenPoseAsset(result.asset, result.people?.[0]?.points, result.people?.[0]?.fullBody);
     doc.openpose.people = result.people; doc.openpose.origin = 'keypoints'; doc.openpose.inputSignature = result.signature; doc.openpose.inputPlanSignature = result.planSignature; changed();
@@ -1363,6 +1394,7 @@ if (embedded) {
       started = true; await start(event.data.snapshot, event.data.reference, event.data.structure, event.data.unwiredAnyAngle, event.data.initialSettings);
       pendingActors = { actorReferences: event.data.actorReferences, error: event.data.inputError }; readPendingActors();
       $('#read-pose-keypoints').hidden = !event.data.keypointsConnected;
+      $('#read-animal-keypoints').hidden = !event.data.keypointsConnected;
     } else if (event.data.type === 'anyangle-actors' && ready) {
       pendingActors = event.data; readPendingActors();
     } else if (event.data.type === 'anyangle-keypoints' && ready) {

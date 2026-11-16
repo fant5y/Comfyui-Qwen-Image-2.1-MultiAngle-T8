@@ -38,7 +38,7 @@ export function installActorsUI(options) {
     <label class="option-toggle"><input id="color-actors" type="checkbox"><span>Use Character Colors in Coarse Render<small>Distinguishes characters. Pose guides keep standard joint colors.</small></span></label>`;
   const identityFile = document.createElement('input'); identityFile.type = 'file'; identityFile.accept = 'image/*'; identityFile.hidden = true; identityFile.id = 'actor-identity-file'; document.body.append(identityFile);
   const readReferences = button('Read Connected Character Photos', () => context.send('anyangle-read-actors')); readReferences.id = 'read-actor-references'; readReferences.className = 'wide-button'; $('actors-panel').append(readReferences);
-  const readKeypoints = button('Read Connected Pose Keypoints · SDPose', () => context.send('anyangle-read-keypoints')); readKeypoints.id = 'read-pose-keypoints'; readKeypoints.className = 'wide-button'; readKeypoints.hidden = true; $('openpose-panel').prepend(readKeypoints);
+  const readKeypoints = button('Read Connected Pose Keypoints', () => context.send('anyangle-read-keypoints')); readKeypoints.id = 'read-pose-keypoints'; readKeypoints.className = 'wide-button'; readKeypoints.hidden = true; $('openpose-panel').prepend(readKeypoints);
   $('add-actor').onclick = () => atomic(async () => {
     const doc = context.doc(), wasEmpty = doc.source.kind === 'empty' && !doc.actors?.length;
     context.studio().syncPose(); ensureActors(doc); const actor = createActor(doc.actors.length);

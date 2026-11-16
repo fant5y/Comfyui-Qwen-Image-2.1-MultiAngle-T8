@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.mjs';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116cast';
+import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116rig';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 import { PoseViewerCore } from '../vendor/vnccs_pose_studio_core.mjs?v=20261031resize';
 import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs';
@@ -323,6 +323,7 @@ export class StudioScene {
         for (const actor of doc.actors.filter(item => item.source.kind === 'animal')) {
           const rig = new AnimalMannequin(actor.source.shape);
           rig.restore(actor.animalPose);
+          rig.setBuild(actor.animalBuild);
           this.animalActors.set(actor.id, rig);
           this.attachActor(actor, rig.root);
           this.viewer.scene.add(rig.handles);

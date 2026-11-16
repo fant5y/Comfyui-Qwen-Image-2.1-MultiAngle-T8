@@ -34,10 +34,17 @@ export function poseForActor(current, incoming, { part = 'full', preserveHands =
   return next;
 }
 
+export function catalogPoseTargets(scene, entry, scope) {
+  const shape = entry?.pose?.shape;
+  return editableActors(scene, scope).filter(actor => shape
+    ? actor.source?.kind === 'animal' && actor.source.shape === shape
+    : actor.source?.kind !== 'animal');
+}
+
 export function applyCatalogPose(scene, entry, options = {}) {
   if (scene.source?.kind !== 'human') throw new Error('Switch to a posable mannequin before applying a library pose.');
-  const result = clone(scene), roles = editableActors(result, options.scope || 'current');
-  if (!roles.length) throw new Error('Select visible, unlocked characters first.');
+  const result = clone(scene), roles = catalogPoseTargets(result, entry, options.scope || 'current');
+  if (!roles.length) throw new Error('Select a visible, unlocked mannequin that matches this pose.');
   const ids = new Set(roles.map(role => role.id));
   if (entry.kind === 'composition' && roles.length !== entry.slots.length) throw new Error(`Select exactly ${entry.slots.length} editable characters for this arrangement.`);
   const contacts = (result.contacts || []).filter(contact => contact.actors?.some(id => ids.has(id)));
@@ -45,24 +52,28 @@ export function applyCatalogPose(scene, entry, options = {}) {
   const origin = clone(roles[0].transform);
   for (const [index,role] of roles.entries()) {
     const slot = entry.kind === 'composition' ? entry.slots[index] : null;
-    role.pose = poseForActor(role.pose, slot?.pose || entry.pose, options);
+    if (entry.pose?.shape) role.animalPose = clone(entry.pose.rotations);
+    else role.pose = poseForActor(role.pose, slot?.pose || entry.pose, options);
     if (slot) for (const key of ['x','y','z','yaw']) role.transform[key] = origin[key] + slot.transform[key];
     role.poseSource = role.poseSource ? { ...role.poseSource, useRig: true } : null;
     delete role.poseRandom;
   }
   result.contacts = (result.contacts || []).filter(contact => !contact.actors?.some(id => ids.has(id)));
-  if (result.openpose) result.openpose.useRig = true;
-  if (result.conditioning.guide === 'pose') Object.assign(result.conditioning, { map: null, mapKind: null, mapOrigin: 'rig' });
+  if (result.openpose && !entry.pose?.shape) result.openpose.useRig = true;
+  if (result.conditioning.guide === 'pose') {
+    if (entry.pose?.shape) result.conditioning.guide = 'coarse';
+    else Object.assign(result.conditioning, { map: null, mapKind: null, mapOrigin: 'rig' });
+  }
   if (result.conditioning.guide === 'depth' || result.conditioning.guide === 'canny') {
     Object.assign(result.conditioning, { map: null, mapKind: null, mapOrigin: result.conditioning.guide === 'depth' ? 'scene' : 'auto' });
   }
   bindActor(result, result.activeActorId);
   const align = (entry.align || []).map(pair => ({ actors: pair.slots.map(i=>roles[i].id), hands: pair.hands }));
-  return { scene: result, actorIds: [...ids], align };
+  return { scene: result, actorIds: [...ids], align, animal: !!entry.pose?.shape };
 }
 
 export async function finishCatalogPose(studio, result, options = {}) {
-  studio.useRigPose();
+  if (!result.animal) studio.useRigPose();
   if(options.ground && Number.isFinite(options.floorY))studio.grid.position.y=options.floorY;
   if(options.ground)studio.groundActors(result.actorIds);
   for(const pair of result.align){
@@ -93,7 +104,7 @@ export function poseCameraPlan(scene, settings, entries, options, cameraPlan) {
     for (const entry of list) {
       const result = applyCatalogPose(scene, entry, entry.kind==='composition' ? {...options,part:'full',preserveHands:false} : options);
       for (const view of cameraPlan(result.scene, settings).views()) yield { ...view, label: `${entry.name} · ${view.label}`, poseId: entry.id, poseName: entry.name,
-        preparation: {actorIds:result.actorIds,align:result.align,options:clone(options)} };
+        preparation: {actorIds:result.actorIds,align:result.align,animal:result.animal,options:clone(options)} };
     }
   } };
 }

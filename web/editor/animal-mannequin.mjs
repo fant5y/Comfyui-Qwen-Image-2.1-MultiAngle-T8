@@ -14,6 +14,7 @@ export class AnimalMannequin {
     this.root = new THREE.Group();
     this.handles = new THREE.Group();
     this.joints = new Map();
+    this.bodyVolumes = [];
     this.targets = new Map();
     this.markers = new Map();
     this.sphere = new THREE.SphereGeometry(1, 20, 14);
@@ -21,6 +22,16 @@ export class AnimalMannequin {
     this.jointMaterial = new THREE.MeshBasicMaterial({ color: '#a1ddea', depthTest: false });
     this.targetMaterial = new THREE.MeshBasicMaterial({ color: '#ffb64c', depthTest: false });
     this.selectedMaterial = new THREE.MeshBasicMaterial({ color: '#ffffff', depthTest: false });
+    if (shape === 'feline') {
+      const profile = new THREE.Shape();
+      profile.moveTo(-0.38, -0.33);
+      profile.quadraticCurveTo(-0.28, 0.23, -0.02, 0.62);
+      profile.quadraticCurveTo(0.09, 0.78, 0.18, 0.57);
+      profile.quadraticCurveTo(0.34, 0.25, 0.43, -0.33);
+      profile.closePath();
+      this.catEarGeometry = new THREE.ExtrudeGeometry(profile, { depth: 0.12, bevelSize: 0.075, bevelThickness: 0.07, bevelSegments: 3 });
+      this.catEarGeometry.translate(0, 0, -0.06);
+    }
     if (shape === 'owl') this.owl();
     else if (shape === 'bunny') this.bunny();
     else this.quadruped(shape === 'feline');
@@ -33,6 +44,7 @@ export class AnimalMannequin {
 
   joint(name, parent, offset) {
     const joint = new THREE.Group();
+    joint.name = name;
     joint.position.fromArray(offset);
     parent.add(joint);
     this.joints.set(name, joint);
@@ -44,6 +56,7 @@ export class AnimalMannequin {
     mesh.position.fromArray(offset);
     mesh.scale.fromArray(radii);
     parent.add(mesh);
+    if (['Torso', 'Chest', 'Pelvis'].includes(parent.name)) this.bodyVolumes.push({ mesh, scale: mesh.scale.clone() });
     return mesh;
   }
 
@@ -72,27 +85,35 @@ export class AnimalMannequin {
 
   quadruped(feline) {
     const body = this.joint('Torso', this.root, [0, 0, 0]);
-    this.volume(body, [0, 0, 0], feline ? [1.53, 1.62, 3.65] : [1.78, 1.97, 3.46]);
-    this.volume(body, [0, 0.1, 2.02], feline ? [1.34, 1.65, 1.55] : [1.72, 2.03, 1.66]);
-    const neck = this.joint('Neck', body, [0, 0.62, 2.55]);
-    const neckEnd = feline ? [0, 1.25, 1.46] : [0, 1.8, 1.28];
+    const chest = this.joint('Chest', body, [0, 0, 1.37]);
+    const pelvis = this.joint('Pelvis', body, [0, 0, -1.39]);
+    this.volume(body, [0, 0, 0], feline ? [1.04, 1.22, 2.25] : [1.3, 1.58, 2.34]);
+    this.volume(chest, [0, 0.04, 0.16], feline ? [1.16, 1.44, 1.82] : [1.58, 1.91, 1.89]);
+    this.volume(pelvis, [0, 0.04, -0.55], feline ? [1.19, 1.34, 1.83] : [1.41, 1.60, 1.83]);
+    const neck = this.joint('Neck', chest, [0, 0.62, 1.18]);
+    const neckEnd = feline ? [0, 0.77, 1.22] : [0, 1.8, 1.28];
     this.segment(neck, neckEnd, feline ? 0.9 : 1.18);
     const head = this.joint('Head', neck, neckEnd);
-    this.volume(head, [0, 0.15, 0.32], feline ? [1.13, 1.02, 1.0] : [1.26, 1.15, 1.25]);
-    this.volume(head, [0, -0.27, feline ? 1.03 : 1.58], [0.69, 0.55, feline ? 0.55 : 1.08], 1);
-    this.volume(head, [0, -0.18, feline ? 1.52 : 2.48], [0.33, 0.24, 0.24], 2);
+    this.volume(head, [0, 0.15, 0.32], feline ? [1.05, 0.91, 0.9] : [1.26, 1.15, 1.25]);
+    this.volume(head, [0, -0.27, feline ? 0.91 : 1.58], [feline ? 0.51 : 0.69, feline ? 0.28 : 0.55, feline ? 0.27 : 1.08], 1);
+    this.volume(head, [0, -0.18, feline ? 1.14 : 2.48], feline ? [0.2, 0.12, 0.12] : [0.33, 0.24, 0.24], 2);
     for (const [side, sign] of [['Left', 1], ['Right', -1]]) {
       const ear = this.joint(side + ' ear', head, [sign * 0.75, 0.66, 0.19]);
-      this.volume(ear, [sign * 0.19, 0.55, 0], [0.37, feline ? 0.66 : 0.86, 0.24]);
+      if (feline) {
+        const earMesh = new THREE.Mesh(this.catEarGeometry, this.colors[0]);
+        earMesh.position.set(sign * 0.07, 0.41, 0);
+        earMesh.rotation.z = -sign * 0.19;
+        ear.add(earMesh);
+      } else this.volume(ear, [sign * 0.19, 0.55, 0], [0.37, 0.86, 0.24]);
       this.volume(head, [sign * 0.72, 0.22, feline ? 1.04 : 1.21], [0.17, 0.17, 0.17], 2);
-      this.limb(side + ' foreleg', body, [sign * 1.03, -0.53, 2.23],
-        [[0, -2.15, -0.44], [0, -2.07, 0.48], [0, -0.53, 0.16]], [0.64, 0.42, 0.35],
+      this.limb(side + ' foreleg', chest, [sign * 0.91, -0.53, 0.86],
+        [[0, -2.15, -0.44], [0, -2.07, 0.48], [0, -0.53, 0.16]], feline ? [0.48, 0.30, 0.24] : [0.64, 0.42, 0.35],
         { offset: [0, 0, 0.26], radii: [0.48, 0.33, 0.72] });
-      this.limb(side + ' hind leg', body, [sign * 1.06, -0.24, -2.4],
-        [[0, -1.88, 0.84], [0, -1.76, -1.03], [0, -1.05, 0.41]], [0.91, 0.58, 0.31],
+      this.limb(side + ' hind leg', pelvis, [sign * 0.97, -0.24, -1.01],
+        [[0, -1.88, 0.84], [0, -1.76, -1.03], [0, -1.05, 0.41]], feline ? [0.72, 0.43, 0.23] : [0.91, 0.58, 0.31],
         { offset: [0, 0, 0.29], radii: [0.48, 0.33, 0.71] });
     }
-    let tail = this.joint('Tail base', body, [0, 0.58, -3.05]);
+    let tail = this.joint('Tail base', pelvis, [0, 0.58, -1.66]);
     const offsets = feline ? [[0, 0.5, -1.51], [0, 1.11, -1.39], [0, 0.95, -0.78]]
       : [[0, -0.31, -1.56], [0, -0.45, -1.65], [0, 0.11, -1.25]];
     for (const [index, offset] of offsets.entries()) {
@@ -103,13 +124,16 @@ export class AnimalMannequin {
 
   bunny() {
     const body = this.joint('Torso', this.root, [0, 0, 0]);
-    this.volume(body, [0, 0, -0.65], [2.05, 2.12, 2.85]);
-    this.volume(body, [0, 0.29, 1.23], [1.57, 1.92, 1.83]);
-    const head = this.joint('Head', body, [0, 1.55, 2.42]);
+    const chest = this.joint('Chest', body, [0, 0, 0.92]);
+    const pelvis = this.joint('Pelvis', body, [0, 0, -0.72]);
+    this.volume(body, [0, 0.1, 0], [1.6, 1.82, 1.94]);
+    this.volume(pelvis, [0, 0, 0.07], [2.05, 2.12, 2.48]);
+    this.volume(chest, [0, 0.29, 0.31], [1.57, 1.92, 1.83]);
+    const head = this.joint('Head', chest, [0, 1.55, 1.5]);
     this.volume(head, [0, 0.38, 0.35], [1.42, 1.4, 1.35]);
     this.volume(head, [0, -0.21, 1.19], [0.82, 0.63, 0.8], 1);
     this.volume(head, [0, -0.05, 1.89], [0.26, 0.19, 0.2], 2);
-    const tail = this.joint('Tail', body, [0, 0.27, -2.95]);
+    const tail = this.joint('Tail', pelvis, [0, 0.27, -2.23]);
     this.volume(tail, [0, 0.22, -0.39], [0.72, 0.72, 0.8], 1);
     for (const [side, sign] of [['Left', 1], ['Right', -1]]) {
       const ear = this.joint(side + ' ear', head, [sign * 0.65, 1.19, 0.04]);
@@ -117,10 +141,10 @@ export class AnimalMannequin {
       this.segment(ear, tip.position.toArray(), 0.47, 0, 0.27);
       this.segment(tip, [sign * 0.19, 1.61, -0.29], 0.42, 1, 0.22);
       this.volume(head, [sign * 1.08, 0.55, 0.83], [0.2, 0.22, 0.19], 2);
-      this.limb(side + ' foreleg', body, [sign * 0.83, -0.52, 1.88],
+      this.limb(side + ' foreleg', chest, [sign * 0.83, -0.52, 0.96],
         [[0, -1.26, -0.22], [0, -1.1, 0.48]], [0.49, 0.39],
         { offset: [0, 0, 0.23], radii: [0.4, 0.29, 0.62] });
-      this.limb(side + ' hind leg', body, [sign * 1.39, -0.41, -0.91],
+      this.limb(side + ' hind leg', pelvis, [sign * 1.39, -0.41, -0.19],
         [[sign * 0.14, -1.34, 0.84], [0, -1.04, -0.54]], [1.03, 0.56],
         { offset: [0, 0, 0.52], radii: [0.55, 0.32, 1.11] });
     }
@@ -128,22 +152,26 @@ export class AnimalMannequin {
 
   owl() {
     const body = this.joint('Torso', this.root, [0, 0, 0]);
-    this.volume(body, [0, 0, 0], [2.25, 3.03, 1.87]);
-    this.volume(body, [0, -0.42, 1.36], [1.57, 2.18, 0.81], 1);
-    const head = this.joint('Head', body, [0, 2.33, 0.18]);
+    const chest = this.joint('Chest', body, [0, 0.89, 0]);
+    const pelvis = this.joint('Pelvis', body, [0, -1.07, 0]);
+    this.volume(body, [0, -0.16, 0], [2.03, 2.15, 1.84]);
+    this.volume(chest, [0, 0.06, 0.1], [2.19, 1.99, 1.87]);
+    this.volume(pelvis, [0, -0.17, 0.16], [1.75, 1.67, 1.58]);
+    this.volume(chest, [0, -0.74, 1.12], [1.57, 1.95, 0.83], 1);
+    const head = this.joint('Head', chest, [0, 1.44, 0.18]);
     this.volume(head, [0, 0.69, 0], [2.2, 1.84, 1.69]);
     const beak = this.volume(head, [0, 0.15, 1.72], [0.41, 0.61, 0.51], 2);
     beak.rotation.x = -0.42;
-    const tail = this.joint('Tail', body, [0, -1.96, -1.15]);
+    const tail = this.joint('Tail', pelvis, [0, -0.89, -1.15]);
     this.segment(tail, [0, -1.5, -1.35], 0.92, 0, 0.38);
     for (const [side, sign] of [['Left', 1], ['Right', -1]]) {
       this.volume(head, [sign * 0.88, 0.68, 1.24], [0.98, 1.02, 0.55], 1);
       this.volume(head, [sign * 0.86, 0.72, 1.77], [0.36, 0.42, 0.19], 2);
-      this.limb(side + ' wing', body, [sign * 1.77, 1.25, 0],
+      this.limb(side + ' wing', chest, [sign * 1.77, 0.36, 0],
         [[sign * 1.77, -0.58, -0.42], [sign * 2.05, -0.63, -0.72], [sign * 1.51, -0.41, -0.68]],
         [0.92, 0.81, 0.57],
         { offset: [sign * 0.31, -0.13, -0.23], radii: [0.72, 0.29, 0.44], color: 0 });
-      this.limb(side + ' leg', body, [sign * 0.83, -2.25, 0.08],
+      this.limb(side + ' leg', pelvis, [sign * 0.83, -1.18, 0.08],
         [[0, -0.85, -0.15], [0, -0.69, 0.35]], [0.4, 0.27],
         { offset: [0, 0, 0.25], radii: [0.38, 0.22, 0.63] }, [0, 2]);
     }
@@ -156,6 +184,10 @@ export class AnimalMannequin {
     mesh.userData = { name, target };
     this.handles.add(mesh);
     this.markers.set(mesh, target ? this.targets.get(name).tip : this.joints.get(name));
+  }
+
+  setBuild(build = 1) {
+    for (const { mesh, scale } of this.bodyVolumes) mesh.scale.set(scale.x * build, scale.y * build, scale.z);
   }
 
   update(selected = '', color) {
@@ -240,6 +272,7 @@ export class AnimalMannequin {
     this.root.removeFromParent();
     this.handles.removeFromParent();
     this.sphere.dispose();
+    this.catEarGeometry?.dispose();
     for (const material of [...this.colors, this.jointMaterial, this.targetMaterial, this.selectedMaterial]) material.dispose();
   }
 }

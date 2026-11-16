@@ -246,6 +246,21 @@ def _people_in_regions(image, pixels, regions, estimator):
     return people, buffer.getvalue()
 
 
+def animal_keypoint_frame(frames):
+    """Return a validated first AP-10K frame or None for another pose format."""
+    frame = frames[0] if isinstance(frames, list) and frames else frames
+    if not isinstance(frame, dict) or frame.get("version") != "ap10k":
+        return None
+    animals = frame.get("animals")
+    if not isinstance(animals, list) or not 1 <= len(animals) <= 128:
+        raise ValueError("AP-10K must contain at least one detected animal")
+    for points in animals:
+        if (not isinstance(points, list) or len(points) != 51
+                or any(type(value) not in (int, float) or not -1e7 <= value <= 1e7 for value in points)):
+            raise ValueError("AP-10K requires 17 finite x, y, confidence triplets per animal")
+    return {"version": "ap10k", "animals": animals}
+
+
 def keypoints_signature(frames):
     frame = frames[0] if isinstance(frames, list) and frames else frames
     encoded = json.dumps(frame, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()

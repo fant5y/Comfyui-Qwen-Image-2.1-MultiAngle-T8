@@ -1,6 +1,6 @@
-import { StudioScene, defaultScene } from './scene.mjs?v=20261116en';
+import { StudioScene, defaultScene } from './scene.mjs?v=20261116rig';
 import { activeActor, createActor, bindActor, editableActors } from './actors.mjs?v=20261116en';
-import { applyCatalogTransaction, filterCatalog, finishCatalogPose } from './pose-catalog.mjs?v=20261116en';
+import { applyCatalogTransaction, catalogPoseTargets, filterCatalog, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
 import { installPoseGallery, galleryImage } from './pose-gallery-ui.mjs?v=20261116en';
 
 const clone = value => structuredClone(value);
@@ -44,7 +44,16 @@ export function installPoseLibrary(context) {
   const files = document.createElement('input'); files.type = 'file'; files.multiple = true; files.accept = '.json,.zip,.webp,.png,.jpg,.jpeg'; files.hidden = true;
   const directory = document.createElement('input'); directory.type = 'file'; directory.multiple = true; directory.webkitdirectory = true; directory.hidden = true;
   document.body.append(files, directory);
-  const open = control('Open Pose Library', () => execute(async () => { await reload(); render(); if(!dialog.open)dialog.showModal(); if(entry())await showPreview(); }), 'wide-button accent-button');
+  const open = control('Open Pose Library', () => execute(async () => {
+    await reload();
+    const actor = activeActor(context.doc());
+    if (actor?.source.kind === 'animal') {
+      const { shape } = actor.source;
+      $('pl-category').value = 'Animal · ' + shape[0].toUpperCase() + shape.slice(1);
+      if (entry()?.pose?.shape !== shape) selected = null;
+      page = 0;
+    } else if ($('pl-category').value.startsWith('Animal · ')) $('pl-category').value = '';
+    render(); if(!dialog.open)dialog.showModal(); if(entry())await showPreview(); }), 'wide-button accent-button');
   open.id = 'open-pose-library'; document.querySelector('.reference-tabs').after(open);
   const message = text => { if(!disposed)$('pl-status').textContent = text; };
   const execute = task => Promise.resolve().then(task).catch(error => { if(!disposed){message(error.message); context.toast(error.message);} });
@@ -80,12 +89,13 @@ export function installPoseLibrary(context) {
     return [...bones,...gallery.matches()];
   }
   function targets() {
-    const roles = editableActors(context.doc(), $('pl-scope').value);
+    const roles = catalogPoseTargets(context.doc(), entry(), $('pl-scope').value);
     $('pl-target').textContent = context.doc().source.kind === 'human' ? `Will apply to: ${roles.map(role => role.label).join(', ') || 'No editable characters'}` : 'Switch to a posable mannequin to apply library poses.';
     const ids = new Set(roles.map(role=>role.id)), contacts = (context.doc().contacts || []).filter(contact => contact.actors?.some(id=>ids.has(id)));
     $('pl-contact-row').hidden = !contacts.length; $('pl-contact-text').textContent = `Allow removing ${contacts.length} contact anchors involving these characters`;
     const composition=entry()?.kind==='composition';
-    $('pl-part').disabled=composition;$('pl-preserve-hands').disabled=composition;
+    const animal = !!entry()?.pose?.shape;
+    $('pl-part').disabled=composition||animal;$('pl-preserve-hands').disabled=composition||animal;
     $('pl-apply').textContent=composition ? `Apply Arrangement for ${entry().slots.length} Characters (Moves Characters)` : 'Apply to Characters';
     if(composition)$('pl-target').textContent+=` · Requires ${entry().slots.length} characters, matched in displayed order`;
     $('pl-apply').disabled = writing || !entry() || !roles.length || context.doc().source.kind !== 'human' || contacts.length > 0 && !$('pl-release').checked || composition && roles.length!==entry().slots.length;
@@ -103,7 +113,7 @@ export function installPoseLibrary(context) {
     for (const item of items.slice(page*24,(page+1)*24)) {
       const card = control('', () => { selected = item.id; render(); execute(showPreview); if (matchMedia('(max-width:700px)').matches) dialog.querySelector('.pl-detail:not([hidden])').scrollIntoView({block:'start',behavior:'smooth'}); }, 'pl-card' + (selected === item.id ? ' selected' : ''));
       if(item.kind==='reference-set'){const img=document.createElement('img'),view=item.views.find(view=>view.id===item.matchedViewIds?.[0])||item.views[0];img.src=galleryImage(view.thumbnail.name);img.loading='lazy';img.alt=`${item.name} · ${view.label}`;card.append(img);}
-      else if (item.preview || item.builtin) { const img = document.createElement('img'); img.src = item.preview ? `${API}/previews/${encodeURIComponent(item.preview)}` : new URL(`./pose-previews/${encodeURIComponent(item.id)}.png`,import.meta.url).href; img.loading = 'lazy'; img.alt = item.name; card.append(img); }
+      else if (item.preview || (item.builtin && !item.pose?.shape)) { const img = document.createElement('img'); img.src = item.preview ? `${API}/previews/${encodeURIComponent(item.preview)}` : new URL(`./pose-previews/${encodeURIComponent(item.id)}.png`,import.meta.url).href; img.loading = 'lazy'; img.alt = item.name; card.append(img); }
       else { const graphic = document.createElement('span'); graphic.className='pl-placeholder'; graphic.textContent = item.category === '舞蹈' ? '✧' : ['Movement', '运动'].includes(item.category) ? '↗' : '◯'; card.append(graphic); }
       const name = document.createElement('strong'); name.textContent = item.name;
       const meta = document.createElement('small'); meta.textContent = `${item.favorite ? '★ ' : ''}${item.kind==='reference-set'?`${item.people} people · ${item.views.length} views`:item.kind==='composition' ? `${item.slots.length}-character arrangement` : item.category} · ${item.builtin ? 'Built-in' : 'Imported'}${batchIds.has(item.id) ? ' · Added to batch' : ''}`;
@@ -137,7 +147,13 @@ export function installPoseLibrary(context) {
       const doc=defaultScene(), target=activeActor(context.doc());
       doc.source={kind:'human'};doc.width=doc.height=384;doc.interaction.quality='economy';
       doc.actors=(item.kind==='composition' ? item.slots : [{pose:item.pose}]).map((slot,i)=>createActor(i,{id:`library-preview-${i}`,mesh:clone(target?.mesh || doc.mesh),pose:clone(slot.pose),transform:{x:0,y:0,z:0,yaw:0,scale:1,...slot.transform}}));doc.activeActorId='library-preview-0';doc.selectedActorIds=doc.actors.map(role=>role.id);bindActor(doc);
-      doc.camera={...doc.camera,azimuth:25,elevation:5,zoom:1};
+      if (item.pose?.shape) {
+        const shape = item.pose.shape;
+        doc.actors[0].source = { kind: 'animal', shape };
+        doc.actors[0].animalPose = clone(item.pose.rotations);
+        doc.actors[0].animalBuild = target?.source.shape === shape ? target.animalBuild || 1 : 1;
+      }
+      doc.camera={...doc.camera,azimuth:item.pose?.shape ? 60 : 25,elevation:5,zoom:1};
       if (!preview) { preview=new StudioScene($('pl-preview'),{begin:()=>{},change:()=>{},camera:()=>{},select:()=>{},error:error=>message(error.message)});await preview.init(doc); }
       else await preview.restore(doc);
       if(item.kind==='composition')await finishCatalogPose(preview,{actorIds:doc.actors.map(role=>role.id),align:(item.align||[]).map(pair=>({actors:pair.slots.map(i=>doc.actors[i].id),hands:pair.hands}))});
@@ -204,13 +220,16 @@ export function installPoseLibrary(context) {
   async function saveCurrent() {
     if(context.doc().source.kind!=='human')throw new Error('Select a posable mannequin first.');
     const name=await context.askName('Save to Shared Pose Library','My Pose');if(!name)return;
-    const pose=portablePose();
-    accept(await api('/import',{revision:catalog.revision,entries:[{name,originalName:name,pose,source:{id:'local',name:'User-Saved Pose',license:'User-provided'}}]}));
+    const actor=activeActor(context.doc()), rig=context.studio().animal;
+    const pose=rig ? {shape:actor.source.shape,rotations:rig.pose()} : portablePose();
+    const rigProfile=rig ? 'anyangle-animal-radians' : 'makehuman-v2-degrees';
+    accept(await api('/import',{revision:catalog.revision,entries:[{name,originalName:name,pose,rigProfile,source:{id:'local',name:'User-Saved Pose',license:'User-provided'}}]}));
     selected=catalog.items.find(item=>item.name===name && !item.builtin)?.id;await reload();$('pl-source').value='local';$('pl-search').value=name;render();context.toast('Pose saved to the local shared ComfyUI library.');
   }
   async function saveComposition(){
     context.studio().syncPose();const roles=editableActors(context.doc(),$('pl-scope').value);
     if(roles.length<2)throw new Error('Select at least two editable characters under Apply To.');
+    if(roles.some(role=>role.source.kind==='animal'))throw new Error('Save mixed casts through Scene Templates. Pose Library group arrangements use human rigs.');
     const name=await context.askName('Save Group Arrangement','My Group Arrangement');if(!name)return;
     const origin=roles[0].transform, ids=roles.map(role=>role.id);
     const slots=roles.map(role=>({label:role.label,pose:portablePose(role.id),transform:Object.fromEntries(['x','y','z','yaw'].map(key=>[key,role.transform[key]-origin[key]]))}));

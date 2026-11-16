@@ -141,6 +141,25 @@ TRANSLATIONS = {"Standing": "自然站立", "Boxing Stance": "拳击准备", "Fi
 
 
 def normalized_entry(data, name, source=None, names=None):
+    if isinstance(data, dict) and data.get("kind") == "anyangle-animal-pose" and data.get("version") == 1:
+        shape, rotations = data.get("shape"), data.get("rotations")
+        if shape not in ("canine", "feline", "bunny", "owl"):
+            raise ValueError("Choose a supported animal mannequin")
+        if not isinstance(rotations, dict) or len(rotations) > 64 or any(
+            not isinstance(key, str) or len(key) > 80 or key in ("__proto__", "constructor", "prototype")
+            or not isinstance(rotation, list) or len(rotation) != 3
+            or any(type(angle) not in (int, float) or not -math.pi <= angle <= math.pi for angle in rotation)
+            for key, rotation in rotations.items()
+        ):
+            raise ValueError("Invalid animal joint rotations")
+        if source is not None and not isinstance(source, dict):
+            raise ValueError("Invalid pose metadata")
+        source = {"id": "local", "name": "Local Import", "license": "User-provided", **(source or {})}
+        name = str(name).strip()[:160] or "Animal Pose"
+        pose = {"shape": shape, "rotations": rotations}
+        return {"kind": "pose", "name": name, "originalName": name, "category": "Animal · " + shape.title(),
+                "tags": [shape], "pose": pose, "source": source,
+                "rigProfile": "anyangle-animal-radians", "warnings": [], "favorite": False, "poseHash": digest(pose)}
     if isinstance(data, dict) and data.get("kind") == "anyangle-composition" and data.get("version") == 1:
         slots = data.get("slots")
         if not isinstance(slots, list) or not 2 <= len(slots) <= 128:
@@ -286,6 +305,17 @@ def builtin_entries():
         entry["name"] = english_names.get(entry["originalName"], entry["name"])
         entry["category"] = english_categories.get(entry["category"], entry["category"])
         entry["builtinPreview"] = entry["id"] + ".png"
+    animals = {
+        "canine": ("Canine · Alert", {"Head": [-0.21, 0, 0], "Tail base": [0.5, 0, 0]}),
+        "feline": ("Feline · Paw Lift", {"Left foreleg root": [-0.32, 0, 0], "Left foreleg joint 1": [0.72, 0, 0], "Chest": [-0.07, 0, 0]}),
+        "bunny": ("Bunny · Listening", {"Head": [-0.2, 0, 0], "Left ear": [0, 0, -0.22], "Right ear": [0, 0, 0.22]}),
+        "owl": ("Owl · Wings Raised", {"Left wing root": [0, 0, 0.48], "Right wing root": [0, 0, -0.48]}),
+    }
+    for shape, (action, rotations) in animals.items():
+        for key, name, pose in (("rest", shape.title() + " · Neutral", {}), ("action", action, rotations)):
+            entry = normalized_entry({"version": 1, "kind": "anyangle-animal-pose", "shape": shape, "rotations": pose},
+                                     name, {"id": "builtin", "name": "AnyAngle Built-in", "license": "Project original"})
+            entries.append({**entry, "id": f"builtin-{shape}-{key}", "builtin": True})
     return entries
 
 
@@ -351,6 +381,8 @@ class PoseLibraryStore:
                 raise ValueError("无效的姿势条目")
             data = ({"kind": "anyangle-composition", "version": 1, "slots": row.get("slots"), "align": row.get("align", [])}
                     if row.get("kind") == "composition" else {"kind": "anyangle-pose", "version": 1, "pose": row.get("pose")})
+            if row.get("rigProfile") == "anyangle-animal-radians" and isinstance(row.get("pose"), dict):
+                data = {**row["pose"], "kind": "anyangle-animal-pose", "version": 1}
             entry = normalized_entry(data, row.get("originalName") or row.get("name", ""), row.get("source"))
             for key in ("name", "category"):
                 if key in row:
@@ -449,6 +481,8 @@ class PoseLibraryStore:
                 file = row["id"] + ".json"
                 payload = ({"version": 1, "kind": "anyangle-composition", "slots": row["slots"], "align": row.get("align", [])}
                            if row.get("kind") == "composition" else {"version": 1, "kind": "anyangle-pose", "pose": row["pose"]})
+                if row.get("rigProfile") == "anyangle-animal-radians":
+                    payload = {**row["pose"], "version": 1, "kind": "anyangle-animal-pose"}
                 archive.writestr(file, json.dumps(payload))
                 manifest["items"].append({**{key: row[key] for key in ("name", "originalName", "category", "tags", "favorite", "source")}, "file": file})
                 if row.get("preview"):
