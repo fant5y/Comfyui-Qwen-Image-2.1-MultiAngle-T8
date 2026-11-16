@@ -59,6 +59,37 @@ function modelData(morph, data) {
   };
 }
 
+function directMaleAnatomy(pack, vertices, tilt, turn) {
+  if (!tilt && !turn) return;
+  const shaft = pack.targets.find(target => target.factorValues.includes('penis-circ-incr'));
+  if (!shaft?.indices.length) return;
+  const point = new THREE.Vector3();
+  let rootIndex = shaft.indices[0], tipIndex = rootIndex;
+  for (const index of shaft.indices) {
+    const y = pack.baseVertices[index * 3 + 1];
+    if (y > pack.baseVertices[rootIndex * 3 + 1]) rootIndex = index;
+    if (y < pack.baseVertices[tipIndex * 3 + 1]) tipIndex = index;
+  }
+  const pivot = new THREE.Vector3().fromArray(vertices, rootIndex * 3);
+  pivot.x = 0;
+  const root = new THREE.Vector3().fromArray(pack.baseVertices, rootIndex * 3);
+  const axis = new THREE.Vector3().fromArray(pack.baseVertices, tipIndex * 3).sub(root);
+  root.x = axis.x = 0;
+  const axisLength = axis.lengthSq();
+  if (axisLength < 1e-8) return;
+  const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(-radians(tilt), radians(turn), 0, 'YXZ'));
+  const rotated = new THREE.Vector3();
+  for (const index of shaft.indices) {
+    const offset = index * 3;
+    // Fade the rotation near the attachment so the base stays on the pelvis.
+    const distance = point.fromArray(pack.baseVertices, offset).sub(root).dot(axis) / axisLength;
+    const weight = THREE.MathUtils.smoothstep(distance, 0.08, 0.65);
+    point.fromArray(vertices, offset);
+    rotated.copy(point).sub(pivot).applyQuaternion(rotation).add(pivot);
+    point.lerp(rotated, weight).toArray(vertices, offset);
+  }
+}
+
 function disposeObject(root) {
   root.traverse(object => {
     object.geometry?.dispose();
@@ -175,6 +206,8 @@ export class StudioScene {
     let cached = this.morphCache.get(key);
     if (!cached) {
       const morph = solveMorph(this.pack, this.doc.mesh);
+      if (morph.includeGenitals) directMaleAnatomy(this.pack, morph.vertices,
+        this.doc.mesh.penis_tilt || 0, this.doc.mesh.penis_turn || 0);
       cached = { morph, bytes: morph.vertices.byteLength + morph.bonePositions.byteLength + 65536 };
       this.morphCacheBytes += cached.bytes;
     } else this.morphCache.delete(key);

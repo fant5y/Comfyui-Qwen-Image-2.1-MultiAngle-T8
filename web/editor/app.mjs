@@ -1,5 +1,5 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116anatomymesh';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116anatomydirection';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116en';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116en';
@@ -9,7 +9,7 @@ import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges }
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116anatomymesh';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116anatomydirection';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
 import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116rig';
@@ -500,6 +500,10 @@ $('#show-genitals').onchange = event => run(async () => {
 for (const [key, label] of [['penis_len', 'Penis Length'], ['penis_circ', 'Penis Girth'], ['penis_test', 'Testicle Size']])
   makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min: 0, max: 1, step: 0.01,
     read: () => doc.mesh[key] ?? (key === 'penis_len' ? doc.mesh.genital_size : undefined) ?? 0.5,
+    write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
+for (const [key, label, range] of [['penis_tilt', 'Penis Tilt', 45], ['penis_turn', 'Penis Left / Right', 30]])
+  makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min: -range, max: range, unit: '°',
+    read: () => doc.mesh[key] ?? 0,
     write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
 makeControl('#animal-body-sliders', { id: 'animal-size', label: 'Size', min: 0.25, max: 4, step: 0.01, unit: '×',
   read: () => activeActor(doc)?.transform.scale ?? 1,
