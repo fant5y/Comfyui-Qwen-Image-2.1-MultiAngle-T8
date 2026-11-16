@@ -78,15 +78,14 @@ function directMaleAnatomy(pack, vertices, tilt, turn) {
   const axisLength = axis.lengthSq();
   if (axisLength < 1e-8) return;
   const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(-radians(tilt), radians(turn), 0, 'YXZ'));
-  const rotated = new THREE.Vector3();
+  const jointRotation = new THREE.Quaternion();
   for (const index of shaft.indices) {
     const offset = index * 3;
     // Fade the rotation near the attachment so the base stays on the pelvis.
     const distance = point.fromArray(pack.baseVertices, offset).sub(root).dot(axis) / axisLength;
-    const weight = THREE.MathUtils.smoothstep(distance, 0.08, 0.65);
-    point.fromArray(vertices, offset);
-    rotated.copy(point).sub(pivot).applyQuaternion(rotation).add(pivot);
-    point.lerp(rotated, weight).toArray(vertices, offset);
+    const weight = THREE.MathUtils.smoothstep(distance, 0.04, 0.28);
+    jointRotation.identity().slerp(rotation, weight);
+    point.fromArray(vertices, offset).sub(pivot).applyQuaternion(jointRotation).add(pivot).toArray(vertices, offset);
   }
 }
 
