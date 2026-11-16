@@ -1,5 +1,5 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116modelplacement';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116modelrotation';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116en';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116sources';
@@ -9,10 +9,10 @@ import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges }
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116bodyrange';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116modelrotation';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116modelplacement';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116modelrotation';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116en';
 
@@ -44,7 +44,7 @@ const controls = new Map();
 const textSize = $('#studio-text-size');
 const textSizeKey = 'anyangle-studio.text-scale';
 const hostTextSize = parseFloat(params.get('hostTextSize'));
-const baseTextSize = embedded && Number.isFinite(hostTextSize) ? Math.max(15, Math.min(24, hostTextSize)) : 15;
+const baseTextSize = embedded && Number.isFinite(hostTextSize) ? Math.max(17, Math.min(24, hostTextSize)) : 17;
 try {
   const savedScale = localStorage.getItem(textSizeKey);
   if (Array.from(textSize.options).some(option => option.value === savedScale)) textSize.value = savedScale;
@@ -291,6 +291,7 @@ function refresh() {
   for (const id of ['camera-heading', 'camera-eyebrow', 'camera-sliders', 'view-presets', 'shot-shelf', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
   $('#stage-help').textContent = previewVisible ? staticGuide ? 'Source composition and structure · Apply to output this guide' : 'Guide from the current camera · Switch to 3D Workspace to adjust the view'
     : studio?.mode === 'position' ? 'Select a character or model · Drag to place · Right-drag to orbit · Middle-drag to pan'
+    : studio?.mode === 'edit' && studio.selectedModel() ? 'Drag the rotation rings · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' && studio.animal ? 'Select a blue joint for rotation rings · Drag gold handles to pose limbs · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan'
       : 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom';
@@ -301,23 +302,25 @@ function refresh() {
   $('#ratio').value = ratio || 'custom';
   $('#guide-size').textContent = `${doc.width} × ${doc.height}`;
   const mannequinScene = doc.source.kind === 'human';
+  const selectedModel = studio?.selectedModel();
   const animal = mannequinScene && activeActor(doc)?.source.kind === 'animal';
   const human = mannequinScene && !animal;
   const splat = doc.source.kind === 'splat', empty = doc.source.kind === 'empty';
   $('#front').disabled = $('#front-number').disabled = mannequinScene || splat || empty;
   $('#scale').disabled = $('#scale-number').disabled = splat || empty || mannequinScene && !!activeActor(doc)?.locked;
   $('#front').closest('.control').hidden = mannequinScene || splat || empty;
-  $('#scale').closest('.control').hidden = splat || empty;
+  $('#scale').closest('.control').hidden = splat || empty || !!selectedModel;
   $('#calibration-hint').textContent = splat
     ? 'The reconstructed subject is aligned with the estimated source camera. Use the camera to adjust the angle, zoom, and composition.'
     : empty ? 'Connect a source image and rebuild the subject, or import a GLB to adjust the scene.'
+      : selectedModel ? 'Use Scene Characters to adjust the selected model.'
       : human ? 'Adjust mannequin scale here. Use Edit Scene to change poses, hand poses, and joints.'
         : animal ? 'Use Edit Scene to rotate joints or drag the gold limb handles.'
         : 'GLB uses Y-up by default. Rotate the asset to align its front. Asset scale and camera zoom adjust independently.';
-  $('#asset-label').textContent = empty ? 'Waiting for source reconstruction' : human ? 'MakeHuman · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Posable Mannequin' : doc.source.label || 'GLB Scene';
-  $('#source-badge').textContent = empty ? 'PHOTO → 3D' : splat ? doc.source.keep_background ? 'TRIPOSPLAT · Background Included' : 'TRIPOSPLAT · Source Subject' : human ? 'HUMAN · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Mannequin' : 'GLB · Scene';
+  $('#asset-label').textContent = empty ? 'Waiting for source reconstruction' : selectedModel ? selectedModel.label : human ? 'MakeHuman · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Posable Mannequin' : doc.source.label || 'GLB Scene';
+  $('#source-badge').textContent = empty ? 'PHOTO → 3D' : splat ? doc.source.keep_background ? 'TRIPOSPLAT · Background Included' : 'TRIPOSPLAT · Source Subject' : selectedModel ? selectedModel.label : human ? 'HUMAN · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Mannequin' : 'GLB · Scene';
   for (const id of ['pose-panel', 'hands-panel', 'body-panel', 'joint-panel']) {
-    const available = human || animal && ['joint-panel', 'body-panel'].includes(id);
+    const available = !selectedModel && (human || animal && ['joint-panel', 'body-panel'].includes(id));
     const panel = document.getElementById(id);
     panel.classList.toggle('disabled-panel', !available);
     panel.inert = !available || mannequinScene && id !== 'pose-panel' && !!activeActor(doc)?.locked;
@@ -675,6 +678,7 @@ function setMode(mode) {
   $('#use-view').hidden = mode !== 'edit';
   $('#stage-help').textContent = mode === 'camera' ? 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom'
     : mode === 'position' ? 'Select a character or model · Drag to place · Right-drag to orbit · Middle-drag to pan'
+    : studio.selectedModel() ? 'Drag the rotation rings · Right-drag to orbit · Middle-drag to pan'
     : studio.animal ? 'Drag Pelvis to lower the hips · Drag knees or elbows to steer the bend · Click a joint for rotation rings'
     : doc.source.kind === 'human' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan · Camera stays in place'
       : 'Right-drag to orbit · Middle-drag to pan · Set this view as the camera';
@@ -1666,7 +1670,8 @@ function readPendingKeypoints() {
 installActorsUI({ doc: () => doc, replace: value => { doc = value; }, studio: () => studio, run, begin, changed, refresh,
   ensureHumanTools, askName, upload, captureGuide, toast, send, downloadURL: download, downloadBlob: download,
   showScene: () => { previewVisible = false; setMode('camera'); },
-  placeScene: () => { previewVisible = false; setMode('position'); } });
+  placeScene: () => { previewVisible = false; setMode('position'); },
+  editScene: () => { previewVisible = false; setMode('edit'); refresh(); } });
 installReferencesUI({ doc: () => doc, sourceConnected: () => linkedReference.connected, run, begin, changed, askName, upload, send, toast,
   clearSource: () => run(clearSourceImage),
   setSource: asset => run(async () => {

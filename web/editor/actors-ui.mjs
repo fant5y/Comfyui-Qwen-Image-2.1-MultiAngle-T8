@@ -1,7 +1,7 @@
 import { createActor, activeActor, ensureActors, bindActor, cloneActor, removeActor, moveActor, editableActors, actorSeed, applySceneTemplate } from './actors.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { installCastTools } from './cast-tools.mjs?v=20261116modelplacement';
+import { installCastTools } from './cast-tools.mjs?v=20261116modelrotation';
 import { poseCopyIssue, ORDER } from './openpose.mjs?v=20261116en';
 import { guideSource } from './guides.mjs?v=20261116en';
 import { addReference, newUse } from './reference-library.mjs?v=20261116en';
@@ -44,14 +44,15 @@ export function installActorsUI(options) {
     context.studio().syncPose(); ensureActors(doc); const actor = createActor(doc.actors.length);
     doc.actors.push(actor); doc.activeActorId = actor.id; doc.selectedActorIds = [actor.id]; doc.source = { kind: 'human' };
     bindActor(doc); if (wasEmpty) { doc.conditioning.model = 'base'; doc.conditioning.identityMode = 'actors'; doc.conditioning.imageOrder = 'guide-first'; }
+    context.studio().selectedModelId = null; context.studio().modelJoint = null;
     await context.studio().restore(doc); await context.ensureHumanTools(); context.showScene();
     context.toast(wasEmpty ? 'Character added. Add more characters or select one to edit and assign an identity.' : 'Character added. Qwen Base Model is recommended for multi-character posing. Your current model stays selected.');
   });
-  $('clone-actor').onclick = () => atomic(async () => {
+  $('clone-actor').onclick = () => context.studio().selectedModel() ? context.duplicateModel() : atomic(async () => {
     const doc = context.doc(); context.studio().syncPose(); const actor = cloneActor(doc);
     doc.activeActorId = actor.id; doc.selectedActorIds = [actor.id]; bindActor(doc); await context.studio().restore(doc);
   });
-  $('delete-actor').onclick = () => atomic(async () => { const doc = context.doc(); removeActor(doc, doc.activeActorId); await context.studio().restore(doc); });
+  $('delete-actor').onclick = () => context.studio().selectedModel() ? context.deleteModel() : atomic(async () => { const doc = context.doc(); removeActor(doc, doc.activeActorId); await context.studio().restore(doc); });
   for (const [id, key] of [['actor-x', 'x'], ['actor-y', 'y'], ['actor-z', 'z'], ['actor-yaw', 'yaw'], ['actor-scale', 'scale']]) $(''+id).onchange = () => {
     const actor = activeActor(context.doc()), value = Number($(id).value);
     if (!actor || actor.locked || !Number.isFinite(value) || key === 'scale' && value <= 0) return;
@@ -94,6 +95,7 @@ export function installActorsUI(options) {
     if (template.props && doc.props?.some(prop => prop.locked)) throw new Error('Unlock props before applying a scene template.');
     applySceneTemplate(doc, template); await context.studio().restore(doc); context.studio().useRigPose(); await context.ensureHumanTools();
   });
+  };
   $('export-scene').onclick = () => context.run(async () => {
     context.studio().syncPose(); const response = await fetch('/anyangle-studio/portable-scenes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scene: context.doc(), png: await context.captureGuide() }) });
     const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Export failed');
@@ -130,9 +132,14 @@ export function importModel() {
 }
 export function selectModel(id) {
   const studio = context.studio();
-  studio.selectedModelId = id;
+  if (studio.selectedModelId !== id) {
+    studio.finishDrag();
+    studio.modelJoint = null;
+    studio.selectedModelId = id;
+    if (studio.mode === "edit") studio.setMode("edit");
+  }
   $('actors-panel').open = true;
-  if (studio.mode !== 'position') context.placeScene();
+  if (studio.mode === 'camera') context.placeScene();
   context.refresh();
 }
 export async function selectRole(id, additive = false) {
@@ -140,8 +147,12 @@ export async function selectRole(id, additive = false) {
     const doc = context.doc();
     if (additive) doc.selectedActorIds = doc.selectedActorIds?.includes(id) ? doc.selectedActorIds.filter(value => value !== id) : [...doc.selectedActorIds || [], id];
     else doc.selectedActorIds = [id];
-    context.studio().selectedModelId = null;
-    await context.studio().selectActor(id);
+    const studio = context.studio();
+    const hadModelSelected = !!studio.selectedModel();
+    studio.finishDrag();
+    studio.selectedModelId = null; studio.modelJoint = null;
+    await studio.selectActor(id);
+    if (hadModelSelected) studio.setMode(studio.mode);
     await context.ensureHumanTools();
     context.refresh();
   });
@@ -178,7 +189,7 @@ export function refreshActorsUI() {
   $('actor-count').textContent = `${(doc.actors || []).filter(role => role.visible !== false).length} / ${doc.actors?.length || 0}`;
   const modelSelected = doc.props?.some(prop => prop.id === context.studio()?.selectedModelId);
   $('active-actor-controls').hidden = !actor || !human || modelSelected;
-  $('clone-actor').disabled = $('delete-actor').disabled = !actor || !human || modelSelected;
+  $('clone-actor').disabled = $('delete-actor').disabled = !human || !(actor || modelSelected);
   if (actor) {
     for (const [id, value] of [['actor-label', actor.label], ['actor-color', actor.editorColor], ...['x', 'y', 'z', 'yaw', 'scale'].map(key => [`actor-${key}`, actor.transform[key]]), ['actor-description', actor.identity.description], ['actor-source-person', typeof actor.identity.sourcePerson === 'string' ? actor.identity.sourcePerson : actor.identity.sourcePerson?.description || '']])
       if (document.activeElement !== $(id)) $(id).value = value;

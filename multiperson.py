@@ -135,6 +135,18 @@ def canonical_scene(raw):
         if not isinstance(asset, dict) or not isinstance(asset.get("name"), str) or not re.fullmatch(r"[a-f0-9]{64}\.glb", asset["name"]):
             raise ValueError("Scene props require an embedded GLB asset")
         normalize_transform(prop)
+        for axis in ("pitch", "roll"):
+            if axis in prop["transform"] and not finite(prop["transform"][axis]):
+                raise ValueError(f"Invalid GLB rotation {axis}")
+        rotations = prop.get("jointRotations", {})
+        if not isinstance(rotations, dict) or any(
+            not isinstance(index, str) or not re.fullmatch(r"0|[1-9][0-9]*", index)
+            or not isinstance(rotation, list) or len(rotation) != 4
+            or not all(finite(value) and abs(value) <= 1.000001 for value in rotation)
+            or not any(rotation)
+            for index, rotation in rotations.items()
+        ):
+            raise ValueError("Invalid GLB joint rotations")
     target = scene.get("cameraTarget")
     if target is not None and (not isinstance(target, list) or len(target) != 3 or not all(finite(value) for value in target)):
         raise ValueError("Scene cameraTarget must contain three finite coordinates")

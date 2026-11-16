@@ -11,7 +11,7 @@ import { SplatScene } from './splat.mjs?v=20261116en';
 import { capturePNG } from './capture.mjs?v=20261116en';
 import { liftOpenPose, copyVisiblePose, WORLD_KEYPOINT_NAMES, ORDER, LIMBS, COLORS } from './openpose.mjs?v=20261116en';
 import { createActor, ensureActors, activeActor, bindActor, saveActor, visibleActors } from './actors.mjs?v=20261116en';
-import { loadProp, disposeProp, placeProp } from './props.mjs?v=20261116en';
+import { loadProp, disposeProp, placeProp } from './props.mjs?v=20261116modelrotation';
 import { emptyLibrary } from './reference-library.mjs?v=20261116en';
 
 export const PRESETS = [
@@ -138,7 +138,7 @@ export class StudioScene {
       // FK marks itself as dragging before requesting its initial history entry.
       this.beginningRigGesture = true;
       try {
-        const pose = this.rigPointerDown ? JSON.stringify(this.animal?.pose() ?? this.viewer.getPose()) : null;
+        const pose = this.rigPointerDown ? JSON.stringify(this.modelRotation() ?? this.animal?.pose() ?? this.viewer.getPose()) : null;
         const rollback = callbacks.begin();
         if (pose !== null) this.rigHistory = { pose, rollback };
       }
@@ -148,7 +148,7 @@ export class StudioScene {
       const history = this.rigHistory; this.rigHistory = null;
       if (this.restoring) return;
       // Selecting an IK marker or FK ring without moving leaves history intact.
-      if (history && history.pose === JSON.stringify(this.animal?.pose() ?? this.viewer.getPose())) history.rollback?.();
+      if (history && history.pose === JSON.stringify(this.modelRotation() ?? this.animal?.pose() ?? this.viewer.getPose())) history.rollback?.();
       else callbacks.change(true, this.interactionControls !== false);
     };
     const requestRender = this.viewer.requestRender.bind(this.viewer);
@@ -159,7 +159,16 @@ export class StudioScene {
     this.doc = doc;
     await this.viewer.init();
     if (!this.viewer.initialized) throw new Error('WebGL initialization failed. Enable hardware acceleration in your browser.');
-    this.viewer.transform.addEventListener('objectChange', () => this.animal?.update(this.animalSelection));
+    this.viewer.transform.addEventListener('objectChange', () => {
+      const model = this.selectedModel();
+      const rotation = this.modelRotation();
+      if (!rotation) { this.animal?.update(this.animalSelection); return; }
+      if (this.modelJoints()[this.modelJoint]) (model.jointRotations ||= {})[this.modelJoint] = rotation;
+      else {
+        const [pitch, yaw, roll] = rotation;
+        Object.assign(model.transform, { pitch, yaw, roll });
+      }
+    });
     this.cameraClips = [this.viewer.camera, this.viewer.captureCamera].map(camera => ({ near: camera.near, far: camera.far }));
     this.viewer.setDirectionalSkydomeVisible(false);
     this.viewer.scene.background = new THREE.Color('#171f28');
@@ -283,7 +292,7 @@ export class StudioScene {
 
   async restoreProps() {
     this.propRoots ||= new Map(); const props = this.doc.props || [], ids = new Set(props.map(prop=>prop.id));
-    if (!ids.has(this.selectedModelId)) this.selectedModelId = null;
+    if (!ids.has(this.selectedModelId)) { this.selectedModelId = null; this.modelJoint = null; }
     for (const [id, root] of this.propRoots) if (!ids.has(id) || props.find(prop=>prop.id===id)?.asset.name !== root.userData.assetName) { disposeProp(root); this.propRoots.delete(id); }
     for (const prop of props) {
       let root = this.propRoots.get(prop.id);
@@ -533,19 +542,43 @@ export class StudioScene {
     applyLens(v.captureCamera, target, c.focalLength || 0);
   }
 
+  selectedModel() {
+    return this.doc.source.kind === 'human' && this.doc.props?.find(model => model.id === this.selectedModelId);
+  }
+
+  modelJoints() {
+    return this.propRoots.get(this.selectedModelId)?.userData.joints || [];
+  }
+
+  modelRotation() {
+    if (this.mode !== 'edit' || !this.selectedModel()) return null;
+    const joint = this.modelJoints()[this.modelJoint]?.bone;
+    const target = joint || this.propRoots.get(this.selectedModelId);
+    if (!target || target !== this.viewer.transform.object) return null;
+    if (joint) return joint.quaternion.toArray();
+    return [target.rotation.x, target.rotation.y, target.rotation.z].map(degrees);
+  }
+
   setMode(mode) {
     this.finishDrag?.();
     if (this.doc.source.kind === 'splat' || this.doc.source.kind === 'empty') mode = 'camera';
     this.mode = mode;
     const actor = activeActor(this.doc);
-    const editable = this.doc.source.kind === 'human' && !actor?.locked && actor?.visible !== false;
+    const model = this.selectedModel();
+    const editable = !model && this.doc.source.kind === 'human' && !actor?.locked && actor?.visible !== false;
     for (const animal of this.animalActors.values()) animal.handles.visible = mode === 'edit' && animal === this.animal && editable;
     const editHuman = editable && !this.animal;
     this.viewer.setIKMode(mode === 'edit' && editHuman);
     this.viewer.transform.detach();
-    this.viewer.transform.setSize(this.animal ? 0.46 : 0.8);
+    this.viewer.transform.setSize(this.animal && !model ? 0.46 : 0.8);
     this.viewer.transform.visible = mode === 'edit' && editHuman;
-    if (this.animal) this.selectAnimalJoint(this.animalSelection);
+    if (mode === 'edit' && model && !model.locked && model.visible !== false) {
+      const target = this.modelJoints()[this.modelJoint]?.bone || this.propRoots.get(model.id);
+      if (target) {
+        this.viewer.transform.setMode('rotate'); this.viewer.transform.setSpace('local');
+        this.viewer.transform.attach(target);
+      }
+    } else if (this.animal) this.selectAnimalJoint(this.animalSelection);
     this.viewer.skeletonHelper && (this.viewer.skeletonHelper.visible = false);
     this.viewer.jointMarkers.forEach(marker => { marker.visible = mode === 'edit' && editHuman && this.viewer._shouldMarkerBeVisible(marker); });
     this.viewer.orbit.enabled = mode === 'edit' || mode === 'position';
@@ -963,6 +996,13 @@ export class StudioScene {
         raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), this.viewer.camera);
         return raycaster;
       };
+      if (this.mode === 'edit' && event.button === 0 && !event.shiftKey && this.selectedModel()) {
+        const transform = this.viewer.transform;
+        if (transform.object) {
+          transform.pointerHover(transform._getPointer(event));
+          if (transform.axis) return;
+        }
+      }
       if (this.animal?.handles.visible && this.mode === 'edit' && event.button === 0 && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
         const transform = this.viewer.transform;
         transform.pointerHover(transform._getPointer(event));
@@ -998,7 +1038,7 @@ export class StudioScene {
         for (const item of mesh) { item.updateMatrixWorld(true); item.skeleton.update(); item.computeBoundingBox(); item.computeBoundingSphere(); }
         const raycaster = ray();
         const animals = visibleActors(this.doc).map(actor => this.animalActors.get(actor.id)?.root).filter(Boolean);
-        const models = this.mode === 'position' ? [...this.propRoots.values()].filter(root => root.visible) : [];
+        const models = [...this.propRoots.values()].filter(root => root.visible);
         const hit = [...raycaster.intersectObjects(mesh, false), ...raycaster.intersectObjects([...animals, ...models], true)]
           .sort((first, second) => first.distance - second.distance)[0];
         let object = hit?.object;
@@ -1007,6 +1047,11 @@ export class StudioScene {
         const id = object?.userData.actorId;
         if (id && (id !== this.doc.activeActorId || this.selectedModelId || event.ctrlKey || event.metaKey)) {
           event.stopImmediatePropagation(); event.preventDefault(); this.callbacks.pick?.(id, event.ctrlKey || event.metaKey); return;
+        }
+        if (this.mode === 'edit' && (modelId || this.selectedModel())) {
+          event.stopImmediatePropagation(); event.preventDefault();
+          if (modelId && modelId !== this.selectedModelId) this.callbacks.pickModel?.(modelId);
+          return;
         }
         if (this.mode === 'position') {
           event.stopImmediatePropagation(); event.preventDefault();
