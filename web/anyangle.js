@@ -9,17 +9,21 @@ let closeActive = null;
 const extensionURL = new URL('./editor/index.html', import.meta.url);
 extensionURL.searchParams.set('v', '20261116sceneselection');
 
+const dialogStyles = document.createElement('link');
+dialogStyles.rel = 'stylesheet';
+dialogStyles.href = new URL('./anyangle.css?v=20261116dialog', import.meta.url).href;
+document.head.append(dialogStyles);
+
 function openEditor(node, widget) {
   closeActive?.();
   const session = uuid(), graph = app.graph, revision = graphRevision, initial = widget.value;
   let initialSnapshot = null;
   try { initialSnapshot = initial ? JSON.parse(initial) : null; } catch { /* Studio can replace a damaged widget. */ }
   const dialog = document.createElement('dialog');
-  Object.assign(dialog.style, { width: '96vw', height: '94vh', maxWidth: 'none', maxHeight: 'none', padding: '0', border: '1px solid #3a5265', borderRadius: '12px', background: '#101920', overflow: 'hidden' });
+  dialog.className = 'anyangle-studio-dialog';
   const frame = document.createElement('iframe');
   const url = new URL(extensionURL); url.searchParams.set('session', session);
   frame.src = url; frame.title = 'AnyAngle Studio · 3D Camera and Pose Editor';
-  Object.assign(frame.style, { width: '100%', height: '100%', border: '0', display: 'block' });
   dialog.append(frame); document.body.append(dialog);
   let active = true;
   let reference = { connected: false }, referenceSignature = null, readingReference = false;
