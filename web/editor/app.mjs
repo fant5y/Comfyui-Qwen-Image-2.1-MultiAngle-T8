@@ -47,6 +47,19 @@ for (const handle of workspace.querySelectorAll('[data-sidebar]')) {
   const panel = workspace.querySelector(`.${side}-panel`);
   const widthProperty = `--${side}-sidebar-width`;
   const direction = side === 'left' ? 1 : -1;
+  const storageKey = `anyangle-studio.sidebar-width.${side}`;
+  try {
+    const savedWidth = Number(localStorage.getItem(storageKey));
+    if (Number.isFinite(savedWidth) && savedWidth >= 200)
+      workspace.style.setProperty(widthProperty, `${savedWidth}px`);
+  } catch { /* Studio can still resize without browser storage. */ }
+  const saveWidth = () => {
+    try {
+      const width = parseFloat(workspace.style.getPropertyValue(widthProperty));
+      if (Number.isFinite(width)) localStorage.setItem(storageKey, String(width));
+      else localStorage.removeItem(storageKey);
+    } catch { /* Browser storage is optional. */ }
+  };
   const setWidth = width => {
     const maxWidth = Math.floor(workspace.clientWidth * 0.34);
     workspace.style.setProperty(widthProperty, `${Math.max(200, Math.min(maxWidth, width))}px`);
@@ -61,15 +74,21 @@ for (const handle of workspace.querySelectorAll('[data-sidebar]')) {
     if (drag && handle.hasPointerCapture(event.pointerId))
       setWidth(drag.width + (event.clientX - drag.x) * direction);
   };
-  handle.onlostpointercapture = () => { drag = null; };
-  const resetWidth = () => workspace.style.removeProperty(widthProperty);
+  handle.onlostpointercapture = () => { drag = null; saveWidth(); };
+  const resetWidth = () => {
+    workspace.style.removeProperty(widthProperty);
+    saveWidth();
+  };
   handle.ondblclick = resetWidth;
   handle.onkeydown = event => {
     if (!['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return;
     event.preventDefault();
     event.stopPropagation();
     if (event.key === 'Home') resetWidth();
-    else setWidth(panel.offsetWidth + (event.key === 'ArrowRight' ? 16 : -16) * direction);
+    else {
+      setWidth(panel.offsetWidth + (event.key === 'ArrowRight' ? 16 : -16) * direction);
+      saveWidth();
+    }
   };
 }
 let poseCatalog, galleryActions;
