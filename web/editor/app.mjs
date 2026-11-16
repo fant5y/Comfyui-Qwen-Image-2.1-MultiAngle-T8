@@ -12,7 +12,7 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116modelrotation';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116modelrotation';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116studiostart';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116en';
 
@@ -41,22 +41,14 @@ let batchRunning = false, batchController = null, batchViews = [], batchId = nul
 const batchReplies = new Map();
 const controls = new Map();
 
-const textSize = $('#studio-text-size');
-const textSizeKey = 'anyangle-studio.text-scale';
-const hostTextSize = parseFloat(params.get('hostTextSize'));
-const baseTextSize = embedded && Number.isFinite(hostTextSize) ? Math.max(17, Math.min(24, hostTextSize)) : 17;
-try {
-  const savedScale = localStorage.getItem(textSizeKey);
-  if (Array.from(textSize.options).some(option => option.value === savedScale)) textSize.value = savedScale;
-} catch { /* Browser storage is optional. */ }
-function applyTextSize() {
-  document.documentElement.style.setProperty('--studio-text-size', (baseTextSize * Number(textSize.value)) + 'px');
+if (embedded) {
+  const hostSize = params.get('hostTextSize');
+  const hostFont = params.get('hostFontFamily');
+  if (hostSize && /^\d+(?:\.\d+)?px$/.test(hostSize) && parseFloat(hostSize) > 0)
+    document.documentElement.style.setProperty('--studio-text-size', hostSize);
+  if (hostFont && CSS.supports('font-family', hostFont))
+    document.documentElement.style.setProperty('--studio-font-family', hostFont);
 }
-applyTextSize();
-textSize.onchange = () => {
-  applyTextSize();
-  try { localStorage.setItem(textSizeKey, textSize.value); } catch { /* Browser storage is optional. */ }
-};
 
 const workspace = $('#workspace');
 for (const handle of workspace.querySelectorAll('[data-sidebar]')) {
@@ -376,7 +368,6 @@ function refresh() {
   $('#model-anyangle').classList.toggle('active', !base); $('#model-base').classList.toggle('active', base);
   $('#model-anyangle').disabled = promptMode === 'single';
   $('#model-anyangle').title = promptMode === 'single' ? 'Guide Image Only uses the Qwen Base Model.' : '';
-  $('#model-badge').textContent = base ? 'QWEN 2.1' : 'ANYANGLE';
   document.querySelectorAll('[data-guide]').forEach(button => {
     button.classList.toggle('active', button.dataset.guide === guide);
     button.setAttribute('aria-pressed', String(button.dataset.guide === guide));

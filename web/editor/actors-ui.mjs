@@ -95,7 +95,6 @@ export function installActorsUI(options) {
     if (template.props && doc.props?.some(prop => prop.locked)) throw new Error('Unlock props before applying a scene template.');
     applySceneTemplate(doc, template); await context.studio().restore(doc); context.studio().useRigPose(); await context.ensureHumanTools();
   });
-  };
   $('export-scene').onclick = () => context.run(async () => {
     context.studio().syncPose(); const response = await fetch('/anyangle-studio/portable-scenes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scene: context.doc(), png: await context.captureGuide() }) });
     const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Export failed');
