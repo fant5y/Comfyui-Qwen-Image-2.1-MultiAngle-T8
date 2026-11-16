@@ -1,8 +1,8 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116canvasprompt';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116scenebackdrop';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261116canvasprompt';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116canvasprompt';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116scenebackdrop';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
@@ -127,7 +127,7 @@ function hasGuide() {
   const source = guideSource(doc);
   return source.kind === 'image' || source.kind === 'canny-image' || source.kind === 'canny-scene'
     || source.kind === 'depth-scene'
-    || source.kind === 'pose' && doc.source.kind === 'human' && doc.actors.some(actor => actor.visible !== false && actor.source.kind !== 'animal') || source.kind === 'scene' && (doc.source.kind !== 'empty' || !!canvasBackgroundAsset(doc));
+    || source.kind === 'pose' && doc.source.kind === 'human' && doc.actors.some(actor => actor.visible !== false && actor.source.kind !== 'animal') || source.kind === 'scene' && (doc.source.kind !== 'empty' || doc.sceneBackground?.visible !== false && !!canvasBackgroundAsset(doc));
 }
 function applyDisabled() {
   return busy || !ready || !hasGuide() || !!linkedReference.pending;
@@ -259,9 +259,8 @@ function refresh() {
     $(`#${id}`).classList.toggle('active', active); $(`#${id}`).setAttribute('aria-pressed', String(active));
   }
   $('#view-scene').hidden = staticGuide || guide === 'depth' && input.kind !== 'depth-scene';
-  $('#view-scene').disabled = doc.source.kind === 'empty' && !canvasBackgroundAsset(doc);
-  $('#lens-panel').hidden = staticGuide;
-  $('#mouse-pitch').closest('section').hidden = staticGuide;
+  $('#view-scene').disabled = doc.source.kind === 'empty' && (doc.sceneBackground?.visible === false || !canvasBackgroundAsset(doc));
+  $('#camera-section').hidden = staticGuide;
   $('#lens-mode').value = doc.camera.focalLength ? 'custom' : 'original';
   $('#lens-controls').hidden = !doc.camera.focalLength;
   const poseAnimal = studio?.animal ? activeActor(doc) : doc.source.kind === 'splat' ? animalPoseTarget() : null;
@@ -271,7 +270,7 @@ function refresh() {
     : !doc.reference?.name || !!linkedReference.pending;
   $('#pose-category').value = (doc.randomMaster || doc.poseRandom)?.category || 'mixed';
   if (document.activeElement !== $('#pose-seed')) $('#pose-seed').value = (doc.randomMaster || doc.poseRandom)?.seed || 0;
-  for (const id of ['camera-heading', 'camera-eyebrow', 'camera-sliders', 'view-presets', 'shot-shelf', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
+  for (const id of ['shot-shelf', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
   $('#stage-help').textContent = previewVisible ? staticGuide ? 'Source composition and structure · Apply to output this guide' : 'Guide from the current camera · Switch to 3D Workspace to adjust the view'
     : studio?.mode === 'position' ? 'Select a character or model · Drag to place · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' && studio.selectedModel() ? 'Drag the rotation rings · Right-drag to orbit · Middle-drag to pan'
@@ -281,6 +280,10 @@ function refresh() {
   for (const control of controls.values()) control.refresh();
   $('#width').value = doc.width; $('#height').value = doc.height;
   $('#background').value = doc.background;
+  $('#scene-background-options').hidden = !canvasBackgroundAsset(doc);
+  $('#scene-background-visible').checked = doc.sceneBackground?.visible !== false;
+  $('#scene-background-scale').value = doc.sceneBackground?.scale ?? 1;
+  for (const axis of ['x', 'y', 'z']) $(`#scene-background-${axis}`).value = doc.sceneBackground?.[axis] ?? 0;
   const ratio = ['1:1', '16:9', '9:16', '4:3'].find(value => { const [w, h] = value.split(':').map(Number); return Math.abs(doc.width / doc.height - w / h) < 0.015; });
   $('#ratio').value = ratio || 'custom';
   $('#guide-size').textContent = `${doc.width} × ${doc.height}`;
@@ -352,7 +355,7 @@ function refresh() {
   $('#empty-scene').hidden = !empty;
   $('#coarse-inputs').hidden = guide !== 'coarse';
   $('#extract-coarse').disabled = !doc.reference || !!linkedReference.pending;
-  $('#preview-coarse').disabled = empty && !canvasBackgroundAsset(doc);
+  $('#preview-coarse').disabled = empty && (doc.sceneBackground?.visible === false || !canvasBackgroundAsset(doc));
   $('#coarse-status').textContent = splat ? doc.source.keep_background ? 'Reconstruction with background is ready. Preview it or adjust the camera. Large scenes are experimental.' : 'The reconstructed subject is ready. Preview it or adjust the camera.'
     : animal ? 'Render a guide from the animal’s current pose and camera angle.'
     : human ? 'The scene uses a posable mannequin. Rebuild the source to render its subject.'
@@ -500,7 +503,7 @@ function refresh() {
   for (const axis of ['x', 'y', 'z']) controls.get(`bone-${axis}`)?.refresh();
   refreshActorsUI();
   refreshReferencesUI();
-  studio?.updateCanvasBackground();
+  studio?.loadSceneBackground();
 }
 
 function animalJointLabel(name) {
@@ -703,6 +706,21 @@ $('#ratio').onchange = event => {
   dimensions(a >= b ? long : Math.round(long * a / b / 32) * 32, a >= b ? Math.round(long * b / a / 32) * 32 : long);
 };
 $('#background').onchange = event => { begin(); doc.background = event.target.value; changed(); };
+$('#scene-background-visible').onchange = event => {
+  begin(); (doc.sceneBackground ||= {}).visible = event.target.checked; changed();
+};
+for (const field of ['scale', 'x', 'y', 'z']) $(`#scene-background-${field}`).onchange = event => {
+  const value = event.target.valueAsNumber;
+  if (!Number.isFinite(value)) { refresh(); return; }
+  begin();
+  (doc.sceneBackground ||= {})[field] = field === 'scale' ? Math.max(0.05, Math.min(20, value)) : value;
+  changed();
+};
+$('#fit-scene-background').onclick = () => {
+  begin();
+  doc.sceneBackground = { visible: doc.sceneBackground?.visible !== false };
+  changed();
+};
 $('#prompt-mode').onchange = event => {
   begin();
   if (event.target.value === 'custom' && doc.conditioning.customPrompt === undefined) {
@@ -1501,7 +1519,7 @@ $('#clear-canvas').onclick = () => run(async () => {
   if (!canvasHasObjects()) return;
   const rollback = begin(), previous = doc;
   const defaults = defaultScene();
-  doc = { ...doc, source: defaults.source, actors: [], props: [], sceneOrder: [], contacts: [], activeActorId: null, backgroundReferenceId: null,
+  doc = { ...doc, source: defaults.source, actors: [], props: [], sceneOrder: [], contacts: [], activeActorId: null, backgroundReferenceId: null, sceneBackground: null,
     selectedActorIds: [], cameraTarget: null, mesh: defaults.mesh, pose: defaults.pose, front: 0, scale: 1,
     sourceStale: false, derivedGuideStale: false, derivedGuideSource: null, openpose: null,
     conditioning: { ...doc.conditioning, guide: 'coarse', map: null, mapKind: null, mapOrigin: 'auto' } };

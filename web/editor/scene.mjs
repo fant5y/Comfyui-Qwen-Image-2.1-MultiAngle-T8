@@ -209,39 +209,73 @@ export class StudioScene {
     const { width, height } = this.canvas.parentElement.getBoundingClientRect();
     this.viewer.resize(Math.max(1, width), Math.max(1, height));
     if (this.mode === 'camera' && this.baseTarget) this.updateShot();
-    this.showCanvasBackground();
   }
 
-  updateCanvasBackground() {
+  loadSceneBackground() {
+    if (this.capturing) return this.backgroundLoad;
     const name = canvasBackgroundAsset(this.doc)?.name;
-    if (name === this.backgroundName) return this.backgroundLoad;
+    if (name === this.backgroundName) {
+      this.updateSceneBackground();
+      return this.backgroundLoad;
+    }
     this.backgroundName = name;
-    this.backgroundTexture?.dispose();
-    this.backgroundTexture = null;
-    this.showCanvasBackground();
+    if (this.sceneBackground) {
+      this.sceneBackground.removeFromParent();
+      this.sceneBackground.geometry.dispose();
+      this.sceneBackground.material.dispose();
+      this.sceneBackground.material.map.dispose();
+      this.sceneBackground = null;
+    }
     const pending = name ? new THREE.TextureLoader().loadAsync(assetURL(name)).then(texture => {
-      // A reference may be replaced or removed while the image is loading.
       if (this.disposed || this.backgroundLoad !== pending) { texture.dispose(); return null; }
       texture.colorSpace = THREE.SRGBColorSpace;
-      this.backgroundTexture = texture;
-      this.showCanvasBackground();
-      return texture;
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }));
+      plane.visible = false;
+      this.sceneBackground = plane;
+      this.viewer.scene.add(plane);
+      this.updateSceneBackground();
+      return plane;
     }).catch(() => null) : null;
     this.backgroundLoad = pending;
+    this.viewer.requestRender();
     return pending;
   }
 
-  fitBackground(texture, aspect) {
-    const imageAspect = texture.image.width / texture.image.height;
-    const x = Math.min(1, aspect / imageAspect), y = Math.min(1, imageAspect / aspect);
-    texture.repeat.set(x, y);
-    texture.offset.set((1 - x) / 2, (1 - y) / 2);
-  }
-
-  showCanvasBackground() {
-    if (!this.workspaceBackground || this.capturing || this.disposed) return;
-    if (this.backgroundTexture) this.fitBackground(this.backgroundTexture, this.viewer.camera.aspect);
-    this.viewer.scene.background = this.backgroundTexture || this.workspaceBackground;
+  updateSceneBackground() {
+    const plane = this.sceneBackground;
+    if (!plane || this.capturing || this.disposed) return;
+    const settings = this.doc.sceneBackground ||= {};
+    if (!settings.frame) {
+      const camera = this.viewer.captureCamera;
+      if (this.splat) this.splat.configureCamera(camera, this.doc, this.doc.width, this.doc.height);
+      else this.configureCapture(this.doc.width, this.doc.height);
+      camera.updateMatrixWorld(true);
+      const direction = camera.getWorldDirection(new THREE.Vector3());
+      const target = this.baseTarget || new THREE.Vector3(0, 10, 0);
+      // Start behind the subject and project the frame onto the image plane.
+      const targetDepth = target.clone().sub(camera.position).dot(direction);
+      const distance = Math.min(camera.far * 0.9, Math.max(camera.near * 2, targetDepth + 25));
+      const framePoint = y => {
+        const ray = new THREE.Vector3(0, y, 0.5).unproject(camera).sub(camera.position);
+        return ray.multiplyScalar(distance / ray.dot(direction)).add(camera.position);
+      };
+      const center = framePoint(0);
+      settings.frame = {
+        center: center.toArray(), rotation: camera.quaternion.toArray(),
+        height: 2 * framePoint(1).distanceTo(center), aspect: this.doc.width / this.doc.height,
+      };
+    }
+    const { center, rotation, height, aspect } = settings.frame;
+    const image = plane.material.map.image;
+    const imageAspect = image.width / image.height;
+    const planeHeight = height * Math.max(1, aspect / imageAspect) * (settings.scale ?? 1);
+    plane.position.fromArray(center);
+    plane.position.x += settings.x ?? 0;
+    plane.position.y += settings.y ?? 0;
+    plane.position.z += settings.z ?? 0;
+    plane.quaternion.fromArray(rotation);
+    plane.scale.set(planeHeight * imageAspect, planeHeight, 1);
+    plane.visible = settings.visible !== false;
     this.viewer.requestRender();
   }
 
@@ -651,18 +685,18 @@ export class StudioScene {
   }
 
   async capture(width = this.doc.width, height = this.doc.height, options = {}) {
-    const backgroundAsset = !options.depth && !options.canny && !options.actorIds && canvasBackgroundAsset(this.doc);
-    const backgroundTexture = backgroundAsset ? await this.updateCanvasBackground() : null;
-    if (backgroundAsset && !backgroundTexture) throw new Error('Could not load the canvas background. Replace or clear the reference image.');
-    if (this.doc.source.kind === 'empty' && !backgroundTexture) throw new Error('Rebuild the source subject or import its 3D scene first.');
+    const backgroundAsset = !options.depth && !options.canny && !options.actorIds && this.doc.sceneBackground?.visible !== false && canvasBackgroundAsset(this.doc);
+    const backgroundPlane = backgroundAsset ? await this.loadSceneBackground() : null;
+    if (backgroundAsset && !backgroundPlane) throw new Error('Could not load the scene background. Replace or clear the reference image.');
+    if (this.doc.source.kind === 'empty' && !backgroundPlane) throw new Error('Rebuild the source subject or import its 3D scene first.');
     await this.waitForCaptureReady();
     const v = this.viewer;
     const content = this.splat?.root || this.animal?.root || (this.doc.source.kind === 'glb' ? this.glb : v.skinnedMesh);
-    if (!content && !backgroundTexture) throw new Error('The scene has no renderable assets.');
+    if (!content && !backgroundPlane) throw new Error('The scene has no renderable assets.');
     const contents = this.doc.source.kind === 'human' && this.actorRoots?.size
       ? [...(options.actorIds ? this.doc.actors.filter(actor => options.actorIds.includes(actor.id)) : visibleActors(this.doc)).map(actor => this.actorRoots.get(actor.id)),
         ...(!options.actorIds ? (this.doc.props || []).filter(prop=>prop.visible!==false).map(prop=>this.propRoots.get(prop.id)) : [])].filter(Boolean) : this.doc.source.kind === 'empty' ? [] : [content].filter(Boolean);
-    if (!contents.length && !backgroundTexture) throw new Error('Make at least one character visible.');
+    if (!contents.length && !backgroundPlane) throw new Error('Make at least one character visible.');
     if (options.depth && this.splat) throw new Error('Use DA3 source depth for a TripoSplat reconstruction.');
     const visibility = v.scene.children.map(object => [object, object.visible]);
     // VNCCS attaches joint markers below the skinned mesh, not just to the scene.
@@ -675,7 +709,7 @@ export class StudioScene {
     const actorColors = [];
     let depthMaterial = null, cannyMaterial = null, captureBackground = null;
     this.capturing = true;
-    let restoreSplat = null;
+    let restoreSplat = null, restoreBackgroundMap = null;
     try {
       if (v._renderFrame) { cancelAnimationFrame(v._renderFrame); v._renderFrame = null; }
       if (this.splat) this.splat.configureCamera(v.captureCamera, this.doc, width, height);
@@ -690,11 +724,15 @@ export class StudioScene {
       for (const [object] of visibility) object.visible = contents.includes(object) || !!object.isLight;
       for (const [object] of nestedHelpers) object.visible = false;
       v.scene.background = new THREE.Color(this.doc.background);
-      if (backgroundTexture) {
-        captureBackground = backgroundTexture.clone();
-        if (this.splat) captureBackground.colorSpace = THREE.NoColorSpace;
-        this.fitBackground(captureBackground, width / height);
-        v.scene.background = captureBackground;
+      if (backgroundPlane?.parent === v.scene) {
+        backgroundPlane.visible = true;
+        if (this.splat) {
+          const texture = backgroundPlane.material.map;
+          captureBackground = texture.clone();
+          captureBackground.colorSpace = THREE.NoColorSpace;
+          backgroundPlane.material.map = captureBackground;
+          restoreBackgroundMap = () => { backgroundPlane.material.map = texture; };
+        }
       }
       if (this.doc.source.kind === 'human' && this.doc.conditioning?.colorActors !== true) {
         for (const actor of visibleActors(this.doc)) for (const material of this.animalActors.get(actor.id)?.colors.slice(0, 1) || [].concat(this.actorMesh(actor.id)?.material || [])) {
@@ -750,10 +788,11 @@ export class StudioScene {
       for (const [object, visible] of visibility) object.visible = visible;
       for (const [object, visible] of nestedHelpers) object.visible = visible;
       v.scene.background = background;
-      v.scene.overrideMaterial = overrideMaterial; depthMaterial?.dispose(); cannyMaterial?.dispose(); captureBackground?.dispose();
+      v.scene.overrideMaterial = overrideMaterial; depthMaterial?.dispose(); cannyMaterial?.dispose();
+      restoreBackgroundMap?.(); captureBackground?.dispose();
       for (const [material, color] of actorColors) material.color.copy(color);
       try { restoreSplat?.(); }
-      finally { this.capturing = false; this.showCanvasBackground(); this.updateShot(); }
+      finally { this.capturing = false; this.updateShot(); this.loadSceneBackground(); }
     }
   }
 
@@ -1281,8 +1320,6 @@ export class StudioScene {
     // GLB props, the main GLB and line helpers remain attached: the viewer owns
     // their final disposal and deduplicates shared geometry/material/texture.
     this.propRoots?.clear();
-    if (this.viewer.scene?.background === this.backgroundTexture) this.viewer.scene.background = this.workspaceBackground;
-    this.backgroundTexture?.dispose();
     this.viewer.dispose();
     this.glb = null; this.glbName = null;
     this.grid = this.ring = this.photoFrame = this.shotHelper = null;

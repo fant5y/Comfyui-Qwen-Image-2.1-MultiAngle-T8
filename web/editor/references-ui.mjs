@@ -78,9 +78,9 @@ export function installReferencesUI(value) {
   const frame = el('p', '', 'hint'); frame.id = 'reference-frame-state'; first.append(frame);
   $('first-reference').onchange = () => edit(() => { context.doc().referenceLibrary.firstReferenceId = $('first-reference').value || null; });
   $('first-reference-resolution').onchange = () => edit(() => { context.doc().referenceLibrary.firstResolution = Number($('first-reference-resolution').value); });
-  const send = el('details', '', 'reference-send-plan'); send.id = 'reference-send-plan';
-  send.innerHTML = '<summary id="reference-send-summary"></summary><div id="reference-send-images"></div><p id="reference-send-warning" class="hint"></p><p class="hint">Image numbers show the actual input order. The prompt describes targets and source regions. Full Input uses your text as written.</p>';
-  document.querySelector('.right-panel').prepend(send);
+  const send = el('details', '', 'reference-send-plan sidebar-section'); send.id = 'reference-send-plan';
+  send.innerHTML = '<summary class="section-heading collapsible-heading"><h2 id="reference-send-summary"></h2></summary><div id="reference-send-images"></div><p id="reference-send-warning" class="hint"></p><p class="hint">Image numbers show the actual input order. The prompt describes targets and source regions. Full Input uses your text as written.</p>';
+  document.querySelector('.guide-section').after(send);
   const preview = el('div', '', 'reference-stage-preview'); preview.id = 'reference-stage-preview';
   preview.innerHTML = '<div class="reference-preview-title"><strong>Reference Preview</strong><span>3D scene retained · No guide output</span></div><img id="reference-stage-image" alt="Current reference preview"><p id="reference-stage-empty" class="empty-note">Enter a prompt or add a reference.</p><div id="reference-stage-thumbs"></div>';
   $('stage').append(preview);
@@ -226,12 +226,13 @@ function card(scene, item, manifest) {
     scene.referenceLibrary.items = scene.referenceLibrary.items.filter(value => value.id !== item.id);
     if (scene.referenceLibrary.firstReferenceId === item.id) scene.referenceLibrary.firstReferenceId = null;
     if (openId === item.id) openId = null;
-    if (scene.backgroundReferenceId === item.id) scene.backgroundReferenceId = null;
+    if (scene.backgroundReferenceId === item.id) { scene.backgroundReferenceId = null; scene.sceneBackground = null; }
   }, scene.backgroundReferenceId === item.id));
   remove.title = 'Remove from the library. You can undo this. The scene source and characters are kept.';
   const character = button('Use as Character', () => chooseCharacter(scene, item));
   const isBackground = scene.backgroundReferenceId === item.id;
-  const background = button(isBackground ? 'Clear Canvas Background' : 'Use as Background', () => edit(() => {
+  const background = button(isBackground ? 'Clear Scene Background' : 'Use as Scene Background', () => edit(() => {
+    scene.sceneBackground = null;
     if (isBackground) scene.backgroundReferenceId = null;
     else {
       assignRole(item, 'scene', { kind: 'scene', ids: [], text: '' });
@@ -283,7 +284,7 @@ export function refreshReferencesUI(force = false) {
   $('keep-derived-guide').hidden = !scene.derivedGuideStale && !staleGuide(scene);
   $('library-source-image').hidden = !source; if (source) $('library-source-image').src = imageURL(source);
   const noGuide = modern && library.mode !== 'guided'; $('stage').classList.toggle('reference-only', noGuide); $('reference-stage-preview').hidden = !noGuide;
-  if (noGuide) $('mouse-pitch').closest('.studio-options').hidden = true;
+  $('camera-section').classList.toggle('no-guide', noGuide);
   $('image-order-row').hidden = noGuide || scene.conditioning.promptMode === 'single';
   const anyangle = scene.conditioning.model === 'anyangle';
   $('library-source-state').textContent = source ? anyangle && !noGuide
@@ -342,9 +343,7 @@ export function refreshReferencesUI(force = false) {
     $('reference-stage-thumbs').replaceChildren(...library.items.filter(item => item.asset).map(item => { const thumb = button('', () => { previewId = item.id; refreshReferencesUI(); }); const image = el('img'); image.src = imageURL(item.asset); image.alt = item.label; thumb.title = item.label; thumb.append(image); thumb.classList.toggle('active', item.id === selected?.id); return thumb; }));
     $('view-detail').textContent = library.mode === 'text' ? 'Text Only · References excluded' : 'References Only · First image sets the aspect ratio';
   }
-  for (const id of ['camera-heading', 'camera-eyebrow', 'camera-sliders', 'lens-panel', 'view-presets', 'shot-shelf', 'guide-section']) {
-    const node = $(id) || (id === 'guide-section' ? document.querySelector('.guide-section') : null); if (node && noGuide) node.hidden = true;
-  }
+  if (noGuide) $('shot-shelf').hidden = true;
   if (noGuide) { $('download-guide').disabled = true; $('open-batch').disabled = true; }
   document.querySelector('.guide-section').hidden = noGuide;
   $('model-anyangle').disabled ||= noGuide;
