@@ -227,7 +227,7 @@ class StudioStore:
         model, guide_mode, conditioning = conditioning_for(scene)
         no_guide = scene.get("version") == 3 and scene["referenceLibrary"].get("mode", "guided") != "guided"
         if not no_guide and scene.get("version") == 3 and guide_is_stale(scene):
-            raise ValueError("来源图已改变，请重新提取结构，或明确沿用保存的结构图")
+            raise ValueError("The source image changed. Extract the structure again or choose to reuse the saved guide.")
         source_kind = scene.get("source", {}).get("kind")
         if source_kind not in ("human", "glb", "splat", "empty"):
             raise ValueError("Select a reconstructed scene, human or GLB source")
@@ -256,7 +256,7 @@ class StudioStore:
         if not no_guide and scene["source"]["kind"] == "splat" and (not isinstance(source_reference, dict) or not isinstance(reference, dict)
                                                   or not isinstance(reference.get("name"), str)
                                                   or source_reference.get("name") != reference.get("name")):
-            raise ValueError("参考图与重建主体不一致，请重新重建后应用")
+            raise ValueError("The reference image and reconstructed subject differ. Rebuild the subject, then apply.")
         if reference:
             name = reference.get("name") if isinstance(reference, dict) else None
             if not isinstance(name, str) or not name.endswith(".png"):
@@ -275,9 +275,9 @@ class StudioStore:
                 self.read_asset(name)
             scene["manifest"] = build_manifest(scene)
             if scene["manifest"].get("missing"):
-                raise ValueError("缺少参考素材：" + ", ".join(scene["manifest"]["missing"]))
+                raise ValueError("Missing reference assets: " + ", ".join(scene["manifest"]["missing"]))
             if no_guide and scene["referenceLibrary"]["mode"] == "references-only" and not scene["manifest"]["references"]:
-                raise ValueError("仅参考模式至少启用一张参考；不使用图片请切换纯文本模式")
+                raise ValueError("Enable at least one image in References Only mode, or switch to Text Only.")
             scene["resolvedPrompt"] = prompt_for(scene)
         guide = None
         if not no_guide:
@@ -293,7 +293,7 @@ class StudioStore:
             guide_digest = hashlib.sha256(data).hexdigest()
             guide = {"name": f"{guide_digest}.png", "sha256": guide_digest, **meta}
         elif png is not None:
-            raise ValueError("仅参考 / 纯文本模式不应保存引导图片")
+            raise ValueError("References Only and Text Only modes do not save guide images.")
         document = {"scene": scene, "guide": guide, "prompt": prompt_for(scene)}
         encoded = json.dumps(document, ensure_ascii=False, sort_keys=True, allow_nan=False, separators=(",", ":")).encode()
         digest = hashlib.sha256(encoded).hexdigest()
@@ -313,7 +313,7 @@ class StudioStore:
         no_guide = scene.get("version") == 3 and scene["referenceLibrary"].get("mode", "guided") != "guided"
         if no_guide:
             if document.get("guide") is not None:
-                raise ValueError("无引导模式的快照包含了引导图片")
+                raise ValueError("The snapshot contains a guide image for a mode without guidance.")
             return document, None
         if not isinstance(document.get("guide"), dict):
             raise ValueError("This snapshot is missing its guide image")
@@ -378,7 +378,7 @@ class StudioStore:
                 raise ValueError("This ZIP is not an AnyAngle scene")
             minimum = manifest.get("minimumPluginVersion", "0.0.0")
             if not isinstance(minimum, str) or not re.fullmatch(r"\d+\.\d+\.\d+", minimum) or tuple(map(int, minimum.split("."))) > (1, 8, 0):
-                raise ValueError("该便携文件需要更新版本的 AnyAngle Studio")
+                raise ValueError("This portable scene requires a newer version of AnyAngle Studio.")
             document = manifest.get("document")
             if not isinstance(document, dict):
                 raise ValueError("Scene ZIP is missing its document")

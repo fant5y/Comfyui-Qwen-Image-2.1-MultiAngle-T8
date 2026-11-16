@@ -273,7 +273,18 @@ def builtin_entries():
         entry = normalized_entry({"version": 1, "kind": "anyangle-composition", "slots": slots, "align": align}, name,
                                  {"id": "builtin", "name": "AnyAngle内置编排", "license": "项目原创编排"})
         entries.append({**entry, "id": f"builtin-composition-{i}", "builtin": True})
+    english_names = {
+        "自然站立": "Natural Stand", "迈步": "Step Forward", "坐姿": "Seated",
+        "举手": "Raised Hand", "双臂伸展": "Arms Outstretched", "向上伸展": "Overhead Stretch",
+        "挥手致意": "Wave", "跑步准备": "Ready to Run", "单腿平衡": "One-Leg Balance",
+        "低头阅读": "Looking Down to Read", "对话手势": "Conversation Gesture",
+        "交叉坐姿": "Seated with Crossed Legs", "双人合影": "Two-Person Photo",
+        "双人对话": "Two-Person Conversation", "双人握手": "Handshake",
+    }
+    english_categories = {"站姿": "Standing", "坐姿": "Seated", "运动": "Movement", "多人编排": "Group Arrangement"}
     for entry in entries:
+        entry["name"] = english_names.get(entry["originalName"], entry["name"])
+        entry["category"] = english_categories.get(entry["category"], entry["category"])
         entry["builtinPreview"] = entry["id"] + ".png"
     return entries
 

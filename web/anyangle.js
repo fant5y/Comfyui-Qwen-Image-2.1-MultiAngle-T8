@@ -1,13 +1,13 @@
 import { app } from '../../scripts/app.js';
 import { api } from '../../scripts/api.js';
-import { uuid } from './uuid.mjs?v=20261010lan1';
-import { referencePlan, executeReference } from './reference.mjs?v=20261010lan1';
-import { promptForSnapshot } from './batch-queue.mjs?v=20261009v160';
+import { uuid } from './uuid.mjs?v=20261116en';
+import { referencePlan, executeReference } from './reference.mjs?v=20261116en';
+import { promptForSnapshot } from './batch-queue.mjs?v=20261116en';
 
 let graphRevision = 0;
 let closeActive = null;
 const extensionURL = new URL('./editor/index.html', import.meta.url);
-extensionURL.searchParams.set('v', '20261031resize');
+extensionURL.searchParams.set('v', '20261116en');
 
 function openEditor(node, widget) {
   closeActive?.();

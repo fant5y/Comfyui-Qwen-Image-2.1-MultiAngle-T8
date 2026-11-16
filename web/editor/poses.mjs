@@ -1,6 +1,6 @@
 export function randomPose(seed, category = 'mixed') {
-  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error('姿势种子应为 0–4294967295 的整数');
-  if (!['mixed', 'standing', 'action', 'seated'].includes(category)) throw new Error('未知的随机姿势类型');
+  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error('The pose seed must be an integer from 0 to 4294967295.');
+  if (!['mixed', 'standing', 'action', 'seated'].includes(category)) throw new Error('Unknown random pose category');
   let state = seed >>> 0;
   const sample = (min, max) => {
     state = (state + 0x6d2b79f5) >>> 0;

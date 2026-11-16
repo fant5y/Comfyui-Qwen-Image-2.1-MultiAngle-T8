@@ -1,15 +1,15 @@
 import * as THREE from '../vendor/three.module.mjs';
 import { DropInViewer, SceneFormat, SceneRevealMode } from '../vendor/gaussian-splats-3d.mjs';
-import { lensSettings } from './lens.mjs?v=20261009v160';
+import { lensSettings } from './lens.mjs?v=20261116en';
 
 const radians = THREE.MathUtils.degToRad;
 
 export function decodeCameraToken(token) {
   if (!Array.isArray(token) || token.length !== 5 || !token.every(Number.isFinite)) {
-    throw new Error('重建结果缺少有效的 5 维相机参数');
+    throw new Error('The reconstruction is missing valid five-dimensional camera parameters.');
   }
   const direction = new THREE.Vector3(token[0], token[2], -token[1]);
-  if (direction.lengthSq() < 1e-12 || token[4] <= 0) throw new Error('重建相机方向或视野无效');
+  if (direction.lengthSq() < 1e-12 || token[4] <= 0) throw new Error('Invalid reconstruction camera direction or field of view');
   direction.normalize();
   const orthographic = token[3] < 0.001;
   const radius = orthographic ? 1000 : 1 / token[3];
@@ -18,12 +18,12 @@ export function decodeCameraToken(token) {
 
 function normalization(bounds) {
   if (!Array.isArray(bounds) || bounds.length !== 2 || bounds.some(v => !Array.isArray(v) || v.length !== 3 || !v.every(Number.isFinite))) {
-    throw new Error('重建结果缺少有效的场景范围');
+    throw new Error('The reconstruction is missing valid scene bounds.');
   }
   const box = new THREE.Box3(new THREE.Vector3(...bounds[0]), new THREE.Vector3(...bounds[1]));
   const size = box.getSize(new THREE.Vector3());
   const longest = Math.max(size.x, size.y, size.z);
-  if (box.isEmpty() || longest <= 0) throw new Error('重建场景范围为空');
+  if (box.isEmpty() || longest <= 0) throw new Error('Reconstructed scene bounds are empty.');
   const scale = 20 / longest;
   const center = box.getCenter(new THREE.Vector3());
   const offset = new THREE.Vector3(-center.x, -box.min.y, -center.z).multiplyScalar(scale);
@@ -35,7 +35,7 @@ function normalization(bounds) {
 // The predicted camera is approximate; this reverses the known preprocessing crop,
 // not an assertion that the model recovered the physical camera of the photograph.
 export function configureSplatCamera(camera, source, controls, width, height, matrixWorld = new THREE.Matrix4()) {
-  if (!camera.isPerspectiveCamera) throw new Error('高斯机位需要透视相机');
+  if (!camera.isPerspectiveCamera) throw new Error('Gaussian splat views require a perspective camera.');
   const predicted = decodeCameraToken(source.camera_token);
   const lens = lensSettings(predicted.fov, controls.focalLength || 0);
   const normalized = normalization(source.bounds);
@@ -44,9 +44,9 @@ export function configureSplatCamera(camera, source, controls, width, height, ma
   if (!reference || !(reference.width > 0 && reference.height > 0) ||
       !Array.isArray(crop) || crop.length !== 4 || !crop.every(Number.isFinite) ||
       crop[2] <= crop[0] || crop[3] <= crop[1] || !(width > 0 && height > 0)) {
-    throw new Error('重建结果缺少原图尺寸或裁切参数');
+    throw new Error('The reconstruction is missing source image dimensions or crop settings.');
   }
-  if (!Number.isFinite(controls.zoom) || controls.zoom <= 0) throw new Error('构图缩放必须大于零');
+  if (!Number.isFinite(controls.zoom) || controls.zoom <= 0) throw new Error('Composition zoom must be greater than zero.');
 
   const azimuth = Math.atan2(predicted.direction.x, predicted.direction.z) + radians(controls.azimuth || 0);
   const elevation = THREE.MathUtils.clamp(Math.asin(predicted.direction.y) + radians(controls.elevation || 0), -Math.PI / 2 + 1e-5, Math.PI / 2 - 1e-5);
@@ -110,7 +110,7 @@ export class SplatScene {
   }
 
   async load(source) {
-    if (this.disposed || this.dropIn) throw new Error('请为新的重建资产创建独立场景');
+    if (this.disposed || this.dropIn) throw new Error('Create a separate scene for the new reconstruction.');
     decodeCameraToken(source.camera_token);
     const normalized = normalization(source.bounds);
     this.source = source;
@@ -136,7 +136,7 @@ export class SplatScene {
         rotation: [1, 0, 0, 0], scale: [normalized.scale, normalized.scale, normalized.scale],
         position: normalized.offset.toArray(),
       });
-      if (this.disposed) throw new Error('重建场景已关闭');
+      if (this.disposed) throw new Error('Reconstruction scene closed');
       this.root.updateMatrixWorld(true);
     } catch (error) {
       await this.dispose();
@@ -175,7 +175,7 @@ export class SplatScene {
   }
 
   async prepareCapture(renderer, camera) {
-    if (this.disposed || !this.dropIn?.viewer.splatRenderReady) throw new Error('高斯场景尚未准备完成');
+    if (this.disposed || !this.dropIn?.viewer.splatRenderReady) throw new Error('Gaussian splat scene is still loading.');
     const viewer = this.dropIn.viewer;
     await viewer.sortPromise;
     this.root.updateWorldMatrix(true, true);
@@ -186,13 +186,13 @@ export class SplatScene {
     for (let i = 0; i < 5; i++) {
       await viewer.runSplatSort(true, true);
       await viewer.sortPromise;
-      if (this.disposed) throw new Error('高斯场景已关闭');
+      if (this.disposed) throw new Error('Gaussian splat scene closed');
       if (viewer.lastSplatSortCount === viewer.splatRenderCount) {
         viewer.updateSplatMesh();
         return;
       }
     }
-    throw new Error('高斯排序尚未完成，请重试导出');
+    throw new Error('Splat sorting is still in progress. Retry the export.');
   }
 
   beginOffscreenCapture(width, height) {

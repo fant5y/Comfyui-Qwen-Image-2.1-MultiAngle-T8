@@ -1,5 +1,5 @@
-import { guideSource } from './guides.mjs?v=20261009v160';
-import { uuid } from '../uuid.mjs?v=20261010lan1';
+import { guideSource } from './guides.mjs?v=20261116en';
+import { uuid } from '../uuid.mjs?v=20261116en';
 export const USES = { free: 'General Reference', identity: 'Identity / Face', clothing: 'Clothing', accessory: 'Accessories / Products', scene: 'Scene / Background', style: 'Style / Lighting', layout: 'Layout / Composition', pose: 'Pose' };
 const copy = value => JSON.parse(JSON.stringify(value));
 const uid = prefix => `${prefix}-${uuid()}`;

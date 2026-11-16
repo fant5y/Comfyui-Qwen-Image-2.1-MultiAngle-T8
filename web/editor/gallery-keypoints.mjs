@@ -1,4 +1,4 @@
-import { ORDER, LIMBS, COLORS } from './openpose.mjs?v=20261009v160';
+import { ORDER, LIMBS, COLORS } from './openpose.mjs?v=20261116en';
 
 export function galleryKeypointFrame(people, width, height) {
   return { canvas_width: width, canvas_height: height, people: people.map(person => {
@@ -6,7 +6,7 @@ export function galleryKeypointFrame(people, width, height) {
     ORDER.forEach((name, index) => {
       const point = person.points?.[name];
       if (!point) return;
-      if (point.length !== 2 || !point.every(Number.isFinite) || point[0] < 0 || point[0] >= width || point[1] < 0 || point[1] >= height) throw new Error('标记的关节超出图片范围');
+      if (point.length !== 2 || !point.every(Number.isFinite) || point[0] < 0 || point[0] >= width || point[1] < 0 || point[1] >= height) throw new Error('A marked joint is outside the image.');
       body.splice(index * 3, 3, point[0], point[1], 1);
     });
     return { pose_keypoints_2d: body };
@@ -15,24 +15,24 @@ export function galleryKeypointFrame(people, width, height) {
 
 // User corrections belong to this isolated preview until the final apply operation.
 export function installGalleryKeypoints(container, asset, onChange) {
-  const ns = 'http://www.w3.org/2000/svg', names = ['头部','颈部','右肩','右肘','右腕','左肩','左肘','左腕','右髋','右膝','右踝','左髋','左膝','左踝'];
+  const ns = 'http://www.w3.org/2000/svg', names = ['Head','Neck','Right Shoulder','Right Elbow','Right Wrist','Left Shoulder','Left Elbow','Left Wrist','Right Hip','Right Knee','Right Ankle','Left Hip','Left Knee','Left Ankle'];
   const width = asset.width, height = asset.height;
   let people = [], boxes = [], dragging = null, edited = false;
   const details = document.createElement('details'); details.className = 'pg-keypoints';
-  const summary = document.createElement('summary'); summary.textContent = '线稿未检出或骨架不准？框选人物 / 修正关节';
-  const help = document.createElement('p'); help.className = 'hint'; help.textContent = '框选模式：拖动圈出每个人，再点击“按框提取”。标点模式：选择人物和关节，点击原图修正；只标可见关节，缺失关节不补猜。';
+  const summary = document.createElement('summary'); summary.textContent = 'Missed Detection or Inaccurate Skeleton? Select People / Correct Joints';
+  const help = document.createElement('p'); help.className = 'hint'; help.textContent = 'In box mode, drag around each person, then choose Extract from Selected Regions. In joint mode, pick a person and joint, then click its position on the image. Mark visible joints only.';
   const bar = document.createElement('div'); bar.className = 'compact-actions';
-  const mode = document.createElement('select'); mode.setAttribute('aria-label','标注模式'); mode.append(new Option('框选人物（拖动）','box'),new Option('修正关节（点击）','point'));
-  const person = document.createElement('select'); person.setAttribute('aria-label','标注人物');
-  const joint = document.createElement('select'); joint.setAttribute('aria-label','待标记关节');
+  const mode = document.createElement('select'); mode.setAttribute('aria-label','Annotation Mode'); mode.append(new Option('Select People (Drag)','box'),new Option('Correct Joints (Click)','point'));
+  const person = document.createElement('select'); person.setAttribute('aria-label','Person to Annotate');
+  const joint = document.createElement('select'); joint.setAttribute('aria-label','Joint to Mark');
   ORDER.forEach((name,index) => joint.append(new Option(names[index],name)));
   const button = (text, fn) => { const node = document.createElement('button'); node.type='button'; node.textContent=text; node.onclick=fn; return node; };
-  const add = button('新增标注人物', () => { if(people.length>=9)return; people.push({id:`manual-${people.length+1}`,points:{}}); refreshPeople(people.length-1); mode.value='point'; edited=true; onChange(); });
-  const removePoint = button('清除此关节', () => { if(people[Number(person.value)]) { delete people[Number(person.value)].points[joint.value];edited=true;render();onChange(); } });
-  const clear = button('清空选框', () => { boxes=[];render(); });
-  const whole = button('整张图作为单人区域', () => { boxes=[[0,0,width,height]];render(); });
+  const add = button('Add Person to Annotate', () => { if(people.length>=9)return; people.push({id:`manual-${people.length+1}`,points:{}}); refreshPeople(people.length-1); mode.value='point'; edited=true; onChange(); });
+  const removePoint = button('Clear This Joint', () => { if(people[Number(person.value)]) { delete people[Number(person.value)].points[joint.value];edited=true;render();onChange(); } });
+  const clear = button('Clear Regions', () => { boxes=[];render(); });
+  const whole = button('Use Full Image for One Person', () => { boxes=[[0,0,width,height]];render(); });
   bar.append(mode,person,joint,add,removePoint,clear,whole);
-  const canvas = document.createElementNS(ns,'svg');canvas.setAttribute('viewBox',`0 0 ${width} ${height}`);canvas.setAttribute('role','img');canvas.setAttribute('aria-label','在来源图上框选人物或修正关节');canvas.style.touchAction='none';
+  const canvas = document.createElementNS(ns,'svg');canvas.setAttribute('viewBox',`0 0 ${width} ${height}`);canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Select people or correct joints on the source image');canvas.style.touchAction='none';
   const image=document.createElementNS(ns,'image');image.setAttribute('href',`/anyangle-studio/assets/${encodeURIComponent(asset.name)}`);image.setAttribute('width',width);image.setAttribute('height',height);
   const overlay=document.createElementNS(ns,'g');overlay.style.pointerEvents='none';canvas.append(image,overlay);
   const count=document.createElement('p');count.className='hint';
@@ -44,9 +44,9 @@ export function installGalleryKeypoints(container, asset, onChange) {
     const points=people[Number(person.value)]?.points||{};
     for(const [i,[a,b]] of LIMBS.entries())if(points[ORDER[a]]&&points[ORDER[b]])shape('line',{x1:points[ORDER[a]][0],y1:points[ORDER[a]][1],x2:points[ORDER[b]][0],y2:points[ORDER[b]][1],stroke:COLORS[i],'stroke-width':5});
     ORDER.forEach((name,index)=>{if(points[name])shape('circle',{cx:points[name][0],cy:points[name][1],r:name===joint.value?10:6,fill:COLORS[index],stroke:'#111','stroke-width':2});});
-    count.textContent=`${boxes.length} 个人物选框 · 当前人物 ${Object.keys(points).length} 个可见关节`;
+    count.textContent=`${boxes.length} regions · Current person has ${Object.keys(points).length} visible joints`;
   }
-  function refreshPeople(index=0){person.replaceChildren(...people.map((row,i)=>new Option(`人物 ${i+1}`,i)));person.value=String(index);render();}
+  function refreshPeople(index=0){person.replaceChildren(...people.map((row,i)=>new Option(`Person ${i+1}`,i)));person.value=String(index);render();}
   function coordinate(event){const point=canvas.createSVGPoint();point.x=event.clientX;point.y=event.clientY;const at=point.matrixTransform(canvas.getScreenCTM().inverse());return [Math.max(0,Math.min(width-.01,at.x)),Math.max(0,Math.min(height-.01,at.y))];}
   canvas.onpointerdown=event=>{if(event.button!==0)return;const at=coordinate(event);if(mode.value==='point'){
     const row=people[Number(person.value)];if(!row)return;row.points[joint.value]=at;edited=true;render();onChange();

@@ -1,4 +1,4 @@
-import { uuid } from '../uuid.mjs?v=20261010lan1';
+import { uuid } from '../uuid.mjs?v=20261116en';
 
 // Stable role identity is independent of layer order, active rig and image index.
 export const ACTOR_COLORS = ['#64cde1', '#f5b66f', '#b59bef', '#92d79f', '#f08cab', '#8faaf4', '#d5d677', '#70d9c7', '#d9a58b'];

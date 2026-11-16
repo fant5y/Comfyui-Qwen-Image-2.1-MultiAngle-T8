@@ -1,4 +1,4 @@
-import { uuid } from '../uuid.mjs?v=20261010lan1';
+import { uuid } from '../uuid.mjs?v=20261116en';
 
 export function reconstructionGraph(reference, models, seed = 46, keepBackground = false) {
   const node = (class_type, inputs) => ({ class_type, inputs });

@@ -1,33 +1,33 @@
-import { createActor, bindActor, ensureActors } from './actors.mjs?v=20261010lan1';
-import { poseCopyIssue } from './openpose.mjs?v=20261009v160';
-import { addReference, newUse, upgradeReferences, libraryManifest } from './reference-library.mjs?v=20261029v180';
+import { createActor, bindActor, ensureActors } from './actors.mjs?v=20261116en';
+import { poseCopyIssue } from './openpose.mjs?v=20261116en';
+import { addReference, newUse, upgradeReferences, libraryManifest } from './reference-library.mjs?v=20261116en';
 
 const clone = value => structuredClone(value);
 
 // Detection slots are explicit: an empty target is ignored, "new" creates one role.
 export function prepareGalleryPose(scene, detection, mapping, options = {}) {
-  if (!Array.isArray(mapping) || mapping.length !== detection.people?.length) throw new Error('人物映射与检测结果不一致');
-  if (!['human', 'empty'].includes(scene.source?.kind)) throw new Error('请先切换到人偶场景，再复制图库动作；也可直接使用静态 POSE 引导图');
+  if (!Array.isArray(mapping) || mapping.length !== detection.people?.length) throw new Error('Character assignments do not match the detected people.');
+  if (!['human', 'empty'].includes(scene.source?.kind)) throw new Error('Switch to a mannequin scene to copy the pose, or use the static pose guide directly.');
   const result = clone(scene), assignments = [], seen = new Set();
   ensureActors(result);
   for (const [index, target] of mapping.entries()) {
     if (!target) continue;
     const person = detection.people[index], issue = poseCopyIssue(person.points || {});
-    if (issue) throw new Error(`检测人物 ${index + 1}：${issue}`);
+    if (issue) throw new Error(`Detected person ${index + 1}: ${issue}`);
     let actor;
     if (target === 'new') {
       actor = createActor(result.actors.length); result.actors.push(actor);
     } else {
       actor = result.actors.find(role => role.id === target);
-      if (!actor || actor.visible === false || actor.locked) throw new Error('所选人物不可编辑，请重新选择目标');
-      if (seen.has(target)) throw new Error('同一个人物不能接收两套动作，请分别指定目标');
+      if (!actor || actor.visible === false || actor.locked) throw new Error('The selected character cannot be edited. Choose another target.');
+      if (seen.has(target)) throw new Error('Assign each pose to a different character.');
     }
     seen.add(actor.id);
     assignments.push({ actorId: actor.id, person: clone(person), index });
   }
-  if (!assignments.length) throw new Error('请至少指定一个目标人物');
+  if (!assignments.length) throw new Error('Assign at least one target character.');
   const touches = (result.contacts || []).filter(contact => contact.actors?.some(id => seen.has(id)));
-  if (touches.length && !options.releaseContacts) throw new Error(`这些人物有 ${touches.length} 项接触关系，请确认解除后再复制`);
+  if (touches.length && !options.releaseContacts) throw new Error(`Confirm removal of ${touches.length} contact anchors before copying the pose.`);
   result.contacts = (result.contacts || []).filter(contact => !contact.actors?.some(id => seen.has(id)));
   if (options.matchLayout) {
     const heights = assignments.filter(row => row.person.fullBody && row.person.bbox).map(row => row.person.bbox[3] - row.person.bbox[1]).filter(value => value > 0);
@@ -100,10 +100,10 @@ export function addGalleryReference(scene, asset, source, target) {
 }
 
 export function galleryViewPlan(scene, rows, target, mode = 'references-only') {
-  if (!Array.isArray(rows) || !rows.length || rows.length > 256) throw new Error('请选择 1–256 个实际视角');
-  if (!['references-only', 'guided'].includes(mode)) throw new Error('未知图库批量方式');
+  if (!Array.isArray(rows) || !rows.length || rows.length > 256) throw new Error('Select 1–256 available views.');
+  if (!['references-only', 'guided'].includes(mode)) throw new Error('Unknown gallery batch mode');
   const base = clone(scene), selected = clone(rows), mapping = clone(target);
-  if (mapping.kind === 'actors' && (!mapping.ids.length || mapping.ids.some(id => !base.actors?.some(actor => actor.id === id && actor.visible !== false)))) throw new Error('批量目标人物已改变，请重新选择');
+  if (mapping.kind === 'actors' && (!mapping.ids.length || mapping.ids.some(id => !base.actors?.some(actor => actor.id === id && actor.visible !== false)))) throw new Error('The batch target characters changed. Select them again.');
   upgradeReferences(base);
   // Each task gets one selected gallery view. Other references and draft text remain frozen.
   for (const item of base.referenceLibrary.items) {
@@ -115,7 +115,7 @@ export function galleryViewPlan(scene, rows, target, mode = 'references-only') {
   base.conditioning.model = 'base'; base.referenceLibrary.mode = mode;
   const keys = new Set();
   for (const row of selected) {
-    if (!row.asset?.name || !row.source?.viewId || !row.source.hash || keys.has(row.source.viewId)) throw new Error('批量包含重复或未就绪的视角');
+    if (!row.asset?.name || !row.source?.viewId || !row.source.hash || keys.has(row.source.viewId)) throw new Error('The batch contains duplicate or unavailable views.');
     keys.add(row.source.viewId);
   }
   return { count: selected.length, *views() {
@@ -123,7 +123,7 @@ export function galleryViewPlan(scene, rows, target, mode = 'references-only') {
       const current = clone(base);
       addGalleryReference(current, row.asset, row.source, mapping);
       const manifest = libraryManifest(current);
-      if (manifest.missing.length) throw new Error(`参考素材缺失：${manifest.missing.join('、')}`);
+      if (manifest.missing.length) throw new Error(`Missing references: ${manifest.missing.join(', ')}`);
       yield { scene: current, label: row.asset.label || row.source.viewId, gallerySource: clone(row.source) };
     }
   } };

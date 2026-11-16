@@ -35,7 +35,7 @@ def _model_paths():
         try:
             from huggingface_hub import hf_hub_download
         except ImportError as error:
-            raise RuntimeError("DWPose 首次下载需要 huggingface_hub；请在 ComfyUI Python 环境安装此依赖") from error
+            raise RuntimeError("The first DWPose download requires huggingface_hub in the ComfyUI Python environment.") from error
         local.mkdir(parents=True, exist_ok=True)
         for name in MODEL_FILES:
             if not (local / name).is_file():
@@ -48,7 +48,7 @@ def _sessions():
     try:
         import onnxruntime as ort
     except ImportError as error:
-        raise RuntimeError("DWPose 需要 onnxruntime；请在 ComfyUI Python 环境安装此依赖") from error
+        raise RuntimeError("DWPose requires onnxruntime in the ComfyUI Python environment.") from error
     paths = _model_paths()
     return tuple(ort.InferenceSession(str(path), providers=["CPUExecutionProvider"]) for path in paths)
 
@@ -76,7 +76,7 @@ def _detect_people(image, session):
     scores = output[:, 4] * output[:, 5]  # YOLOX class 0 is person.
     candidates = np.flatnonzero(scores > .3)
     if not len(candidates):
-        raise ValueError("DWPose 没有识别到人物；请换一张身体更清晰的照片")
+        raise ValueError("DWPose detected no people. Try a photo with a clearer view of the body.")
     boxes = np.concatenate((centers - sizes / 2, centers + sizes / 2), axis=1) / ratio
     selected = []
     for index in candidates[np.argsort(scores[candidates])[::-1]]:
@@ -96,7 +96,7 @@ def _detect_people(image, session):
         if not duplicate:
             selected.append((box, float(scores[index])))
     if not selected:
-        raise ValueError("DWPose 没有识别到人物；请换一张身体更清晰的照片")
+        raise ValueError("DWPose detected no people. Try a photo with a clearer view of the body.")
     return sorted(selected, key=lambda item: float(item[0][0]))
 
 
@@ -162,14 +162,14 @@ def _photo(photo):
     with Image.open(BytesIO(photo)) as source:
         image = ImageOps.exif_transpose(source).convert("RGB")
     if image.width * image.height > 32_000_000:
-        raise ValueError("照片超过 3200 万像素")
+        raise ValueError("The photo exceeds 32 million pixels.")
     return image
 
 
 def _pose_result(keypoints, scores, width, height):
     required = list(COCO_INDEX.values())
     if sum(scores[i] >= .3 for i in required) < 3:
-        raise ValueError("未提取到清晰的身体骨架；请换一张人物更清晰的照片")
+        raise ValueError("Could not extract a clear body skeleton. Try a photo with a clearer view of the person.")
     points = {name: [float(v) for v in keypoints[index]] for name, index in COCO_INDEX.items()}
     points["neck"] = [(points["rs"][axis] + points["ls"][axis]) / 2 for axis in (0, 1)]
     confidence = {name: float(scores[index]) for name, index in COCO_INDEX.items()}
@@ -211,7 +211,7 @@ def extract_regions(photo, regions):
     import numpy as np
     image = _photo(photo)
     if not isinstance(regions, list) or not 1 <= len(regions) <= 9:
-        raise ValueError("请框选1至9个人物区域")
+        raise ValueError("Select 1 to 9 regions.")
     boxes = []
     for region in regions:
         if (not isinstance(region, list) or len(region) != 4
@@ -219,7 +219,7 @@ def extract_regions(photo, regions):
                 or not 0 <= region[0] < region[2] <= image.width
                 or not 0 <= region[1] < region[3] <= image.height
                 or region[2] - region[0] < 16 or region[3] - region[1] < 16):
-            raise ValueError("人物区域必须在图片内且至少16×16像素")
+            raise ValueError("Each region must be within the image and at least 16 × 16 pixels.")
         boxes.append((region, 1.0))
     _, estimator = _sessions()
     people, png = _people_in_regions(image, np.asarray(image), boxes, estimator)

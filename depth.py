@@ -20,7 +20,7 @@ def _model_path():
     try:
         from huggingface_hub import hf_hub_download
     except ImportError as error:
-        raise RuntimeError("Depth Anything 3 首次下载需要 huggingface_hub") from error
+        raise RuntimeError("The first Depth Anything 3 download requires huggingface_hub.") from error
     local = Path(__file__).resolve().parent / ".local" / "da3"
     return Path(hf_hub_download(repo_id=MODEL_REPO, revision=MODEL_REVISION,
                                 filename=f"geometry_estimation/{MODEL_NAME}", local_dir=local))
@@ -40,12 +40,12 @@ def extract_depth(photo):
     try:
         from comfy_extras.nodes_depth_anything_3 import _run_da3, DA3Render
     except ImportError as error:
-        raise RuntimeError("当前 ComfyUI 缺少内置 Depth Anything 3 节点；请更新 ComfyUI") from error
+        raise RuntimeError("This ComfyUI version lacks the built-in Depth Anything 3 node. Update ComfyUI.") from error
 
     with Image.open(BytesIO(photo)) as source:
         image = ImageOps.exif_transpose(source).convert("RGB")
     if image.width * image.height > 32_000_000:
-        raise ValueError("照片超过 3200 万像素")
+        raise ValueError("The photo exceeds 32 million pixels.")
     image.thumbnail((1536, 1536), Image.Resampling.LANCZOS)
     tensor = torch.from_numpy(np.array(image, copy=True)).float().div_(255).unsqueeze(0)
     depth, _, sky = _run_da3(_model(), tensor, process_res=504)

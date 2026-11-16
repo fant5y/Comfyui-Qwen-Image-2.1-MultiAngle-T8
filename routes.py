@@ -25,7 +25,7 @@ def register_routes(store_factory):
             await asyncio.to_thread(repair_editor_assets)
             return web.json_response({"repaired": True})
         except (OSError, ValueError) as error:
-            return web.json_response({"error": f"修复失败：{error}。可在节点目录运行 python install_assets.py。"}, status=400)
+            return web.json_response({"error": f"Repair failed: {error}. You can run python install_assets.py from the node folder."}, status=400)
 
     @routes.get("/anyangle-studio/reconstruction-config")
     async def reconstruction_models(request):
@@ -48,15 +48,15 @@ def register_routes(store_factory):
             store = store_factory()
             name = payload.get("reference")
             if not isinstance(name, str) or not name.endswith(".png"):
-                raise ValueError("请先连接或导入参考原图")
+                raise ValueError("Connect or import a source image first.")
             photo = await asyncio.to_thread(store.read_asset, name)
             people, preview = await asyncio.to_thread(extract_people, photo)
             usable = [person for person in people if person["points"]]
             if not usable:
-                raise ValueError("未提取到清晰的身体骨架；请换一张人物更清晰的照片")
+                raise ValueError("Could not extract a clear body skeleton. Try a photo with a clearer view of the person.")
             person = max(usable, key=lambda item: item["score"] * max(1, (item["bbox"][2] - item["bbox"][0]) * (item["bbox"][3] - item["bbox"][1])))
             asset = await asyncio.to_thread(store.asset, preview, "png")
-            asset["label"] = "DWPose · 原图姿势"
+            asset["label"] = "DWPose · Source Pose"
             return web.json_response({"asset": asset, "points": person["points"], "visibleOnly": True,
                 "lowConfidence": person["lowConfidence"], "fullBody": person["fullBody"], "people": people,
                 "width": asset["width"], "height": asset["height"]})
@@ -85,7 +85,7 @@ def register_routes(store_factory):
                 else:
                     people, png = await asyncio.to_thread(extract_people, photo)
             asset = await asyncio.to_thread(store.asset, png, "png")
-            asset["label"] = "多人 OpenPose"
+            asset["label"] = "Multi-Person OpenPose"
             return web.json_response({"people": people, "asset": asset, "signature": signature,
                 "width": asset["width"], "height": asset["height"]})
         except (ValueError, TypeError, OSError, RuntimeError, UnidentifiedImageError) as error:
@@ -100,11 +100,11 @@ def register_routes(store_factory):
             store = store_factory()
             name = payload.get("reference")
             if not isinstance(name, str) or not name.endswith(".png"):
-                raise ValueError("请先连接或导入参考原图")
+                raise ValueError("Connect or import a source image first.")
             photo = await asyncio.to_thread(store.read_asset, name)
             png = await asyncio.to_thread(extract_depth, photo)
             asset = await asyncio.to_thread(store.asset, png, "png")
-            asset["label"] = "Depth Anything 3 · 原图深度"
+            asset["label"] = "Depth Anything 3 · Source Depth"
             return web.json_response({"asset": asset})
         except (ValueError, TypeError, OSError, RuntimeError, UnidentifiedImageError) as error:
             return web.json_response({"error": str(error)}, status=400)

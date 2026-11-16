@@ -50,7 +50,7 @@ export function detectSkeleton({data,width,height},diagnostics=null) {
         const index=Math.round(h/20)%18,delta=Math.min(Math.abs(h-index*20),360-Math.abs(h-index*20));
         if(index<14&&delta<8&&Math.max(r,g,b)>175)mask[i]=index;
     }
-    if(colored>count*.2||colored<30)throw Error('未识别到标准彩色骨架，请上传黑底 OpenPose 身体骨架图');
+    if(colored>count*.2||colored<30)throw Error('No standard colored skeleton detected. Upload an OpenPose body skeleton on a black background.');
     // Distance to the edge separates round joint markers from thin bones even
     // when a joint and a touching bone have the same palette color.
     const radii=new Float32Array(count);
@@ -146,7 +146,7 @@ export function detectSkeleton({data,width,height},diagnostics=null) {
     const originalCandidates=candidates.map(list=>list.slice());
     // Hand and face markers reuse body colors. A body joint must participate
     // in the complete body connection graph, not merely have the right hue.
-    if(candidates.some(list=>list.length>160))throw Error('彩色标记过密，无法可靠区分身体骨架');
+    if(candidates.some(list=>list.length>160))throw Error('The colored markers are too dense to identify body joints reliably.');
     let candidateId=0;for(const list of candidates)for(const item of list)item.id=candidateId++;
     const scores=new Map();
     const score=(a,b,color)=>{
@@ -171,7 +171,7 @@ export function detectSkeleton({data,width,height},diagnostics=null) {
     for(let color=0;color<LIMBS.length;color++) {
         const [parent,child]=LIMBS[color],options=candidates[child];
         const best=matchJoints(people.map(person=>person[parent]),options,(a,b)=>score(a,b,color));
-        if(!best)throw Error('骨架关节缺失、重叠或配色不匹配，暂未应用；请换完整的 OpenPose 骨架图');
+        if(!best)throw Error('Joints are missing, overlapping, or use different colors. Choose a complete OpenPose skeleton image.');
         people.forEach((person,index)=>person[child]=best[index]);
     }
     const complete=people.map(person=>Object.fromEntries(ORDER.map((name,index)=>[name,person[index].point])));
@@ -242,7 +242,7 @@ function recoverOccluded(original,ends,pixelScore,width,height,tolerance,data) {
         }
         if(n>=12&&n<radius*radius*.5)pools[0].push({point:[sx/n,sy/n],radius:2,estimated:true,from:root});
     }
-    if(pools.some(list=>list.length>200))throw Error('骨架标记过密，无法可靠区分身体');
+    if(pools.some(list=>list.length>200))throw Error('The markers are too dense to distinguish body joints reliably.');
     let id=0;for(const list of pools)for(const p of list)p.id=id++;
     const memo=new Map();
     function solve(joint,point) {
@@ -268,7 +268,7 @@ function recoverOccluded(original,ends,pixelScore,width,height,tolerance,data) {
         const result={total,visible,nodes,estimated};memo.set(key,result);return result;
     }
     const solutions=pools[1].map(root=>solve(1,root)).filter(s=>s&&s.visible>=9&&s.total>=8.5).sort((a,b)=>b.total-a.total);
-    if(!solutions.length)throw Error('可见的身体关节不足，无法可靠补全；请使用更完整的骨架图');
+    if(!solutions.length)throw Error('Too few body joints are visible. Use a more complete skeleton image.');
     const chosen=[];
     for(const solution of solutions){
         if(chosen.some(other=>Object.keys(solution.nodes).filter(k=>distance(solution.nodes[k].point,other.nodes[k].point)<tolerance*2).length>2))continue;
@@ -278,7 +278,7 @@ function recoverOccluded(original,ends,pixelScore,width,height,tolerance,data) {
     const ordered=chosen.slice().sort((a,b)=>a.nodes[1].point[0]-b.nodes[1].point[0]);
     people.inferredByPerson=ordered.map(solution=>[...new Set(solution.estimated.map(index=>ORDER[index]))]);
     const inferred=[...new Set(people.inferredByPerson.flat())];
-    people.warnings=['重叠或裁切的关节已近似补全，请检查姿势'];
+    people.warnings=['Overlapping or cropped joints were estimated. Check the pose.'];
     people.inferredJoints=inferred;
     return people;
 }
@@ -335,7 +335,7 @@ export function liftOpenPose(points, rest, flips = {}) {
     const imageLength = ([, a, b]) => length(sub(p2[b], p2[a]));
     // The second-least foreshortened segment sets pixels→world, tolerating one odd proportion.
     const ratios = LIFT_SEGMENTS.filter(seg => imageLength(seg) > 1e-3).map(seg => restLength(seg) / imageLength(seg)).sort((a, b) => a - b);
-    if (!ratios.length) throw Error('骨架关节重合，无法换算成人偶姿势');
+    if (!ratios.length) throw Error('Overlapping joints prevent transfer to a mannequin.');
     const scale = ratios[Math.min(1, ratios.length - 1)];
     const depth = seg => Math.sqrt(Math.max(0, restLength(seg) ** 2 - (scale * imageLength(seg)) ** 2));
     const sign = key => {
@@ -388,11 +388,11 @@ export const WORLD_KEYPOINT_NAMES = {
 
 // Copy only observed segments in the image plane, without inventing their depth.
 export function poseCopyIssue(points) {
-    if (['ls', 'rs', 'neck'].some(key => !points[key])) return '缺少左右肩或颈部，保留原图骨架';
-    if (Object.values(points).some(point => !Array.isArray(point) || point.length < 2 || !point.slice(0, 2).every(Number.isFinite))) return '关节坐标无效，保留原图骨架';
+    if (['ls', 'rs', 'neck'].some(key => !points[key])) return 'Shoulders or neck missing. Keeping the source skeleton.';
+    if (Object.values(points).some(point => !Array.isArray(point) || point.length < 2 || !point.slice(0, 2).every(Number.isFinite))) return 'Invalid joint coordinates. Keeping the source skeleton.';
     const pairs = [['rs', 'ls'], ['neck', 'head'], ...LIFT_SEGMENTS.slice(1).map(([, from, to]) => [from, to])];
-    if (points.lh && points.rh) { pairs.push(['rh', 'lh']); if (Math.hypot(...mid(points.lh, points.rh).slice(0, 2).map((v, i) => v - points.neck[i])) < 1e-3) return '躯干关节重合，保留原图骨架'; }
-    if (pairs.some(([a, b]) => points[a] && points[b] && Math.hypot(points[b][0] - points[a][0], points[b][1] - points[a][1]) < 1e-3)) return '关节重合，保留原图骨架';
+    if (points.lh && points.rh) { pairs.push(['rh', 'lh']); if (Math.hypot(...mid(points.lh, points.rh).slice(0, 2).map((v, i) => v - points.neck[i])) < 1e-3) return 'Overlapping torso joints. Keeping the source skeleton.'; }
+    if (pairs.some(([a, b]) => points[a] && points[b] && Math.hypot(points[b][0] - points[a][0], points[b][1] - points[a][1]) < 1e-3)) return 'Overlapping joints. Keeping the source skeleton.';
     return null;
 }
 export function copyVisiblePose(points, rest) {
@@ -400,7 +400,7 @@ export function copyVisiblePose(points, rest) {
     const p2 = Object.fromEntries(Object.entries(points).map(([key, [x, y]]) => [key, [x, -y]]));
     const direction = (a, b) => {
         const vector = sub(p2[b], p2[a]), distance = length(vector);
-        if (distance < 1e-3) throw Error('照片关节重合，无法复制该肢体方向');
+        if (distance < 1e-3) throw Error('The photo has overlapping joints. The limb direction could not be copied.');
         return vector.map(value => value / distance);
     };
     const step = (base, a, b) => add(base, [...direction(a, b).map(value => value * length(sub(rest[b], rest[a]))), 0]);

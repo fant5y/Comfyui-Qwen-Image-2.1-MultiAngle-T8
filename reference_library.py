@@ -13,7 +13,7 @@ def validate_library(scene):
     if library.get("mode", "guided") not in ("guided", "references-only", "text"):
         raise ValueError("Unknown reference workflow mode")
     if library.get("mode", "guided") != "guided" and scene.get("conditioning", {}).get("model", "anyangle") != "base":
-        raise ValueError("仅参考 / 纯文本创作使用 Qwen 底模，请关闭 AnyAngle LoRA")
+        raise ValueError("References Only and Text Only use the Qwen Base Model. Turn off the AnyAngle LoRA.")
     resolution = library.get("firstResolution", 0)
     if type(resolution) is not int or not 0 <= resolution <= 4096:
         raise ValueError("Invalid first-reference resolution")
@@ -99,20 +99,20 @@ def library_manifest(scene):
     references, excluded, by_name = [], [], {}
     actor_ids = {actor["id"] for actor in scene.get("actors", []) if actor.get("visible", True)}
     if anyangle and mode == "guided" and scene.get("reference"):
-        references.append({"asset": scene["reference"], "referenceIds": ["scene-source"], "labels": ["场景来源图"], "usages": [], "actorIds": []})
+        references.append({"asset": scene["reference"], "referenceIds": ["scene-source"], "labels": ["Scene Source Image"], "usages": [], "actorIds": []})
         by_name[scene["reference"]["name"]] = 0
     for item in library["items"]:
         reason = None
         uses = [{**use, "targetText": target_text(scene, use["target"])} for use in item["usages"] if use.get("enabled", True)]
         uses = [use for use in uses if use["targetText"]]
         if not item.get("enabled", True):
-            reason = "素材已停用"
+            reason = "Reference disabled"
         elif mode == "text":
-            reason = "纯文本模式不发送图片"
+            reason = "Text Only excludes images"
         elif not uses:
-            reason = "用途已停用或目标待重新分配"
+            reason = "Role disabled or target needs reassignment"
         elif not item.get("asset") or item.get("missing"):
-            reason = "连线或素材缺失，请重新读取或明确使用保存版本"
+            reason = "Missing connection or reference. Read connections again or choose Use Saved Version."
         if reason:
             excluded.append({"id": item["id"], "label": item.get("label") or item["id"], "reason": reason})
             continue
@@ -144,8 +144,8 @@ def library_manifest(scene):
         image_index += 1
         reference["resolution"] = 0 if anyangle and "scene-source" in reference["referenceIds"] else library.get("firstResolution", 0) if mode == "references-only" and index == 0 else "reference"
     count = len(references) + (1 if guide else 0)
-    warnings = ["超过 Qwen Image 2.1 官方建议的 10 图范围，图片仍完整发送；请留意效果和显存。"] if count > 10 else []
-    missing = [entry["label"] for entry in excluded if entry["reason"].startswith("连线")]
+    warnings = ["Qwen Image 2.1 recommends up to 10 images. All images will be sent. Monitor output quality and VRAM use."] if count > 10 else []
+    missing = [entry["label"] for entry in excluded if entry["reason"].startswith("Missing connection")]
     kind = "coarse" if anyangle else settings.get("guide", "coarse")
     static = kind != "coarse" and (settings.get("map") and settings.get("mapKind", kind) == kind
               or kind == "canny" and scene.get("reference") and settings.get("mapOrigin") != "auto")

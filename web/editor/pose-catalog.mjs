@@ -1,10 +1,10 @@
-import { editableActors, bindActor } from './actors.mjs?v=20261010lan1';
+import { editableActors, bindActor } from './actors.mjs?v=20261116en';
 
 const clone = value => structuredClone(value);
 const handBone = name => /^(hand|thumb|index|middle|ring|pinky)_/.test(name);
 export function poseForActor(current, incoming, { part = 'full', preserveHands = false } = {}) {
-  if (!incoming?.bones || typeof incoming.bones !== 'object') throw new Error('姿势缺少骨骼数据');
-  if (!['full','body','arms','legs','hands'].includes(part)) throw new Error('未知动作范围');
+  if (!incoming?.bones || typeof incoming.bones !== 'object') throw new Error('The pose is missing rig data.');
+  if (!['full','body','arms','legs','hands'].includes(part)) throw new Error('Unknown pose scope');
   const match = name => part === 'full' || part === 'body' && !handBone(name)
     || part === 'hands' && handBone(name) || part === 'arms' && /^(clavicle|upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)_/.test(name)
     || part === 'legs' && /^(thigh|calf|foot|ball)_/.test(name);
@@ -13,7 +13,7 @@ export function poseForActor(current, incoming, { part = 'full', preserveHands =
   for (const name of Object.keys(next.bones)) if (match(name) && !(preserveHands && handBone(name))) delete next.bones[name];
   for (const [name, values] of Object.entries(incoming.bones)) {
     if (['__proto__','constructor','prototype'].includes(name) || !Array.isArray(values) || values.length !== 3 || !values.every(Number.isFinite))
-      throw new Error('姿势包含无效的骨骼旋转');
+      throw new Error('The pose contains invalid bone rotations.');
     if (match(name) && !(preserveHands && handBone(name))) next.bones[name] = [...values];
   }
   if (preserveHands) for (const [name, values] of Object.entries(current?.bones || {})) if (handBone(name)) next.bones[name] = [...values];
@@ -25,7 +25,7 @@ export function poseForActor(current, incoming, { part = 'full', preserveHands =
     for(const name of Object.keys(values))if(replace(name))delete values[name];
     if(part==='full' && preserveHands)for(const[name,value]of Object.entries(current?.[field] || {}))if(handBone(name))values[name]=clone(value);
     if(field==='positionDeltas')for(const[name,value]of Object.entries(incoming.positionDeltas || {})){
-      if(['__proto__','constructor','prototype'].includes(name)||!Array.isArray(value)||value.length!==3||!value.every(Number.isFinite))throw new Error('姿势包含无效的骨骼位移');
+      if(['__proto__','constructor','prototype'].includes(name)||!Array.isArray(value)||value.length!==3||!value.every(Number.isFinite))throw new Error('The pose contains invalid bone offsets.');
       if(replace(name))values[name]=clone(value);
     }
     if(Object.keys(values).length)next[field]=values;else delete next[field];
@@ -35,13 +35,13 @@ export function poseForActor(current, incoming, { part = 'full', preserveHands =
 }
 
 export function applyCatalogPose(scene, entry, options = {}) {
-  if (scene.source?.kind !== 'human') throw new Error('姿势库需要可编辑人偶；请先切换到人偶场景');
+  if (scene.source?.kind !== 'human') throw new Error('Switch to a posable mannequin before applying a library pose.');
   const result = clone(scene), roles = editableActors(result, options.scope || 'current');
-  if (!roles.length) throw new Error('请先选择可见且未锁定的人物');
+  if (!roles.length) throw new Error('Select visible, unlocked characters first.');
   const ids = new Set(roles.map(role => role.id));
-  if (entry.kind === 'composition' && roles.length !== entry.slots.length) throw new Error(`此编排需要明确选中 ${entry.slots.length} 位可编辑人物，不会自动增删人物`);
+  if (entry.kind === 'composition' && roles.length !== entry.slots.length) throw new Error(`Select exactly ${entry.slots.length} editable characters for this arrangement.`);
   const contacts = (result.contacts || []).filter(contact => contact.actors?.some(id => ids.has(id)));
-  if (contacts.length && !options.releaseContacts) throw new Error(`此动作会解除 ${contacts.length} 项接触关系，请先勾选允许解除`);
+  if (contacts.length && !options.releaseContacts) throw new Error(`Confirm removal of ${contacts.length} contact anchors to apply this pose.`);
   const origin = clone(roles[0].transform);
   for (const [index,role] of roles.entries()) {
     const slot = entry.kind === 'composition' ? entry.slots[index] : null;

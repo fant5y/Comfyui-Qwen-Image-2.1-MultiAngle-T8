@@ -1,4 +1,4 @@
-import { GALLERY_PINYIN } from './gallery-pinyin.mjs?v=20261029v180';
+import { GALLERY_PINYIN } from './gallery-pinyin.mjs?v=20261116en';
 // An offline action vocabulary: precise matches stay separate from camera-view filters.
 export const ACTIONS = [
   ['站姿',['站姿','站立','站着','站立姿势','立姿'],['站姿','站立','站着','立姿'],'zhanzi zhanli zz zl'],

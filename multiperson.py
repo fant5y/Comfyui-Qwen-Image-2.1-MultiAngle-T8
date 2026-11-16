@@ -59,7 +59,7 @@ def canonical_scene(raw):
         if not isinstance(actor_id, str) or not actor_id or len(actor_id) > 128 or actor_id in ids:
             raise ValueError("Actor IDs must be unique nonempty strings")
         ids.add(actor_id)
-        actor.setdefault("label", f"角色 {index + 1:02d}")
+        actor.setdefault("label", f"Character {index + 1:02d}")
         actor.setdefault("editorColor", COLORS[index % len(COLORS)])
         if not isinstance(actor["label"], str) or not isinstance(actor["editorColor"], str):
             raise ValueError(f"Invalid label or color for actor {actor_id}")
@@ -110,7 +110,7 @@ def canonical_scene(raw):
         if not isinstance(prop_id, str) or not prop_id or len(prop_id) > 128 or prop_id in prop_ids or prop_id in ids:
             raise ValueError("Prop IDs must be unique nonempty strings")
         prop_ids.add(prop_id)
-        prop.setdefault("label", f"道具 {index + 1}")
+        prop.setdefault("label", f"Prop {index + 1}")
         if not isinstance(prop["label"], str):
             raise ValueError("Invalid prop label")
         for key in ("visible", "locked"):
@@ -226,7 +226,7 @@ def build_manifest(scene):
     return {"version": 1, "imageOrder": order, "guide": {"index": guide_index,
             "width": scene.get("width"), "height": scene.get("height")}, "references": references,
             "actors": records, "imageCount": count,
-            "warnings": ["超过 Qwen Image 2.1 官方说明的 10 张参考图范围，效果未验证。"] if count > 10 else []}
+            "warnings": ["Qwen Image 2.1 recommends up to 10 reference images. Results with more images can vary."] if count > 10 else []}
 
 
 def source_person_text(source):

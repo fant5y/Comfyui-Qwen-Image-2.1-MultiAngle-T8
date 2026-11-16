@@ -1,4 +1,4 @@
-import { guideSource } from './guides.mjs?v=20261009v160';
+import { guideSource } from './guides.mjs?v=20261116en';
 
 export function supportsCameraBatch(scene) {
   const kind = guideSource(scene).kind;
@@ -10,17 +10,17 @@ const wrapAngle = value => ((value + 180) % 360 + 360) % 360 - 180;
 export function parseAngleList(value) {
   const values = typeof value === 'string' ? value.trim().split(/[,，、;；\s]+/).filter(Boolean).map(angle => Number(angle.replace(/°$/, '') || NaN)) : value;
   if (!Array.isArray(values) || !values.length || !values.every(angle => typeof angle === 'number' && Number.isFinite(angle)))
-    throw new Error('请输入角度列表，例如 45, -45, 90, -90；用逗号或空格分隔');
+    throw new Error('Enter a list such as 45, -45, 90, -90. Separate angles with commas or spaces.');
   return [...values];
 }
 
 export function cameraBatchPlan(scene, settings) {
-  if (!supportsCameraBatch(scene)) throw new Error('批量机位需要三维主体及粗图、三维人偶骨架或三维 Canny；原图结构图保持原机位。');
+  if (!supportsCameraBatch(scene)) throw new Error('Batch views require a 3D subject with a coarse render, 3D mannequin skeleton, or 3D Canny guide. Source-derived guides keep the original view.');
   const base = structuredClone(scene);
   if (settings.mode === 'saved') {
-    if (!base.shots.length) throw new Error('请先收藏至少一个机位');
+    if (!base.shots.length) throw new Error('Save at least one camera view first.');
     return { count: base.shots.length, *views() {
-      for (const shot of base.shots) yield { label: shot.name || '收藏机位', scene: { ...structuredClone(base),
+      for (const shot of base.shots) yield { label: shot.name || 'Saved View', scene: { ...structuredClone(base),
         camera: { ...base.camera, ...shot.camera }, width: shot.width, height: shot.height,
         ...(Array.isArray(shot.cameraTarget) && shot.cameraTarget.length === 3 && shot.cameraTarget.every(Number.isFinite)
           ? { cameraTarget: structuredClone(shot.cameraTarget) } : {}) } };
@@ -32,21 +32,21 @@ export function cameraBatchPlan(scene, settings) {
       for (const value of angles) {
         const angle = wrapAngle(value), current = structuredClone(base);
         current.camera.azimuth = angle;
-        yield { label: `方位角 ${Number(angle.toFixed(6))}°`, scene: current };
+        yield { label: `Azimuth ${Number(angle.toFixed(6))}°`, scene: current };
       }
     } };
   }
   const { start, end, step } = settings;
   if (![start, end, step].every(Number.isFinite) || step === 0 || (end - start) * step < 0)
-    throw new Error('请输入有限的起止角度和非零步长；步长方向需与起止角度一致');
+    throw new Error('Enter finite start and end angles and a nonzero step in the same direction as the range.');
   let count = Math.floor((end - start) / step + 1e-9) + 1;
-  if (!Number.isSafeInteger(count) || count < 1) throw new Error('机位数量超出可计算范围，请调整步长');
+  if (!Number.isSafeInteger(count) || count < 1) throw new Error('Too many views to calculate. Adjust the step.');
   if (count > 1 && Math.abs(wrapAngle(start + (count - 1) * step) - wrapAngle(start)) < 1e-7) count--;
   return { count, *views() {
     for (let i = 0; i < count; i++) {
       const angle = wrapAngle(start + i * step), current = structuredClone(base);
       current.camera.azimuth = angle;
-      yield { label: `方位角 ${Number(angle.toFixed(6))}°`, scene: current };
+      yield { label: `Azimuth ${Number(angle.toFixed(6))}°`, scene: current };
     }
   } };
 }
