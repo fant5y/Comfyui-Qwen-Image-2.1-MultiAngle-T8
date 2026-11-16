@@ -368,6 +368,19 @@ export class AnimalMannequin {
     }
   }
 
+  isLimbBend(joint) {
+    return [...this.targets.values()].some(({ chain }) => chain.slice(1, -1).includes(joint));
+  }
+
+  dragLimbBend(joint, destination) {
+    const parent = joint.parent;
+    const current = joint.position.clone().applyQuaternion(parent.quaternion).normalize();
+    const wanted = parent.parent.worldToLocal(destination).sub(parent.position);
+    if (wanted.lengthSq() < 1e-8) return;
+    const rotation = new THREE.Quaternion().setFromUnitVectors(current, wanted.normalize());
+    parent.quaternion.premultiply(rotation).normalize();
+  }
+
   dispose() {
     this.root.removeFromParent();
     this.handles.removeFromParent();

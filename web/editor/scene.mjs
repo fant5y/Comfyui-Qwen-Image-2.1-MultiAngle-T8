@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.mjs';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116posefit';
+import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116limbbend';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 import { PoseViewerCore } from '../vendor/vnccs_pose_studio_core.mjs?v=20261031resize';
 import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs';
@@ -933,15 +933,16 @@ export class StudioScene {
           const { name, target } = hit.object.userData;
           this.callbacks.select?.(target ? name + ' root' : name);
           const pose = this.animal.pose();
-          if (target) {
+          const joint = this.animal.joints.get(name);
+          const limbBend = this.animal.isLimbBend(joint);
+          drag = { pointerId: event.pointerId, animal: this.animal, joint, pose, x: event.clientX, y: event.clientY };
+          if (target || limbBend) {
             const center = hit.object.position.clone();
             const normal = this.viewer.camera.getWorldDirection(new THREE.Vector3());
             const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center);
             const point = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
-            if (!point) return;
-            drag = { pointerId: event.pointerId, animal: this.animal, animalTarget: name, plane, offset: center.sub(point), pose, x: event.clientX, y: event.clientY };
-          } else {
-            drag = { pointerId: event.pointerId, animal: this.animal, joint: this.animal.joints.get(name), pose, x: event.clientX, y: event.clientY };
+            if (!point) { drag = null; return; }
+            Object.assign(drag, { plane, offset: center.sub(point), animalTarget: target ? name : null });
           }
           canvas.setPointerCapture(event.pointerId);
           return;
@@ -986,7 +987,7 @@ export class StudioScene {
       if (this.mode === 'camera' || drag) event.stopImmediatePropagation();
       if (!drag || event.pointerId !== drag.pointerId) return;
       if (drag.animal && !drag.changed && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 3) return;
-      if (drag.joint) {
+      if (drag.joint && !drag.plane) {
         const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
         beginChange();
         drag.animal.restore(drag.pose);
@@ -1000,14 +1001,16 @@ export class StudioScene {
         this.viewer.requestRender();
         return;
       }
-      if (drag.animalTarget) {
+      if (drag.animal) {
         const rect = canvas.getBoundingClientRect(), raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), this.viewer.camera);
         const point = raycaster.ray.intersectPlane(drag.plane, new THREE.Vector3());
         if (!point) return;
         beginChange();
         drag.animal.restore(drag.pose);
-        drag.animal.drag(drag.animalTarget, point.add(drag.offset));
+        const destination = point.add(drag.offset);
+        if (drag.animalTarget) drag.animal.drag(drag.animalTarget, destination);
+        else drag.animal.dragLimbBend(drag.joint, destination);
         drag.animal.update(this.animalSelection);
         this.viewer.requestRender();
         return;

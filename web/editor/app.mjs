@@ -1,5 +1,5 @@
-import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116posefit';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116jointdrag';
+import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116limbbend';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116limbbend';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116en';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116en';
@@ -9,7 +9,7 @@ import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges }
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116jointdrag';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116limbbend';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
 import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116rig';
@@ -529,7 +529,7 @@ function setMode(mode) {
   $('#use-view').hidden = mode !== 'edit';
   $('#stage-help').textContent = mode === 'camera' ? 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom'
     : mode === 'position' ? 'Select a character · Drag to place · Right-drag to orbit · Middle-drag to pan'
-    : studio.animal ? 'Click a joint for rings · Drag a joint to rotate or a gold handle to move the limb · Click empty space to deselect'
+    : studio.animal ? 'Click a joint for rings · Drag a knee or elbow to steer the bend · Drag a gold handle to move the paw or wing'
     : doc.source.kind === 'human' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan · Camera stays in place'
       : 'Right-drag to orbit · Middle-drag to pan · Set this view as the camera';
 }
