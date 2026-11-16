@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.mjs';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116limbbend';
+import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pelvis';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 import { PoseViewerCore } from '../vendor/vnccs_pose_studio_core.mjs?v=20261031resize';
 import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs';
@@ -936,13 +936,16 @@ export class StudioScene {
           const joint = this.animal.joints.get(name);
           const limbBend = this.animal.isLimbBend(joint);
           drag = { pointerId: event.pointerId, animal: this.animal, joint, pose, x: event.clientX, y: event.clientY };
-          if (target || limbBend) {
+          if (target || limbBend || name === 'Pelvis') {
             const center = hit.object.position.clone();
             const normal = this.viewer.camera.getWorldDirection(new THREE.Vector3());
             const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center);
             const point = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
             if (!point) { drag = null; return; }
             Object.assign(drag, { plane, offset: center.sub(point), animalTarget: target ? name : null });
+            if (name === 'Pelvis') {
+              drag.feet = this.animal.pelvisLegs.map(([leg, { tip }]) => [leg, tip.getWorldPosition(new THREE.Vector3())]);
+            }
           }
           canvas.setPointerCapture(event.pointerId);
           return;
@@ -1009,7 +1012,8 @@ export class StudioScene {
         beginChange();
         drag.animal.restore(drag.pose);
         const destination = point.add(drag.offset);
-        if (drag.animalTarget) drag.animal.drag(drag.animalTarget, destination);
+        if (drag.feet) drag.animal.dragPelvis(destination, drag.feet);
+        else if (drag.animalTarget) drag.animal.drag(drag.animalTarget, destination);
         else drag.animal.dragLimbBend(drag.joint, destination);
         drag.animal.update(this.animalSelection);
         this.viewer.requestRender();

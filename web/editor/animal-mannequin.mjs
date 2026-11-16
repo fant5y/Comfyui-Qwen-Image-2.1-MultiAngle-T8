@@ -8,6 +8,8 @@ export const ANIMAL_SHAPES = {
 };
 
 const Y = new THREE.Vector3(0, 1, 0);
+// Keep the translation in the same triplet format used by saved animal poses.
+const PELVIS_OFFSET = 'Pelvis offset';
 
 export class AnimalMannequin {
   constructor(shape) {
@@ -36,6 +38,11 @@ export class AnimalMannequin {
     if (shape === 'owl') this.owl();
     else if (shape === 'bunny') this.bunny();
     else this.quadruped(shape === 'feline');
+    const pelvis = this.joints.get('Pelvis');
+    this.pelvisRest = pelvis.position.clone();
+    this.pelvisLegs = [...this.targets].filter(([, { chain }]) => chain[0].parent === pelvis);
+    const leg = this.pelvisLegs[0][1].chain;
+    this.maxPelvisDrop = Math.min(Math.PI, leg.slice(1).reduce((length, joint) => length + joint.position.length(), 0) * 0.65);
     for (const [name] of this.joints) this.marker(name, false);
     for (const [name] of this.targets) this.marker(name, true);
     this.update();
@@ -272,6 +279,9 @@ export class AnimalMannequin {
 
   restore(pose = {}) {
     pose ||= {};
+    const drop = pose[PELVIS_OFFSET]?.[1];
+    this.joints.get('Pelvis').position.copy(this.pelvisRest);
+    if (Number.isFinite(drop)) this.joints.get('Pelvis').position.y += THREE.MathUtils.clamp(drop, -this.maxPelvisDrop, 0);
     for (const [name, joint] of this.joints) {
       const angles = Object.hasOwn(pose, name) ? pose[name] : null;
       joint.rotation.set(...(Array.isArray(angles) && angles.length === 3 && angles.every(Number.isFinite) ? angles : [0, 0, 0]));
@@ -279,7 +289,22 @@ export class AnimalMannequin {
   }
 
   pose() {
-    return Object.fromEntries(Array.from(this.joints, ([name, joint]) => [name, [joint.rotation.x, joint.rotation.y, joint.rotation.z]]));
+    const pose = Object.fromEntries(Array.from(this.joints, ([name, joint]) => [name, [joint.rotation.x, joint.rotation.y, joint.rotation.z]]));
+    const drop = this.joints.get('Pelvis').position.y - this.pelvisRest.y;
+    if (drop) pose[PELVIS_OFFSET] = [0, drop, 0];
+    return pose;
+  }
+
+  resetJoint(name) {
+    this.joints.get(name)?.rotation.set(0, 0, 0);
+    if (name === 'Pelvis') this.joints.get(name).position.copy(this.pelvisRest);
+  }
+
+  dragPelvis(destination, feet) {
+    const pelvis = this.joints.get('Pelvis');
+    const height = pelvis.parent.worldToLocal(destination).y;
+    pelvis.position.y = THREE.MathUtils.clamp(height, this.pelvisRest.y - this.maxPelvisDrop, this.pelvisRest.y);
+    for (const [name, position] of feet) this.drag(name, position);
   }
 
   applyAP10K(points, facing) {
