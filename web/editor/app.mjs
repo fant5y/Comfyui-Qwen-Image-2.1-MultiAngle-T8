@@ -40,6 +40,38 @@ const EMPTY_CANNY_WARNING = 'No Canny edges detected. Lower the thresholds or ch
 let batchRunning = false, batchController = null, batchViews = [], batchId = null;
 const batchReplies = new Map();
 const controls = new Map();
+
+const workspace = $('#workspace');
+for (const handle of workspace.querySelectorAll('[data-sidebar]')) {
+  const side = handle.dataset.sidebar;
+  const panel = workspace.querySelector(`.${side}-panel`);
+  const widthProperty = `--${side}-sidebar-width`;
+  const direction = side === 'left' ? 1 : -1;
+  const setWidth = width => {
+    const maxWidth = Math.floor(workspace.clientWidth * 0.34);
+    workspace.style.setProperty(widthProperty, `${Math.max(200, Math.min(maxWidth, width))}px`);
+  };
+  let drag;
+  handle.onpointerdown = event => {
+    if (event.button !== 0) return;
+    drag = { x: event.clientX, width: panel.offsetWidth };
+    handle.setPointerCapture(event.pointerId);
+  };
+  handle.onpointermove = event => {
+    if (drag && handle.hasPointerCapture(event.pointerId))
+      setWidth(drag.width + (event.clientX - drag.x) * direction);
+  };
+  handle.onlostpointercapture = () => { drag = null; };
+  const resetWidth = () => workspace.style.removeProperty(widthProperty);
+  handle.ondblclick = resetWidth;
+  handle.onkeydown = event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === 'Home') resetWidth();
+    else setWidth(panel.offsetWidth + (event.key === 'ArrowRight' ? 16 : -16) * direction);
+  };
+}
 let poseCatalog, galleryActions;
 
 function toast(message) {
@@ -258,7 +290,7 @@ function refresh() {
   $('#body-sliders').hidden = animal;
   $('#male-anatomy').hidden = !human || Number(doc.mesh.gender) < 0.99;
   $('#show-genitals').checked = doc.mesh.show_genitals === true;
-  $('#male-anatomy-sliders').hidden = !$('#show-genitals').checked;
+  $('#male-anatomy-controls').hidden = !$('#show-genitals').checked;
   for (const button of document.querySelectorAll('[data-body-shape]'))
     button.setAttribute('aria-pressed', String(doc.mesh.gender === Number(button.dataset.bodyShape)));
   $('#animal-body-sliders').hidden = !animal;
@@ -349,9 +381,14 @@ function refresh() {
   $('#guide').alt = `Guide image sent to image_${imageIndex}`;
   $('#prompt-mode').value = promptMode; $('#image-order').value = manifest.imageOrder;
   $('#image-order-row').hidden = promptMode === 'single';
-  $('#custom-prompt-row').hidden = promptMode !== 'custom'; $('#prompt-extra-row').hidden = promptMode === 'custom';
-  if (document.activeElement !== $('#custom-prompt')) $('#custom-prompt').value = doc.conditioning.customPrompt || '';
-  if (document.activeElement !== $('#prompt-extra')) $('#prompt-extra').value = doc.conditioning.promptExtra || '';
+  const customPrompt = promptMode === 'custom';
+  const promptEditor = $('#prompt-editor');
+  $('#prompt-label').textContent = customPrompt ? 'Full Prompt' : 'Additional Description';
+  promptEditor.placeholder = customPrompt ? 'Enter the full prompt' : 'Describe characters, setting, clothing, and style';
+  const promptText = doc.conditioning[customPrompt ? 'customPrompt' : 'promptExtra'] ?? '';
+  if (promptEditor.value !== promptText) promptEditor.value = promptText;
+  $('#prompt-output').hidden = customPrompt;
+  $('#reset-prompt').disabled = promptMode === 'default' && !doc.conditioning.customPrompt && !doc.conditioning.promptExtra;
   $('#image-wiring').textContent = promptMode === 'single' ? 'Current guide → image_1. Use Additional Description for characters, setting, and style.'
     : `Source → image_${3 - imageIndex} · Current guide → image_${imageIndex}. Update the encoder connections if you change the order.`;
   $('#prompt-mode-hint').textContent = promptMode === 'custom' ? 'Studio outputs the prompt as written, including image numbers. Leave it blank to build the prompt in the workflow.'
@@ -492,6 +529,23 @@ for (const [key, label, min, max, step] of [
   ['weight', 'Weight', 0, 1, 0.01], ['muscle', 'Muscle', 0, 1, 0.01], ['height', 'Height', 0, 1, 0.01],
 ]) makeControl('#body-sliders', { id: `body-${key}`, label, min, max, step,
   read: () => doc.mesh[key], write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
+$('#reset-body-shape').onclick = () => run(async () => {
+  const actor = activeActor(doc);
+  if (doc.source.kind !== 'human' || actor?.locked) return;
+  begin();
+  const defaults = defaultScene().mesh;
+  for (const key of ['age', 'gender', 'breast_size', 'weight', 'muscle', 'height']) doc.mesh[key] = defaults[key];
+  await studio.morph();
+  changed();
+});
+$('#reset-male-anatomy').onclick = () => run(async () => {
+  const actor = activeActor(doc);
+  if (doc.source.kind !== 'human' || actor?.locked) return;
+  begin();
+  for (const key of ['penis_len', 'penis_circ', 'penis_test', 'penis_tilt', 'penis_turn', 'genital_size']) delete doc.mesh[key];
+  await studio.morph();
+  changed();
+});
 $('#show-genitals').onchange = event => run(async () => {
   const visible = event.target.checked;
   begin(); doc.mesh.show_genitals = visible;
@@ -610,8 +664,22 @@ $('#prompt-mode').onchange = event => {
   changed();
 };
 $('#image-order').onchange = event => { begin(); doc.conditioning.imageOrder = event.target.value; changed(false); };
-for (const [id, key] of [['custom-prompt', 'customPrompt'], ['prompt-extra', 'promptExtra']])
-  $(`#${id}`).oninput = event => { begin(); doc.conditioning[key] = event.target.value; changed(false); };
+let editingPrompt = false;
+$('#prompt-editor').onblur = () => { editingPrompt = false; };
+$('#prompt-editor').oninput = event => {
+  if (!editingPrompt) begin();
+  editingPrompt = true;
+  const key = doc.conditioning.promptMode === 'custom' ? 'customPrompt' : 'promptExtra';
+  doc.conditioning[key] = event.target.value;
+  changed(false);
+};
+$('#reset-prompt').onclick = () => {
+  begin();
+  doc.conditioning.promptMode = 'default';
+  delete doc.conditioning.customPrompt;
+  delete doc.conditioning.promptExtra;
+  changed();
+};
 $('#mouse-pitch').onchange = event => { begin(); doc.interaction.mousePitch = event.target.checked; changed(false); };
 $('#preview-quality').onchange = event => { begin(); doc.interaction.quality = event.target.value; studio.updatePerformance(); changed(false); };
 $('#live-preview').onchange = event => { begin(); doc.interaction.livePreview = event.target.checked; changed(false); if (event.target.checked) schedulePreview(); else clearTimeout(previewTimer); };
