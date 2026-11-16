@@ -283,11 +283,12 @@ export class StudioScene {
 
   async restoreProps() {
     this.propRoots ||= new Map(); const props = this.doc.props || [], ids = new Set(props.map(prop=>prop.id));
+    if (!ids.has(this.selectedModelId)) this.selectedModelId = null;
     for (const [id, root] of this.propRoots) if (!ids.has(id) || props.find(prop=>prop.id===id)?.asset.name !== root.userData.assetName) { disposeProp(root); this.propRoots.delete(id); }
     for (const prop of props) {
       let root = this.propRoots.get(prop.id);
       if (this.doc.source.kind !== 'human') { if (root) root.visible = false; continue; }
-      if (!root) { root = await loadProp(prop.asset); root.userData.assetName = prop.asset.name; this.propRoots.set(prop.id,root); this.viewer.scene.add(root); }
+      if (!root) { root = await loadProp(prop.asset); root.userData.assetName = prop.asset.name; root.userData.modelId = prop.id; this.propRoots.set(prop.id,root); this.viewer.scene.add(root); }
       placeProp(root,prop,this.doc.source.kind==='human');
     }
   }
@@ -997,22 +998,26 @@ export class StudioScene {
         for (const item of mesh) { item.updateMatrixWorld(true); item.skeleton.update(); item.computeBoundingBox(); item.computeBoundingSphere(); }
         const raycaster = ray();
         const animals = visibleActors(this.doc).map(actor => this.animalActors.get(actor.id)?.root).filter(Boolean);
-        const hit = [...raycaster.intersectObjects(mesh, false), ...raycaster.intersectObjects(animals, true)]
+        const models = this.mode === 'position' ? [...this.propRoots.values()].filter(root => root.visible) : [];
+        const hit = [...raycaster.intersectObjects(mesh, false), ...raycaster.intersectObjects([...animals, ...models], true)]
           .sort((first, second) => first.distance - second.distance)[0];
         let object = hit?.object;
-        while (object && !object.userData.actorId) object = object.parent;
+        while (object && !object.userData.actorId && !object.userData.modelId) object = object.parent;
+        const modelId = object?.userData.modelId;
         const id = object?.userData.actorId;
-        if (id && (id !== this.doc.activeActorId || event.ctrlKey || event.metaKey)) {
+        if (id && (id !== this.doc.activeActorId || this.selectedModelId || event.ctrlKey || event.metaKey)) {
           event.stopImmediatePropagation(); event.preventDefault(); this.callbacks.pick?.(id, event.ctrlKey || event.metaKey); return;
         }
         if (this.mode === 'position') {
           event.stopImmediatePropagation(); event.preventDefault();
-          const actor = activeActor(this.doc);
-          if (!hit || !actor || actor.locked) return;
+          if (modelId) this.callbacks.pickModel?.(modelId);
+          const target = modelId ? this.doc.props.find(model => model.id === modelId) : activeActor(this.doc);
+          if (!hit || !target || target.locked) return;
           const normal = this.doc.interaction?.movePlane === 'ground' ? new THREE.Vector3(0, 1, 0) : this.viewer.camera.getWorldDirection(new THREE.Vector3());
-          const root = this.actorRoots.get(actor.id), plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, root.position);
+          const root = modelId ? this.propRoots.get(modelId) : this.actorRoots.get(target.id);
+          const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, root.position);
           const point = raycaster.ray.intersectPlane(plane, new THREE.Vector3()); if (!point) return;
-          drag = { pointerId: event.pointerId, actor: actor.id, plane, point, transform: { ...actor.transform } };
+          drag = { pointerId: event.pointerId, placementId: target.id, model: !!modelId, plane, point, transform: { ...target.transform } };
           canvas.setPointerCapture(event.pointerId); return;
         }
         return;
@@ -1058,16 +1063,19 @@ export class StudioScene {
         this.viewer.requestRender();
         return;
       }
-      if (drag.actor) {
-        const actor = this.doc.actors.find(item => item.id === drag.actor); if (!actor || actor.locked) return;
+      if (drag.placementId) {
+        const target = (drag.model ? this.doc.props : this.doc.actors).find(item => item.id === drag.placementId);
+        if (!target || target.locked) return;
         const rect = canvas.getBoundingClientRect(), raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), this.viewer.camera);
         const point = raycaster.ray.intersectPlane(drag.plane, new THREE.Vector3()); if (!point) return;
         const delta = point.sub(drag.point);
         const next = { x: drag.transform.x + delta.x, y: drag.transform.y + delta.y, z: drag.transform.z + delta.z };
-        if (Object.entries(next).every(([key, value]) => actor.transform[key] === value)) return;
-        beginChange(); Object.assign(actor.transform, next);
-        this.updateActorTransform(actor); this.callbacks.camera(); return;
+        if (Object.entries(next).every(([key, value]) => target.transform[key] === value)) return;
+        beginChange(); Object.assign(target.transform, next);
+        if (drag.model) this.updateProp(target);
+        else this.updateActorTransform(target);
+        this.callbacks.camera(); return;
       }
       const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
       const next = { ...this.doc.camera };
@@ -1114,9 +1122,13 @@ export class StudioScene {
       if (cancelled.animal) {
         cancelled.animal.restore(cancelled.pose);
         cancelled.animal.update(this.animalSelection);
-      } else if (cancelled.actor) {
-        const actor = this.doc.actors.find(item => item.id === cancelled.actor);
-        if (actor) { actor.transform = cancelled.transform; this.updateActorTransform(actor); }
+      } else if (cancelled.placementId) {
+        const target = (cancelled.model ? this.doc.props : this.doc.actors).find(item => item.id === cancelled.placementId);
+        if (target) {
+          target.transform = cancelled.transform;
+          if (cancelled.model) this.updateProp(target);
+          else this.updateActorTransform(target);
+        }
       } else this.doc.camera = cancelled.camera;
       cancelled.rollback?.();
       this.updateShot(); this.callbacks.camera(); return true;

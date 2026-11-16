@@ -1,5 +1,5 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116bodyrange';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116modelplacement';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116en';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116sources';
@@ -12,7 +12,7 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116bodyrange';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116bodyrange';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116modelplacement';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116en';
 
@@ -273,7 +273,7 @@ function refresh() {
   if (document.activeElement !== $('#pose-seed')) $('#pose-seed').value = (doc.randomMaster || doc.poseRandom)?.seed || 0;
   for (const id of ['camera-heading', 'camera-eyebrow', 'camera-sliders', 'view-presets', 'shot-shelf', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
   $('#stage-help').textContent = previewVisible ? staticGuide ? 'Source composition and structure · Apply to output this guide' : 'Guide from the current camera · Switch to 3D Workspace to adjust the view'
-    : studio?.mode === 'position' ? 'Select a character · Drag to place · Right-drag to orbit · Middle-drag to pan'
+    : studio?.mode === 'position' ? 'Select a character or model · Drag to place · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' && studio.animal ? 'Select a blue joint for rotation rings · Drag gold handles to pose limbs · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan'
       : 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom';
@@ -337,8 +337,7 @@ function refresh() {
   const returnToCast = $('#return-to-cast');
   const glbScene = doc.source.kind === 'glb';
   returnToCast.hidden = !(splat || glbScene) || !doc.actors.length;
-  returnToCast.textContent = glbScene ? 'Keep GLB as Prop and Restore Characters' : 'Return to Mannequins';
-  $('#import-glb-label').textContent = mannequinScene ? 'Import GLB Prop' : 'Import GLB Scene';
+  returnToCast.textContent = glbScene ? 'Keep GLB and Restore Characters' : 'Return to Mannequins';
   $('#reconstruct').disabled = !doc.reference || !!linkedReference.pending;
   if (reconstructionChanged) $('#reconstruction-state').textContent = 'Background setting changed · Rebuild to apply it. The preview shows the last result.';
   if (doc.reference && doc.actors.length) {
@@ -658,7 +657,7 @@ function setMode(mode) {
   $('#camera-mode').setAttribute('aria-pressed', String(mode === 'camera')); $('#edit-mode').setAttribute('aria-pressed', String(mode === 'edit'));
   $('#use-view').hidden = mode !== 'edit';
   $('#stage-help').textContent = mode === 'camera' ? 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom'
-    : mode === 'position' ? 'Select a character · Drag to place · Right-drag to orbit · Middle-drag to pan'
+    : mode === 'position' ? 'Select a character or model · Drag to place · Right-drag to orbit · Middle-drag to pan'
     : studio.animal ? 'Drag Pelvis to lower the hips · Drag knees or elbows to steer the bend · Click a joint for rotation rings'
     : doc.source.kind === 'human' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan · Camera stays in place'
       : 'Right-drag to orbit · Middle-drag to pan · Set this view as the camera';
@@ -1202,7 +1201,7 @@ $('#preview-coarse').onclick = () => { previewVisible = true; refresh(); renderP
 $('#import-glb').onclick = () => {
   if (doc.source.kind === 'human') {
     $('#prop-list').closest('details').open = true;
-    $('#add-prop').click();
+    importModel();
   } else $('#glb-file').click();
 };
 $('#glb-file').onchange = event => run(async () => {
@@ -1569,7 +1568,7 @@ async function start(token, reference = { connected: false }, structure = { conn
     const referenceChanged = reference.connected && !!reference.asset && reference.asset.name !== doc.reference?.name;
     if (reference.asset) { const previous = doc.reference; doc.reference = reference.asset; sourceChanged(doc, previous); }
     if (doc.version !== 3 && doc.source.kind === 'splat' && doc.source.reference?.name !== doc.reference?.name) doc.source = { kind: 'empty' };
-    studio = new StudioScene($('#viewport'), { begin, change: changed, camera: () => { revision++; refresh(); schedulePreview(); $('#status').textContent = 'Camera draft · Apply to save'; $('#status').dataset.state = 'dirty'; }, pick: selectRole, select: (name, updateControls = true) => {
+    studio = new StudioScene($('#viewport'), { begin, change: changed, camera: () => { revision++; refresh(); schedulePreview(); $('#status').textContent = 'Camera draft · Apply to save'; $('#status').dataset.state = 'dirty'; }, pick: selectRole, pickModel: selectModel, select: (name, updateControls = true) => {
       selectedBone = name || '';
       if (studio.animal) {
         studio.selectAnimalJoint(selectedBone);
@@ -1649,7 +1648,8 @@ function readPendingKeypoints() {
 
 installActorsUI({ doc: () => doc, replace: value => { doc = value; }, studio: () => studio, run, begin, changed, refresh,
   ensureHumanTools, askName, upload, captureGuide, toast, send, downloadURL: download, downloadBlob: download,
-  showScene: () => { previewVisible = false; setMode('camera'); } });
+  showScene: () => { previewVisible = false; setMode('camera'); },
+  placeScene: () => { previewVisible = false; setMode('position'); } });
 installReferencesUI({ doc: () => doc, sourceConnected: () => linkedReference.connected, run, begin, changed, askName, upload, send, toast,
   clearSource: () => run(clearSourceImage),
   setSource: asset => run(async () => {

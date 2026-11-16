@@ -6,7 +6,7 @@ import { detachTargets } from './reference-library.mjs?v=20261116en';
 const $ = id => document.getElementById(id);
 export function installCastTools(context) {
   const panel = document.createElement('details'); panel.className = 'panel-block';
-  panel.innerHTML = `<summary>Character Interactions and Props <span class="tag">SCENE</span></summary><label>Layout<select id="cast-layout"><option value="group">Group Photo · Face Camera</option><option value="dialogue">Conversation · Face Each Other</option><option value="handshake">Handshake · Align Hands</option></select></label><button id="apply-layout" class="wide-button">Apply to Selected Characters</button><p class="hint">Locked characters keep their poses. Handshake aligns hands once with IK. You can edit the pose afterward.</p><button id="align-contact" class="wide-button">Realign Hands</button><button id="release-contact" class="wide-button">Clear Contact Anchors</button><button id="add-prop" class="wide-button">＋ Import GLB Prop</button><div id="prop-list" class="prop-list"></div>`;
+  panel.innerHTML = `<summary>Character Interactions <span class="tag">SCENE</span></summary><label>Layout<select id="cast-layout"><option value="group">Group Photo · Face Camera</option><option value="dialogue">Conversation · Face Each Other</option><option value="handshake">Handshake · Align Hands</option></select></label><button id="apply-layout" class="wide-button">Apply to Selected Characters</button><p class="hint">Locked characters keep their poses. Handshake aligns hands once with IK. You can edit the pose afterward.</p><button id="align-contact" class="wide-button">Realign Hands</button><button id="release-contact" class="wide-button">Clear Contact Anchors</button>`;
   $('hands-panel').before(panel);
   const file = document.createElement('input'); file.type = 'file'; file.accept = '.glb'; file.hidden = true; document.body.append(file);
   const mutate = action => context.run(async () => {
@@ -33,23 +33,40 @@ export function installCastTools(context) {
   });
   $('align-contact').onclick = () => mutate(async()=>{const roles=editableActors(context.doc(),'selected').filter(role => role.source.kind !== 'animal');if(roles.length!==2)throw new Error('Select two unlocked characters.');await context.studio().alignHands(roles[0].id,'r',roles[1].id,'r');});
   $('release-contact').onclick = ()=>{context.begin();context.doc().contacts=[];context.changed(false);context.toast('Contact anchors cleared. The current pose is kept.');};
-  $('add-prop').onclick = ()=>file.click();
+  context.importModel = () => file.click();
   file.onchange = ()=>{const chosen=file.files[0];file.value='';if(!chosen)return;
-    mutate(async()=>{if(context.doc().source.kind!=='human')throw new Error('Switch to a mannequin scene before importing props.');const asset=await context.upload(chosen);const prop={id:`prop-${uuid()}`,label:chosen.name,asset,transform:{x:0,y:0,z:-5,scale:1,yaw:0},visible:true,locked:false};context.doc().props||=[];context.doc().props.push(prop);await context.studio().restoreProps();});
+    mutate(async()=>{if(context.doc().source.kind!=='human')throw new Error('Switch to a mannequin scene before importing props.');const asset=await context.upload(chosen);const prop={id:`prop-${uuid()}`,label:chosen.name,asset,transform:{x:0,y:0,z:-5,scale:1,yaw:0},visible:true,locked:false};context.doc().props||=[];context.doc().props.push(prop);await context.studio().restoreProps();context.selectModel(prop.id);});
   };
   function render(){
     $('prop-list').replaceChildren();
     for(const prop of context.doc().props||[]){
-      const card=document.createElement('div');card.className='prop-card';const title=document.createElement('strong');title.textContent=prop.label;card.append(title);
-      for(const[key,label]of [['x','X'],['y','Y'],['z','Z'],['scale','Scale'],['yaw','Facing °']]){const row=document.createElement('label'),input=document.createElement('input');input.type='number';input.step=key==='yaw'?'1':'.1';input.value=prop.transform[key];input.disabled=prop.locked;row.append(document.createTextNode(label),input);input.onchange=()=>{const n=Number(input.value);if(!Number.isFinite(n)||key==='scale'&&n<=0)return;context.begin();prop.transform[key]=n;context.studio().updateProp(prop);context.changed();};card.append(row);}
+      const selected = context.studio()?.selectedModelId === prop.id;
+      const card = document.createElement('div'); card.className = 'actor-card';
+      card.style.setProperty('--actor-color', '#8da8b6');
+      card.classList.toggle('active', selected);
+      const title = document.createElement('button'); title.className = 'actor-name'; title.textContent = prop.label;
+      title.setAttribute('aria-pressed', String(selected)); title.onclick = () => context.selectModel(prop.id);
+      card.append(title);
+      $('prop-list').append(card);
+      if (!selected) continue;
+      const inspector = document.createElement('div'); inspector.className = 'prop-card';
+      const name = document.createElement('label'), nameInput = document.createElement('input');
+      nameInput.value = prop.label; nameInput.maxLength = 255;
+      nameInput.onchange = () => {
+        const label = nameInput.value.trim();
+        if (!label || label === prop.label) { nameInput.value = prop.label; return; }
+        context.begin(); prop.label = label; context.changed(false);
+      };
+      name.append('Name', nameInput); inspector.append(name);
+      for(const[key,label]of [['x','X'],['y','Y'],['z','Z'],['scale','Scale'],['yaw','Facing °']]){const row=document.createElement('label'),input=document.createElement('input');input.type='number';input.step=key==='yaw'?'1':'.1';input.value=prop.transform[key];input.disabled=prop.locked;row.append(document.createTextNode(label),input);input.onchange=()=>{const n=Number(input.value);if(!Number.isFinite(n)||key==='scale'&&n<=0)return;context.begin();prop.transform[key]=n;context.studio().updateProp(prop);context.changed();};inspector.append(row);}
       const actions=document.createElement('div');actions.className='compact-actions';
       for(const[text,action]of [[prop.visible?'Hide':'Show',()=>{prop.visible=!prop.visible;context.studio().updateProp(prop);}],[prop.locked?'Unlock':'Lock',()=>{prop.locked=!prop.locked;}],['Delete',async()=>{detachTargets(context.doc(),'props',prop.id);context.doc().props=context.doc().props.filter(item=>item.id!==prop.id);await context.studio().restoreProps();}]]){const button=document.createElement('button');button.textContent=text;button.onclick=()=>mutate(action);actions.append(button);}
-      card.append(actions);$('prop-list').append(card);
+      $('prop-list').append(inspector); inspector.append(actions);
     }
   }
   let key, renderedDoc, renderedProps = [];
   return () => {
-    const doc = context.doc(), props = doc.props || [], next = JSON.stringify(props);
+    const doc = context.doc(), props = doc.props || [], next = JSON.stringify([context.studio()?.selectedModelId, props]);
     if (next !== key || doc !== renderedDoc || props.some((prop, i) => prop !== renderedProps[i])) {
       key = next; renderedDoc = doc; renderedProps = props.slice(); render();
     }
