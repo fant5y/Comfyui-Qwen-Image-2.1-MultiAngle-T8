@@ -7,11 +7,13 @@ import { promptForSnapshot } from './batch-queue.mjs?v=20261116en';
 let graphRevision = 0;
 let closeActive = null;
 const extensionURL = new URL('./editor/index.html', import.meta.url);
-extensionURL.searchParams.set('v', '20261116pelvis');
+extensionURL.searchParams.set('v', '20261116savedapply');
 
 function openEditor(node, widget) {
   closeActive?.();
   const session = uuid(), graph = app.graph, revision = graphRevision, initial = widget.value;
+  let initialSnapshot = null;
+  try { initialSnapshot = initial ? JSON.parse(initial) : null; } catch { /* Studio can replace a damaged widget. */ }
   const dialog = document.createElement('dialog');
   Object.assign(dialog.style, { width: 'min(1600px, 97vw)', height: '94vh', maxWidth: 'none', maxHeight: 'none', padding: '0', border: '1px solid #3a5265', borderRadius: '12px', background: '#101920', overflow: 'hidden' });
   const frame = document.createElement('iframe');
@@ -143,21 +145,31 @@ function openEditor(node, widget) {
     const response = await fetch(`/anyangle-studio/snapshots/${token.id}`);
     if (!response.ok) throw new Error('Could not verify the saved scene. Apply it again.');
     const saved = await response.json(), scene = saved.scene, settings = scene.conditioning || {};
+    let previous = null;
+    if (/^[a-f0-9]{64}$/.test(initialSnapshot?.id || '')) {
+      const original = initialSnapshot.id === token.id ? response : await fetch(`/anyangle-studio/snapshots/${initialSnapshot.id}`);
+      if (original.ok) previous = original === response ? scene : (await original.json()).scene;
+    }
     const plans = await actorPlans();
     if (JSON.stringify(plans.map(item => [item.inputKey,item.plan.signature])) !== JSON.stringify([...actorSignatures])) throw new Error('The connected photos changed. Read them again.');
     for (const actor of scene.version === 3 ? [] : scene.actors || []) if (actor.identity?.inputKey) {
       const reference = actorReferences.find(item => item.inputKey === actor.identity.inputKey);
-      if (reference && (!reference.asset || actor.identity.asset?.name !== reference.asset.name)) throw new Error(`Read ${actor.identity.inputKey} again and apply the identity assignment.`);
+      const savedIdentity = previous?.actors?.find(item => item.id === actor.id && item.identity?.inputKey === actor.identity.inputKey)?.identity;
+      if (reference && actor.identity.asset?.name !== (reference.asset || savedIdentity?.asset)?.name)
+        throw new Error(`Read ${actor.identity.inputKey} again and apply the identity assignment.`);
     }
     const sentReferences = new Set(scene.manifest?.references?.flatMap(reference => reference.referenceIds || []) || []);
     for (const item of scene.referenceLibrary?.items || []) if (item.inputKey && sentReferences.has(item.id)) {
       const current = actorReferences.find(value => value.inputKey === item.inputKey);
-      const asset = current?.assets?.[item.batchIndex || 0] || (!item.batchIndex ? current?.asset : null);
+      const savedItem = previous?.referenceLibrary?.items?.find(value => value.inputKey === item.inputKey && (value.batchIndex || 0) === (item.batchIndex || 0));
+      const asset = current?.asset ? current.assets?.[item.batchIndex || 0] || (!item.batchIndex ? current.asset : null)
+        : current && savedItem?.asset;
       if (!asset || item.asset?.name !== asset.name) throw new Error(`Read ${item.label} again and apply its reference role.`);
     }
     if (settings.model === 'base' && unwiredAnyAngleLoader())
       throw new Error('The workflow still uses a fixed AnyAngle LoRA strength. Connect Studio’s anyangle_lora_strength output or remove the loader.');
-    if (reference.connected && scene.reference?.name !== reference.asset?.name) throw new Error('The reference image changed. Read it again and rebuild the subject.');
+    if (reference.connected && scene.reference?.name !== (reference.asset || previous?.reference)?.name)
+      throw new Error('The reference image changed. Read it again and rebuild the subject.');
     const noGuide = scene.version === 3 && scene.referenceLibrary.mode !== 'guided';
     if (!noGuide && settings.model === 'base' && settings.guide === 'pose' && scene.openpose?.origin === 'keypoints' && !scene.openpose.useRig) {
       const current = referencePlan((await app.graphToPrompt()).output, node.id, 'pose_keypoints');
@@ -170,7 +182,9 @@ function openEditor(node, widget) {
       || settings.guide === 'canny' && ['auto', 'reference'].includes(settings.mapOrigin);
     if (!noGuide && structure.connected && settings.model === 'base' && !photoGuide) {
       const name = settings.guide === 'pose' ? scene.openpose?.sourceName : settings.map?.name;
-      if (['pose', 'depth', 'canny'].includes(settings.guide) && name !== structure.asset?.name)
+      const priorGuide = previous?.conditioning?.guide === settings.guide
+        ? settings.guide === 'pose' ? previous.openpose?.sourceName : previous.conditioning?.map?.name : null;
+      if (['pose', 'depth', 'canny'].includes(settings.guide) && name !== (structure.asset?.name || priorGuide))
         throw new Error('The structure guide changed. Read it again in Studio and apply.');
     }
     if (!valid()) throw new Error('The workflow changed. Reopen Studio.');
@@ -180,14 +194,13 @@ function openEditor(node, widget) {
     if (event.origin !== location.origin || event.source !== frame.contentWindow || event.data?.session !== session) return;
     if (!valid()) { close(); return; }
     if (event.data.type === 'anyangle-ready') {
-      let snapshot = null; try { snapshot = initial ? JSON.parse(initial) : null; } catch { /* New editor can replace a damaged widget. */ }
       await readReference();
       await readStructure();
       const inputErrors = [];
       try { await readActors(); } catch (error) { inputErrors.push(error.message); }
       try { await readKeypoints(); } catch (error) { inputErrors.push(error.message); }
       const settings = node.properties?.anyangleStart;
-      send('anyangle-load', { snapshot, reference, structure, actorReferences, inputError: inputErrors.join('\n'), keypointsConnected: !!poseSignature, unwiredAnyAngle: unwiredAnyAngleLoader(), initialSettings: settings ? { model: settings.model, mode: settings.mode } : null });
+      send('anyangle-load', { snapshot: initialSnapshot, reference, structure, actorReferences, inputError: inputErrors.join('\n'), keypointsConnected: !!poseSignature, unwiredAnyAngle: unwiredAnyAngleLoader(), initialSettings: settings ? { model: settings.model, mode: settings.mode } : null });
     } else if (event.data.type === 'anyangle-read-reference') {
       await readReference(true); send('anyangle-reference', { reference });
     } else if (event.data.type === 'anyangle-read-structure') {

@@ -72,16 +72,17 @@ function hasGuide() {
   const guide = currentGuide();
   if (linkedStructure.connected && doc.conditioning.model === 'base' && ['pose', 'depth', 'canny'].includes(guide)
       && !usesLocalGuide(guide)
-      && (!linkedStructure.asset || linkedStructure.pending)) return false;
+      && linkedStructure.pending) return false;
   const source = guideSource(doc);
   return source.kind === 'image' || source.kind === 'canny-image' || source.kind === 'canny-scene'
     || source.kind === 'depth-scene'
     || source.kind === 'pose' && doc.source.kind === 'human' && doc.actors.some(actor => actor.visible !== false && actor.source.kind !== 'animal') || source.kind === 'scene' && doc.source.kind !== 'empty';
 }
+function applyDisabled() {
+  return busy || !ready || !hasGuide() || !!linkedReference.pending;
+}
 function setBusy(value) {
-  busy = value; $('#workspace').inert = value; $('#apply').disabled = value || !ready || !hasGuide()
-    || (linkedReference.connected && (!linkedReference.asset || linkedReference.pending))
-    || (linkedStructure.connected && !!linkedStructure.pending && !usesLocalGuide());
+  busy = value; $('#workspace').inert = value; $('#apply').disabled = applyDisabled();
   $('#undo').disabled = value || !undo.length; $('#redo').disabled = value || !redo.length;
   if (!value && pendingReference) queueMicrotask(readPendingReference);
   if (!value && pendingStructure) queueMicrotask(readPendingStructure);
@@ -393,8 +394,7 @@ function refresh() {
   $('#open-batch').title = supportsCameraBatch(doc) ? 'Render or generate a batch from a range or saved views.'
     : 'Use a 3D coarse render, mannequin skeleton, or 3D Canny guide for this feature. Extracted guides keep the source view.';
   $('#download-guide').disabled = !hasGuide();
-  $('#apply').disabled = busy || !ready || !hasGuide() || (linkedReference.connected && (!linkedReference.asset || linkedReference.pending))
-    || (linkedStructure.connected && !!linkedStructure.pending && !usesLocalGuide(guide));
+  $('#apply').disabled = applyDisabled();
   $('#edit-mode').disabled = splat || empty;
   $('#position-mode').disabled = !mannequinScene;
   $('#edit-mode').title = splat ? 'Use Camera mode to change the view of a reconstructed subject.' : empty ? 'Load a 3D subject first.' : '';
@@ -613,7 +613,7 @@ async function undoRedo(source, target) {
   const previous = doc, previousSource = source.slice(), previousTarget = target.slice();
   try {
     studio.syncPose(); target.push(clone(doc)); doc = clone(source.pop());
-    if (linkedReference.connected) { const previous = doc.reference; doc.reference = linkedReference.asset || null; sourceChanged(doc, previous); }
+    if (linkedReference.asset) { const previous = doc.reference; doc.reference = linkedReference.asset; sourceChanged(doc, previous); }
     if (doc.version !== 3 && doc.source.kind === 'splat' && doc.source.reference?.name !== doc.reference?.name) doc.source = { kind: 'empty' };
     await studio.restore(doc); changed(); renderShots(); refresh();
   } catch (error) {
@@ -1381,7 +1381,7 @@ function readPendingReference() {
     const sameAsset = !!reference.asset && reference.asset.name === doc.reference?.name;
     linkedReference = reference;
     if (reference.error) toast(reference.error);
-    if (sameAsset) { refresh(); return; }
+    if (sameAsset || reference.pending || reference.error) { refresh(); return; }
     begin(); const previous = doc.reference; doc.reference = reference.asset || null; sourceChanged(doc, previous);
     if (doc.version !== 3 && doc.source.kind === 'splat') doc.source = { kind: 'empty' };
     await studio.restore(doc); changed();
