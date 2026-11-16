@@ -256,6 +256,9 @@ function refresh() {
     panel.hidden = !available || staticGuide;
   }
   $('#body-sliders').hidden = animal;
+  $('#male-anatomy').hidden = !human || Number(doc.mesh.gender) < 0.99;
+  $('#show-genitals').checked = doc.mesh.show_genitals === true;
+  $('#male-anatomy-sliders').hidden = !$('#show-genitals').checked;
   for (const button of document.querySelectorAll('[data-body-shape]'))
     button.setAttribute('aria-pressed', String(doc.mesh.gender === Number(button.dataset.bodyShape)));
   $('#animal-body-sliders').hidden = !animal;
@@ -485,9 +488,19 @@ for (const button of document.querySelectorAll('[data-body-shape]')) button.oncl
   await studio.morph(); changed();
 });
 for (const [key, label, min, max, step] of [
-  ['age', 'Age', 18, 75, 1], ['gender', 'Female to Male', 0, 1, 0.01], ['weight', 'Weight', 0, 1, 0.01], ['muscle', 'Muscle', 0, 1, 0.01], ['height', 'Height', 0, 1, 0.01],
+  ['age', 'Age', 18, 75, 1], ['gender', 'Female to Male', 0, 1, 0.01], ['breast_size', 'Breast Size', 0, 1, 0.01],
+  ['weight', 'Weight', 0, 1, 0.01], ['muscle', 'Muscle', 0, 1, 0.01], ['height', 'Height', 0, 1, 0.01],
 ]) makeControl('#body-sliders', { id: `body-${key}`, label, min, max, step,
   read: () => doc.mesh[key], write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
+$('#show-genitals').onchange = event => run(async () => {
+  const visible = event.target.checked;
+  begin(); doc.mesh.show_genitals = visible;
+  await studio.morph(); changed();
+});
+for (const [key, label] of [['penis_len', 'Penis Length'], ['penis_circ', 'Penis Girth'], ['penis_test', 'Testicle Size']])
+  makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min: 0, max: 1, step: 0.01,
+    read: () => doc.mesh[key] ?? (key === 'penis_len' ? doc.mesh.genital_size : undefined) ?? 0.5,
+    write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
 makeControl('#animal-body-sliders', { id: 'animal-size', label: 'Size', min: 0.25, max: 4, step: 0.01, unit: '×',
   read: () => activeActor(doc)?.transform.scale ?? 1,
   write: value => {
