@@ -16,7 +16,7 @@ function openEditor(node, widget) {
   Object.assign(dialog.style, { width: 'min(1600px, 97vw)', height: '94vh', maxWidth: 'none', maxHeight: 'none', padding: '0', border: '1px solid #3a5265', borderRadius: '12px', background: '#101920', overflow: 'hidden' });
   const frame = document.createElement('iframe');
   const url = new URL(extensionURL); url.searchParams.set('session', session);
-  frame.src = url; frame.title = 'AnyAngle Studio · 3D 相机与姿势编辑器';
+  frame.src = url; frame.title = 'AnyAngle Studio · 3D Camera and Pose Editor';
   Object.assign(frame.style, { width: '100%', height: '100%', border: '0', display: 'block' });
   dialog.append(frame); document.body.append(dialog);
   let active = true;
@@ -40,13 +40,13 @@ function openEditor(node, widget) {
   const getPlan = async () => {
     const { output } = await app.graphToPrompt();
     const plan = referencePlan(output, node.id);
-    if (!plan && node.inputs?.find(input => input.name === 'reference_image')?.link != null) throw new Error('参考图连线未能解析，请检查上游是否被禁用');
+    if (!plan && node.inputs?.find(input => input.name === 'reference_image')?.link != null) throw new Error('Could not resolve the reference image connection. Check whether the upstream node is disabled.');
     return plan;
   };
   const getStructurePlan = async () => {
     const { output } = await app.graphToPrompt();
     const plan = referencePlan(output, node.id, 'structure_image');
-    if (!plan && node.inputs?.find(input => input.name === 'structure_image')?.link != null) throw new Error('结构图连线未能解析，请检查上游是否被禁用');
+    if (!plan && node.inputs?.find(input => input.name === 'structure_image')?.link != null) throw new Error('Could not resolve the structure guide connection. Check whether the upstream node is disabled.');
     return plan;
   };
   const readReference = async (execute = false) => {
@@ -63,14 +63,14 @@ function openEditor(node, widget) {
       if (!plan) reference = { connected: false };
       else if (plan.filename || execute) {
         if (!sameSignature) reference = { connected: true, pending: true };
-        send('anyangle-reference', { reference: { ...reference, message: plan.filename ? '正在读取连线原图…' : '正在执行参考图的上游节点…' } });
+        send('anyangle-reference', { reference: { ...reference, message: plan.filename ? 'Reading connected source image…' : 'Running upstream nodes for the reference image…' } });
         // Use ComfyUI's decoder for direct images too: JPEG decoding can differ
         // from browser/Pillow import even when the filename ends in .png.
         const asset = await executeReference(plan, valid);
         if (!valid()) return;
-        if ((await getPlan())?.signature !== plan.signature) throw new Error('上游已变化，请重新读取图像');
-        reference = { connected: true, asset, message: '来自 IMAGE 连线 · 使用第一张图像' };
-      } else reference = { connected: true, message: '点击读取上游图像，执行取得原图所需的节点' };
+        if ((await getPlan())?.signature !== plan.signature) throw new Error('The upstream connection changed. Read the image again.');
+        reference = { connected: true, asset, message: 'Connected IMAGE · First image' };
+      } else reference = { connected: true, message: 'Read the upstream image to run the nodes needed to retrieve it.' };
     } catch (error) {
       reference = { connected, ...(sameSignature && previous.asset ? { asset: previous.asset } : {}),
         pending: false, error: error.message, message: error.message };
@@ -91,12 +91,12 @@ function openEditor(node, widget) {
       if (!plan) structure = { connected: false };
       else if (plan.filename || execute) {
         if (!sameSignature) structure = { connected: true, pending: true };
-        send('anyangle-structure', { structure: { ...structure, message: '正在读取连线结构图…' } });
+        send('anyangle-structure', { structure: { ...structure, message: 'Reading connected structure guide…' } });
         const asset = await executeReference(plan, valid);
         if (!valid()) return;
-        if ((await getStructurePlan())?.signature !== plan.signature) throw new Error('结构图上游已变化，请重新读取');
-        structure = { connected: true, asset, message: '来自 IMAGE 连线 · 使用第一张结构图' };
-      } else structure = { connected: true, message: '点击读取上游结构图' };
+        if ((await getStructurePlan())?.signature !== plan.signature) throw new Error('The upstream structure guide changed. Read it again.');
+        structure = { connected: true, asset, message: 'Connected IMAGE · First structure guide' };
+      } else structure = { connected: true, message: 'Read the upstream structure guide' };
     } catch (error) {
       structure = { connected, ...(sameSignature && previous.asset ? { asset: previous.asset } : {}),
         pending: false, error: error.message, message: error.message };
@@ -116,10 +116,10 @@ function openEditor(node, widget) {
       try { if ((!asset || execute) && (plan.filename || execute)) { batch = await executeReference(plan, valid, 'batch'); asset = batch?.asset; } }
       catch (error) { readError = error.message; asset = null; batch = null; }
       if (!valid()) return;
-      result.push({ inputKey, asset, assets: batch?.assets, batchCount: batch?.batchCount || 1, error: readError, message: readError || (asset ? '来自 IMAGE 连线 · 首张图像' : '点击读取参考素材，执行上游节点') });
+      result.push({ inputKey, asset, assets: batch?.assets, batchCount: batch?.batchCount || 1, error: readError, message: readError || (asset ? 'Connected IMAGE · First image' : 'Read the references to run their upstream nodes.') });
     }
     const current = await actorPlans();
-    if (JSON.stringify(current.map(item => [item.inputKey,item.plan.signature])) !== JSON.stringify(plans.map(item => [item.inputKey,item.plan.signature]))) throw new Error('人物照片上游已变化，请重新读取');
+    if (JSON.stringify(current.map(item => [item.inputKey,item.plan.signature])) !== JSON.stringify(plans.map(item => [item.inputKey,item.plan.signature]))) throw new Error('The upstream photo input changed. Read it again.');
     actorReferences = result; actorSignatures = new Map(plans.map(item => [item.inputKey,item.plan.signature]));
     const failed = result.filter(item => item.error); if (failed.length) throw new Error(failed.map(item => `${item.inputKey}: ${item.error}`).join('\n'));
   };
@@ -129,7 +129,7 @@ function openEditor(node, widget) {
     if (execute) {
       const result = await executeReference(plan, valid, 'keypoints');
       const latest = referencePlan((await app.graphToPrompt()).output, node.id, 'pose_keypoints');
-      if (latest?.signature !== plan.signature) throw new Error('姿势关键点上游已变化，请重新读取');
+      if (latest?.signature !== plan.signature) throw new Error('The upstream pose keypoints changed. Read them again.');
       posePeople = { ...result, planSignature: plan.signature };
     }
     poseSignature = plan.signature;
@@ -137,32 +137,32 @@ function openEditor(node, widget) {
   const close = () => { if (!active) return; active = false; window.removeEventListener('message', receive); dialog.remove(); if (closeActive === close) closeActive = null; };
   const valid = () => active && app.graph === graph && graphRevision === revision && graph.getNodeById(node.id) === node && widget.value === initial;
   const validateSnapshot = async token => {
-    if (token?.version !== 1 || !/^[a-f0-9]{64}$/.test(token.id)) throw new Error('无效的场景快照');
-    if (((await getPlan())?.signature || null) !== referenceSignature) throw new Error('上游已变化，请重新打开工作台读取原图');
-    if (((await getStructurePlan())?.signature || null) !== structureSignature) throw new Error('结构图上游已变化，请重新读取');
+    if (token?.version !== 1 || !/^[a-f0-9]{64}$/.test(token.id)) throw new Error('Invalid scene snapshot');
+    if (((await getPlan())?.signature || null) !== referenceSignature) throw new Error('The upstream connection changed. Reopen Studio and read the source image again.');
+    if (((await getStructurePlan())?.signature || null) !== structureSignature) throw new Error('The upstream structure guide changed. Read it again.');
     const response = await fetch(`/anyangle-studio/snapshots/${token.id}`);
-    if (!response.ok) throw new Error('无法验证已保存的场景，请重新应用');
+    if (!response.ok) throw new Error('Could not verify the saved scene. Apply it again.');
     const saved = await response.json(), scene = saved.scene, settings = scene.conditioning || {};
     const plans = await actorPlans();
-    if (JSON.stringify(plans.map(item => [item.inputKey,item.plan.signature])) !== JSON.stringify([...actorSignatures])) throw new Error('人物照片连线已变化，请重新读取');
+    if (JSON.stringify(plans.map(item => [item.inputKey,item.plan.signature])) !== JSON.stringify([...actorSignatures])) throw new Error('The connected photos changed. Read them again.');
     for (const actor of scene.version === 3 ? [] : scene.actors || []) if (actor.identity?.inputKey) {
       const reference = actorReferences.find(item => item.inputKey === actor.identity.inputKey);
-      if (reference && (!reference.asset || actor.identity.asset?.name !== reference.asset.name)) throw new Error(`请重新读取 ${actor.identity.inputKey} 并应用身份绑定`);
+      if (reference && (!reference.asset || actor.identity.asset?.name !== reference.asset.name)) throw new Error(`Read ${actor.identity.inputKey} again and apply the identity assignment.`);
     }
     const sentReferences = new Set(scene.manifest?.references?.flatMap(reference => reference.referenceIds || []) || []);
     for (const item of scene.referenceLibrary?.items || []) if (item.inputKey && sentReferences.has(item.id)) {
       const current = actorReferences.find(value => value.inputKey === item.inputKey);
       const asset = current?.assets?.[item.batchIndex || 0] || (!item.batchIndex ? current?.asset : null);
-      if (!asset || item.asset?.name !== asset.name) throw new Error(`请重新读取 ${item.label} 并应用参考用途`);
+      if (!asset || item.asset?.name !== asset.name) throw new Error(`Read ${item.label} again and apply its reference role.`);
     }
     if (settings.model === 'base' && unwiredAnyAngleLoader())
-      throw new Error('当前工作流的 AnyAngle LoRA 强度仍固定。请连接 Studio 的 anyangle_lora_strength，或移除该加载器。');
-    if (reference.connected && scene.reference?.name !== reference.asset?.name) throw new Error('参考图已变化，请重新读取并重建主体');
+      throw new Error('The workflow still uses a fixed AnyAngle LoRA strength. Connect Studio’s anyangle_lora_strength output or remove the loader.');
+    if (reference.connected && scene.reference?.name !== reference.asset?.name) throw new Error('The reference image changed. Read it again and rebuild the subject.');
     const noGuide = scene.version === 3 && scene.referenceLibrary.mode !== 'guided';
     if (!noGuide && settings.model === 'base' && settings.guide === 'pose' && scene.openpose?.origin === 'keypoints' && !scene.openpose.useRig) {
       const current = referencePlan((await app.graphToPrompt()).output, node.id, 'pose_keypoints');
       if (current?.signature !== poseSignature || scene.openpose.inputPlanSignature && current?.signature !== scene.openpose.inputPlanSignature
-          || posePeople && scene.openpose.inputSignature !== posePeople.signature) throw new Error('姿势关键点上游已变化，请重新读取并应用');
+          || posePeople && scene.openpose.inputSignature !== posePeople.signature) throw new Error('The upstream pose keypoints changed. Read them again and apply.');
     }
     const photoGuide = settings.guide === 'pose' && ['dwpose', 'json', 'keypoints'].includes(scene.openpose?.origin)
       || settings.guide === 'pose' && (scene.openpose?.useRig || settings.mapOrigin === 'rig')
@@ -171,9 +171,9 @@ function openEditor(node, widget) {
     if (!noGuide && structure.connected && settings.model === 'base' && !photoGuide) {
       const name = settings.guide === 'pose' ? scene.openpose?.sourceName : settings.map?.name;
       if (['pose', 'depth', 'canny'].includes(settings.guide) && name !== structure.asset?.name)
-        throw new Error('结构图已变化，请先在工作台重新读取并应用');
+        throw new Error('The structure guide changed. Read it again in Studio and apply.');
     }
-    if (!valid()) throw new Error('工作流已改变，请重新打开工作台');
+    if (!valid()) throw new Error('The workflow changed. Reopen Studio.');
     return { ...scene, resolvedPrompt: saved.prompt };
   };
   const receive = async event => {
@@ -206,7 +206,7 @@ function openEditor(node, widget) {
         if (event.data.action === 'prepare') {
           batchGraph = await app.graphToPrompt();
           if (!batchGraph.output[String(node.id)] || !node.outputs?.find(output => output.name === 'guide_image_2')?.links?.length)
-            throw new Error('请将 Studio 的 guide_image_2 连入当前生成工作流');
+            throw new Error('Connect Studio’s guide_image_2 output to the current workflow.');
           frozenPrompts = {};
           if (event.data.snapshot) {
             const frozenScene = await validateSnapshot(event.data.snapshot);
@@ -224,10 +224,10 @@ function openEditor(node, widget) {
           }
           return {};
         }
-        if (event.data.action !== 'queue' || !batchGraph) throw new Error('请先准备批量工作流');
+        if (event.data.action !== 'queue' || !batchGraph) throw new Error('Prepare the batch workflow first.');
         const frozenScene = await validateSnapshot(event.data.snapshot);
         const result = await api.queuePrompt(0, promptForSnapshot(batchGraph, node.id, event.data.snapshot, frozenScene, frozenPrompts));
-        if (!result.prompt_id) throw new Error('提交未返回任务编号，请检查 ComfyUI 队列');
+        if (!result.prompt_id) throw new Error('No job ID was returned. Check the ComfyUI queue.');
         const encoding_plan = Object.entries(frozenPrompts || {}).map(([encoder_id, inputs]) => ({ encoder_id,
           prompt_mode: inputs.prompt_mode, prompt: inputs.prompt_mode === 'input-full' ? inputs.prompt
             : [frozenScene.resolvedPrompt, inputs.prompt].filter(Boolean).join('\n'), negative_prompt: inputs.negative_prompt,
@@ -257,14 +257,14 @@ function openEditor(node, widget) {
 function labelStudioSockets(node) {
   for (const input of node.inputs || []) {
     const match = input.name.match(/^(?:actor_references\.)?actor_reference_(\d+)$/);
-    if (match) input.label = `参考图 ${match[1]}（通用）`;
-    else if (input.name === 'reference_image') input.label = '场景来源图（可选）';
-    else if (input.name === 'structure_image') input.label = '外部引导图（可选）';
-    else if (input.name === 'pose_keypoints') input.label = '姿势关键点（高级）';
+    if (match) input.label = `Reference Image ${match[1]} (General)`;
+    else if (input.name === 'reference_image') input.label = 'Scene Source Image (Optional)';
+    else if (input.name === 'structure_image') input.label = 'External Guide Image (Optional)';
+    else if (input.name === 'pose_keypoints') input.label = 'Pose Keypoints (Advanced)';
   }
   for (const output of node.outputs || []) {
-    if (output.name === 'guide_image_2') output.label = '当前构图引导';
-    if (output.name === 'scene_json') output.label = '场景与参考设置';
+    if (output.name === 'guide_image_2') output.label = 'Current Composition Guide';
+    if (output.name === 'scene_json') output.label = 'Scene and Reference Settings';
   }
 }
 
@@ -301,7 +301,7 @@ app.registerExtension({
       const widget = this.widgets.find(w => w.name === 'snapshot');
       widget.type = 'converted-widget'; widget.computeSize = () => [0, -4];
       if (widget.inputEl) widget.inputEl.style.display = 'none';
-      this.addWidget('button', '打开 AnyAngle Studio', null, () => openEditor(this, widget));
+      this.addWidget('button', 'Open AnyAngle Studio', null, () => openEditor(this, widget));
       this.color = '#173847'; this.bgcolor = '#111e28'; this.size = [345, 130];
       labelStudioSockets(this);
       const connectionsChanged = this.onConnectionsChange;

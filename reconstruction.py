@@ -38,7 +38,7 @@ def reconstruction_config(selections=None, keep_background=False):
         name = selections.get(role)
         if name is not None:
             if not isinstance(name, str) or name not in files:
-                raise ValueError(f"重建模型不在 {category} 的可用列表中：{name}")
+                raise ValueError(f"Reconstruction model is unavailable in {category}: {name}")
         elif default in files:
             name = default
         else:
@@ -111,7 +111,7 @@ class AnyAngleReconstructionOutput:
         ply = _gaussian_ply_bytes(splat.positions[0, :end], splat.scales[0, :end],
                                   splat.rotations[0, :end], splat.opacities[0, :end], splat.sh[0, :end])
         asset = store.asset(ply, "ply")
-        source = {**asset, "kind": "splat", "label": "TripoSplat · 保留背景（实验）" if keep_background else "TripoSplat · 原图主体", "bounds": bounds,
+        source = {**asset, "kind": "splat", "label": "TripoSplat · Background Included (Experimental)" if keep_background else "TripoSplat · Source Subject", "bounds": bounds,
                   "camera_token": token, "reference": image_asset(store, reference),
                   "prepared": image_asset(store, prepared), "foreground_bbox": bbox, "crop": crop,
                   "gaussians": end, "engine": "TripoSplat", "coordinates": "native-triposplat",

@@ -35,7 +35,7 @@ function reconstructionSource(item, reference) {
       || output?.class_type !== 'AnyAngleReconstructionOutputT8'
       || output.inputs?.reference?.[0] !== '1' || output.inputs.reference[1] !== 0
       || source.reference?.width !== reference.width || source.reference?.height !== reference.height)
-    throw new Error('无法确认重建所用来源图，请重新重建；机位和构图可以自由调整');
+    throw new Error('Could not verify the source of the reconstruction. Rebuild it again. You can still adjust the camera and composition.');
   return { ...source, reference: { ...reference } };
 }
 
@@ -53,7 +53,7 @@ export async function reconstructionConfig(selections = selectedReconstructionMo
   const query = parameters.toString();
   const response = await fetch('/anyangle-studio/reconstruction-config' + (query ? `?${query}` : ''));
   const config = await response.json();
-  if (!response.ok) throw new Error(config.error || '无法检查本地重建模型，请确认 ComfyUI 服务正常运行');
+  if (!response.ok) throw new Error(config.error || 'Could not check local reconstruction models. Verify that ComfyUI is running.');
   return config;
 }
 
@@ -90,22 +90,22 @@ export async function reconstruct(reference, onProgress, retryStaleJob = true, k
   }
   const config = await reconstructionConfig(selections, keepBackground);
   if (!config.available) {
-    const hint = Object.keys(config.ambiguous || {}).length ? '发现多个同名文件，请在左侧「重建模型」手动选择。'
-      : '请在左侧「重建模型」选择兼容权重，或运行节点目录中的 install_reconstruction.py。';
-    throw new Error(`缺少或尚未选择本地重建模型：${config.missing.join('、')}。${hint}`);
+    const hint = Object.keys(config.ambiguous || {}).length ? 'Several files share the same name. Select one under Reconstruction Models in the left panel.'
+      : 'Choose compatible weights under Reconstruction Models in the left panel or run install_reconstruction.py in the node folder.';
+    throw new Error(`Missing or unselected reconstruction models: ${config.missing.join(', ')}. ${hint}`);
   }
   let job = typeof cached === 'string' ? cached : cached?.job;
   if (!job) {
     const response = await fetch('/prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt: reconstructionGraph(reference, config.models, 46, keepBackground), client_id: uuid() }) });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error?.message || JSON.stringify(result.node_errors) || '重建任务提交失败');
+    if (!response.ok) throw new Error(result.error?.message || JSON.stringify(result.node_errors) || 'Could not submit the reconstruction job');
     job = result.prompt_id; localStorage.setItem(key, JSON.stringify({ job }));
   }
   const started = Date.now();
   for (;;) {
     const historyResponse = await fetch(`/history/${encodeURIComponent(job)}`);
-    if (!historyResponse.ok) throw new Error('无法读取重建结果，请检查 ComfyUI 服务');
+    if (!historyResponse.ok) throw new Error('Could not read the reconstruction result. Check ComfyUI.');
     const item = (await historyResponse.json())[job];
     const result = item?.outputs?.['12']?.anyangle_reconstruction?.[0];
     if (result) {
@@ -118,19 +118,19 @@ export async function reconstruct(reference, onProgress, retryStaleJob = true, k
     if (item?.status?.status_str === 'error') {
       localStorage.removeItem(key);
       const detail = item.status.messages?.find(([type]) => type === 'execution_error')?.[1];
-      throw new Error(detail?.exception_message || 'TripoSplat 重建失败');
+      throw new Error(detail?.exception_message || 'TripoSplat reconstruction failed');
     }
     const queueResponse = await fetch('/queue');
-    if (!queueResponse.ok) throw new Error('无法读取重建队列，请检查 ComfyUI 服务');
+    if (!queueResponse.ok) throw new Error('Could not read the reconstruction queue. Check ComfyUI.');
     const queue = await queueResponse.json();
     const running = queue.queue_running.some(entry => entry[1] === job);
     const pending = queue.queue_pending.some(entry => entry[1] === job);
     if (!running && !pending && !item && Date.now() - started > 5000) {
       localStorage.removeItem(key);
       if (retryStaleJob) return reconstruct(reference, onProgress, false, keepBackground);
-      throw new Error('重建任务已被移除，请重新重建');
+      throw new Error('The reconstruction job was removed. Submit it again.');
     }
-    onProgress(running ? `正在${keepBackground ? '保留背景重建' : '从原图重建主体'} · ${Math.round((Date.now() - started) / 1000)} 秒` : '重建任务排队中');
+    onProgress(running ? `${keepBackground ? 'Reconstructing with background' : 'Reconstructing source subject'} · ${Math.round((Date.now() - started) / 1000)} s` : 'Reconstruction queued');
     await new Promise(resolve => setTimeout(resolve, 1500));
   }
 }

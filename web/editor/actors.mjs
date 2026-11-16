@@ -15,7 +15,7 @@ export function actorId() {
 export function createActor(index = 0, values = {}) {
   const id = values.id || actorId();
   return {
-    id, label: `人物 ${index + 1}`, editorColor: ACTOR_COLORS[index % ACTOR_COLORS.length], visible: true, locked: false,
+    id, label: `Character ${index + 1}`, editorColor: ACTOR_COLORS[index % ACTOR_COLORS.length], visible: true, locked: false,
     source: { kind: 'human' }, mesh: copy(DEFAULT_BODY), pose: { bones: { upperarm_l: [0, 0, -8], upperarm_r: [0, 0, 8] } },
     transform: { x: index * 8, y: 0, z: 0, scale: 1, yaw: 0 },
     identity: { asset: null, inputKey: null, description: '', sourcePerson: null }, poseSource: null,
@@ -70,9 +70,9 @@ export function editableActors(doc, scope = 'current') {
 }
 export function cloneActor(doc, id = doc.activeActorId, reuseIdentity = false) {
   const source = doc.actors.find(actor => actor.id === id);
-  if (!source) throw new Error('未选择人物');
+  if (!source) throw new Error('Select a character first.');
   const actor = createActor(doc.actors.length, source);
-  actor.id = actorId(); actor.label = `${source.label} 副本`; actor.locked = false;
+  actor.id = actorId(); actor.label = `${source.label} Copy`; actor.locked = false;
   if (!reuseIdentity) actor.identity = { asset: null, inputKey: null, sourcePerson: null, description: '' };
   actor.editorColor = ACTOR_COLORS[doc.actors.length % ACTOR_COLORS.length];
   actor.transform.x += 8;

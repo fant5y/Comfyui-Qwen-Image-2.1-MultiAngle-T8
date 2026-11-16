@@ -1,5 +1,5 @@
 export const GUIDE_LABELS = {
-  coarse: '三维粗渲染', pose: 'OpenPose 姿势', depth: 'Depth Anything 深度', canny: 'Canny 轮廓',
+  coarse: 'Coarse 3D Render', pose: 'OpenPose', depth: 'Depth Anything', canny: 'Canny Edges',
 };
 
 export const PROMPTS = {

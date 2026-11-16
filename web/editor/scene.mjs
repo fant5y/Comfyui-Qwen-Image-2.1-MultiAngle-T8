@@ -14,10 +14,10 @@ import { loadProp, disposeProp, placeProp } from './props.mjs?v=20261009v160';
 import { emptyLibrary } from './reference-library.mjs?v=20261029v180';
 
 export const PRESETS = [
-  { name: '自然站立', bones: { upperarm_l: [0, 0, -8], upperarm_r: [0, 0, 8] } },
-  { name: '迈步', bones: { thigh_l: [-25, 0, 0], calf_l: [16, 0, 0], thigh_r: [20, 0, 0], calf_r: [9, 0, 0], upperarm_l: [20, 0, -8], upperarm_r: [-20, 0, 8] } },
-  { name: '坐姿', bones: { thigh_l: [-85, 0, -5], thigh_r: [-85, 0, 5], calf_l: [85, 0, 0], calf_r: [85, 0, 0], lowerarm_l: [-45, 0, 0], lowerarm_r: [-45, 0, 0] } },
-  { name: '举手', bones: { upperarm_l: [0, 0, 100], lowerarm_l: [0, 0, 20], upperarm_r: [0, 0, 10] } },
+  { name: 'Natural Stand', bones: { upperarm_l: [0, 0, -8], upperarm_r: [0, 0, 8] } },
+  { name: 'Step Forward', bones: { thigh_l: [-25, 0, 0], calf_l: [16, 0, 0], thigh_r: [20, 0, 0], calf_r: [9, 0, 0], upperarm_l: [20, 0, -8], upperarm_r: [-20, 0, 8] } },
+  { name: 'Seated', bones: { thigh_l: [-85, 0, -5], thigh_r: [-85, 0, 5], calf_l: [85, 0, 0], calf_r: [85, 0, 0], lowerarm_l: [-45, 0, 0], lowerarm_r: [-45, 0, 0] } },
+  { name: 'Raised Hand', bones: { upperarm_l: [0, 0, 100], lowerarm_l: [0, 0, 20], upperarm_r: [0, 0, 10] } },
 ];
 export const defaultScene = () => ({
   version: 3, referenceLibrary: emptyLibrary(), width: 1024, height: 1024, actors: [], activeActorId: null, selectedActorIds: [],
@@ -121,7 +121,7 @@ export class StudioScene {
   async init(doc) {
     this.doc = doc;
     await this.viewer.init();
-    if (!this.viewer.initialized) throw new Error('WebGL 初始化失败，请开启浏览器硬件加速');
+    if (!this.viewer.initialized) throw new Error('WebGL initialization failed. Enable hardware acceleration in your browser.');
     this.cameraClips = [this.viewer.camera, this.viewer.captureCamera].map(camera => ({ near: camera.near, far: camera.far }));
     this.viewer.setDirectionalSkydomeVisible(false);
     this.viewer.scene.background = new THREE.Color('#171f28');
@@ -266,7 +266,7 @@ export class StudioScene {
     let timer;
     try {
       return await Promise.race([this.viewer.waitForCaptureReady(), new Promise((resolve, reject) => {
-        timer = setTimeout(() => reject(new HumanAssetError('人偶贴图加载超时，请重试或修复人偶资源。')), timeout);
+        timer = setTimeout(() => reject(new HumanAssetError('Mannequin textures timed out. Retry or repair the mannequin assets.')), timeout);
       })]);
     } finally { clearTimeout(timer); }
   }
@@ -315,20 +315,20 @@ export class StudioScene {
       } else if (doc.source.kind === 'glb') {
         if (this.glbName !== doc.source.name) {
           const response = await fetch(assetURL(doc.source.name));
-          if (!response.ok) throw new Error('GLB 资源缺失，请重新导入');
+          if (!response.ok) throw new Error('GLB asset missing. Import it again.');
           const manager = new THREE.LoadingManager();
           manager.setURLModifier(url => {
-            if (!url.startsWith('blob:') && !url.startsWith('data:')) throw new Error('GLB 需要内嵌材质，不能加载外部地址');
+            if (!url.startsWith('blob:') && !url.startsWith('data:')) throw new Error('The GLB must include its materials.');
             return url;
           });
           const gltf = await new GLTFLoader(manager).parseAsync(await response.arrayBuffer(), '');
           const imported = gltf.scene;
           const bounds = worldBounds(imported);
-          if (bounds.isEmpty()) throw new Error('GLB 中没有可渲染的几何体');
+          if (bounds.isEmpty()) throw new Error('The GLB contains no renderable geometry.');
           const size = bounds.getSize(new THREE.Vector3());
           const center = bounds.getCenter(new THREE.Vector3());
           const longest = Math.max(size.x, size.y, size.z);
-          if (!Number.isFinite(longest) || longest <= 0) throw new Error('GLB 几何体范围无效');
+          if (!Number.isFinite(longest) || longest <= 0) throw new Error('The GLB geometry bounds are invalid.');
           const scale = 20 / longest;
           const normalized = new THREE.Group();
           normalized.add(imported);
@@ -475,16 +475,16 @@ export class StudioScene {
   }
 
   async capture(width = this.doc.width, height = this.doc.height, options = {}) {
-    if (this.doc.source.kind === 'empty') throw new Error('请先从原图重建主体或导入对应的 3D 场景');
+    if (this.doc.source.kind === 'empty') throw new Error('Rebuild the source subject or import its 3D scene first.');
     await this.waitForCaptureReady();
     const v = this.viewer;
     const content = this.splat ? this.splat.root : this.doc.source.kind === 'glb' ? this.glb : v.skinnedMesh;
-    if (!content) throw new Error('场景中没有可渲染资产');
+    if (!content) throw new Error('The scene has no renderable assets.');
     const contents = this.doc.source.kind === 'human' && this.actorRoots?.size
       ? [...(options.actorIds ? this.doc.actors.filter(actor => options.actorIds.includes(actor.id)) : visibleActors(this.doc)).map(actor => this.actorRoots.get(actor.id)),
         ...(!options.actorIds ? (this.doc.props || []).filter(prop=>prop.visible!==false).map(prop=>this.propRoots.get(prop.id)) : [])].filter(Boolean) : [content];
-    if (!contents.length) throw new Error('请至少显示一个人物');
-    if (options.depth && this.splat) throw new Error('TripoSplat 暂不支持真实场景深度，请使用原图 DA3 深度');
+    if (!contents.length) throw new Error('Make at least one character visible.');
+    if (options.depth && this.splat) throw new Error('Use DA3 source depth for a TripoSplat reconstruction.');
     const visibility = v.scene.children.map(object => [object, object.visible]);
     // VNCCS attaches joint markers below the skinned mesh, not just to the scene.
     const nestedHelpers = this.doc.source.kind === 'human'
@@ -585,7 +585,7 @@ export class StudioScene {
   }
 
   setPreset(preset) {
-    if (!this.restoring && activeActor(this.doc)?.locked) throw new Error('人物已锁定，请先解锁');
+    if (!this.restoring && activeActor(this.doc)?.locked) throw new Error('Unlock the character first.');
     this.viewer.setPose({ bones: preset.bones }, true);
     if (!this.restoring) this.useRigPose();
     this.syncPose();
@@ -595,7 +595,7 @@ export class StudioScene {
   hand(side, preset) { this.viewer.applyHandPreset(side, HAND_PRESETS[preset]); this.syncPose(); }
 
   applyOpenPose(points, flips = {}, mode = 'estimated') {
-    if (activeActor(this.doc)?.locked) throw new Error('人物已锁定，请先解锁');
+    if (activeActor(this.doc)?.locked) throw new Error('Unlock the character first.');
     const actor = activeActor(this.doc), root = this.actorRoots?.get(actor?.id);
     if (!root) return this._applyOpenPose(points, flips, mode);
     // Lift in an untransformed reference plane, then place that pose in its role's world frame.
@@ -605,7 +605,7 @@ export class StudioScene {
   }
 
   _applyOpenPose(points, flips = {}, mode = 'estimated') {
-    if (this.doc.source.kind !== 'human') throw new Error('OpenPose 姿势需要先切换到人偶');
+    if (this.doc.source.kind !== 'human') throw new Error('Switch to a mannequin before applying an OpenPose pose.');
     const viewer = this.viewer;
     if (mode === 'estimated') viewer.resetPose();
     viewer.skinnedMesh.updateMatrixWorld(true);
@@ -623,7 +623,7 @@ export class StudioScene {
         .map(([key, value]) => [WORLD_KEYPOINT_NAMES[key], new THREE.Vector3(...value)]));
       const applied = viewer.applyWorldKeypointImport(worldKps, { drawFigure: false, placeHipRoots: false,
         alignHead: false, alignHands: false, alignFeet: false, dispatchPoseChange: false });
-      if (!applied) throw new Error('复制可见关节失败，请检查人物照片');
+      if (!applied) throw new Error('Could not copy the visible joints. Check the character photo.');
       this.useRigPose(); this.syncPose(); this.updateShot(true);
       return false;
     }
@@ -636,14 +636,14 @@ export class StudioScene {
       [name, new THREE.Vector3(...kps[key].map((value, i) => value + pelvis[i]))]));
     const applied = viewer.applyWorldKeypointImport(worldKps, { drawFigure: false, placeHipRoots: false, alignHead: false,
       alignHands: false, alignFeet: false, dispatchPoseChange: false });
-    if (!applied) throw new Error('无法将 OpenPose 骨架应用到人偶，请检查骨架图');
+    if (!applied) throw new Error('Could not apply the OpenPose skeleton to the mannequin. Check the skeleton image.');
     this.doc.pose = this.pose();
     this.updateShot(true);
     return facingAway;
   }
 
   captureOpenPose(width = this.doc.width, height = this.doc.height) {
-    if (this.doc.source.kind !== 'human') throw new Error('OpenPose 引导图需要人偶场景');
+    if (this.doc.source.kind !== 'human') throw new Error('An OpenPose guide requires a mannequin scene.');
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
     const context = canvas.getContext('2d');
     context.fillStyle = '#000'; context.fillRect(0, 0, width, height);
@@ -775,9 +775,9 @@ export class StudioScene {
 
   async alignHands(idA, sideA, idB, sideB) {
     const actors = [idA,idB].map(id=>this.doc.actors.find(actor=>actor.id===id));
-    if (actors.some(actor=>!actor||actor.locked)) throw new Error('手部对齐需要两位未锁定人物');
+    if (actors.some(actor=>!actor||actor.locked)) throw new Error('Hand alignment requires two unlocked characters.');
     const handA=this.actorBones(idA)?.[`hand_${sideA}`], handB=this.actorBones(idB)?.[`hand_${sideB}`];
-    if(!handA||!handB) throw new Error('人物缺少手部骨架');
+    if(!handA||!handB) throw new Error('Character is missing hand joints.');
     this.viewer.scene.updateMatrixWorld(true);
     const anchor=handA.getWorldPosition(new THREE.Vector3()).add(handB.getWorldPosition(new THREE.Vector3())).multiplyScalar(.5);
     const active=this.doc.activeActorId;

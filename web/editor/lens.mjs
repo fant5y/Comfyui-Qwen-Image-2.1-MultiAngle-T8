@@ -2,7 +2,7 @@
 export function lensSettings(originalFov, focalLength = 0) {
   const originalFocal = 12 / Math.tan(originalFov * Math.PI / 360);
   if (!focalLength) return { fov: originalFov, distanceScale: 1 };
-  if (!Number.isFinite(focalLength) || focalLength <= 0) throw new Error('焦距必须是大于零的数值');
+  if (!Number.isFinite(focalLength) || focalLength <= 0) throw new Error('Focal length must be a positive number.');
   return { fov: 2 * Math.atan(12 / focalLength) * 180 / Math.PI, distanceScale: focalLength / originalFocal };
 }
 

@@ -1,6 +1,6 @@
 import { guideSource } from './guides.mjs?v=20261009v160';
 import { uuid } from '../uuid.mjs?v=20261010lan1';
-export const USES = { free: '自由参考', identity: '身份 / 脸型', clothing: '服装', accessory: '配饰 / 产品', scene: '场景 / 背景', style: '风格 / 灯光', layout: '布局 / 构图', pose: '动作 / 姿态' };
+export const USES = { free: 'General Reference', identity: 'Identity / Face', clothing: 'Clothing', accessory: 'Accessories / Products', scene: 'Scene / Background', style: 'Style / Lighting', layout: 'Layout / Composition', pose: 'Pose' };
 const copy = value => JSON.parse(JSON.stringify(value));
 const uid = prefix => `${prefix}-${uuid()}`;
 export const emptyLibrary = () => ({ version: 1, mode: 'guided', items: [], firstReferenceId: null, firstResolution: 0, templates: [] });
@@ -8,7 +8,7 @@ export function newUse(kind = 'free', target = { kind: 'scene', ids: [], text: '
   return { id: uid('use'), kind, target: copy(target), enabled: true, sourceText: '', instruction: '' };
 }
 export function addReference(scene, asset, values = {}) {
-  const item = { id: uid('ref'), label: asset?.label || `参考 ${scene.referenceLibrary.items.length + 1}`, asset, enabled: true,
+  const item = { id: uid('ref'), label: asset?.label || `Reference ${scene.referenceLibrary.items.length + 1}`, asset, enabled: true,
     inputKey: null, batchIndex: 0, batchCount: 1, usages: [newUse()], ...copy(values) };
   scene.referenceLibrary.items.push(item); return item;
 }
@@ -76,8 +76,8 @@ export function libraryManifest(scene) {
   let references = []; const excluded = [], byName = new Map();
   for (const item of library.items) {
     const uses = item.usages.filter(use => use.enabled !== false).map(use => ({ ...use, targetText: targetText(scene, use.target) })).filter(use => use.targetText);
-    const reason = item.enabled === false ? '素材已停用' : mode === 'text' ? '纯文本模式不发送图片'
-      : !uses.length ? '用途已停用或目标待重新分配' : !item.asset || item.missing ? '连线或素材缺失，请重新读取或明确使用保存版本' : null;
+    const reason = item.enabled === false ? 'Reference disabled' : mode === 'text' ? 'Text Only excludes images'
+      : !uses.length ? 'Role disabled or target needs reassignment' : !item.asset || item.missing ? 'Missing connection or reference. Read connections again or choose Use Saved Version.' : null;
     if (reason) { excluded.push({ id: item.id, label: item.label || item.id, reason }); continue; }
     const name = item.asset.name;
     if (!byName.has(name)) { byName.set(name, references.length); references.push({ asset: item.asset, referenceIds: [], labels: [], usages: [], actorIds: [] }); }
@@ -90,7 +90,7 @@ export function libraryManifest(scene) {
     const source = references.find(reference => reference.asset.name === scene.reference.name)
       || { asset: scene.reference, referenceIds: [], labels: [], usages: [], actorIds: [] };
     source.asset = scene.reference;
-    source.referenceIds.unshift('scene-source'); source.labels.unshift('场景来源图');
+    source.referenceIds.unshift('scene-source'); source.labels.unshift('Scene Source Image');
     references = [source, ...references.filter(reference => reference !== source)];
   }
   const first = library.firstReferenceId;
@@ -109,8 +109,8 @@ export function libraryManifest(scene) {
   const kind = anyangle ? 'coarse' : settings.guide || 'coarse', staticGuide = kind !== 'coarse' && (settings.map && (settings.mapKind || kind) === kind || kind === 'canny' && scene.reference && settings.mapOrigin !== 'auto');
   return { version: 2, mode, imageOrder: order, guide, references,
     actors: (scene.actors || []).filter(actor => !staticGuide && scene.source?.kind === 'human' && actor.visible !== false).map(actor => ({ id: actor.id, label: actor.label || actor.id, transform: actor.transform || {}, editorColor: actor.editorColor ?? null, description: actor.identity?.description || '' })),
-    imageCount, excluded, missing: excluded.filter(entry => entry.reason.startsWith('连线')).map(entry => entry.label),
-    warnings: imageCount > 10 ? ['超过 Qwen Image 2.1 官方建议的 10 图范围，图片仍完整发送；请留意效果和显存。'] : [] };
+    imageCount, excluded, missing: excluded.filter(entry => entry.reason.startsWith('Missing connection')).map(entry => entry.label),
+    warnings: imageCount > 10 ? ['Qwen Image 2.1 recommends up to 10 images. All images will be sent. Monitor output quality and VRAM use.'] : [] };
 }
 export function libraryPrompt(scene, manifest) {
   const settings = scene.conditioning || {};

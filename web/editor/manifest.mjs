@@ -34,7 +34,7 @@ export function buildManifest(scene) {
   for (const actor of actors) { actor.referenceIndex = indices.get(actor.referenceName) ?? null; delete actor.referenceName; }
   const imageCount = references.length + 1;
   return { version: 1, imageOrder: order, guide: { index: guideIndex, width: scene.width, height: scene.height },
-    references, actors, imageCount, warnings: imageCount > 10 ? ['超过 Qwen Image 2.1 官方说明的 10 张参考图范围，效果未验证。'] : [] };
+    references, actors, imageCount, warnings: imageCount > 10 ? ['Qwen Image 2.1 recommends up to 10 reference images. Results with more images can vary.'] : [] };
 }
 const number = value => Number(value || 0).toString();
 function sourcePersonText(source) {

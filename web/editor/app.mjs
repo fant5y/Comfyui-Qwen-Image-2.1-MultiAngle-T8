@@ -35,7 +35,7 @@ let explicitStructureRead = false;
 let overlayShown = false;
 let previewVisible = false, previewGuide = null, previewRevision = -1;
 let cannyWarningRevision = -1;
-const EMPTY_CANNY_WARNING = '未检测到 Canny 轮廓；可降低阈值或检查画幅，仍可输出当前空白图。';
+const EMPTY_CANNY_WARNING = 'No Canny edges detected. Lower the thresholds or check the frame. You can still output the blank guide.';
 let batchRunning = false, batchController = null, batchViews = [], batchId = null;
 const batchReplies = new Map();
 const controls = new Map();
@@ -51,7 +51,7 @@ function showLoadError(error) {
   $('#repair-human').hidden = error?.name !== 'HumanAssetError';
   $('#load-error-help').hidden = error?.name !== 'HumanAssetError';
   $('#repair-state').textContent = error?.name === 'HumanAssetError'
-    ? '也可在节点目录运行 python install_assets.py，再重启 ComfyUI。' : '解决以上错误后重试加载。';
+    ? 'You can also run python install_assets.py in the node folder and restart ComfyUI.' : 'Resolve the error above, then retry loading.';
   const dialog = $('#load-error-dialog'); if (!dialog.open) dialog.showModal();
 }
 function error(error) {
@@ -119,7 +119,7 @@ function changed(updatePreview = true, updateControls = true) {
   if (!updatePreview && previewRevision === revision - 1) previewRevision = revision;
   document.querySelectorAll('.preset-card.active').forEach(button => button.classList.remove('active'));
   document.querySelectorAll('.shot-thumb.active').forEach(button => button.classList.remove('active'));
-  $('#status').textContent = '草稿有更改 · 应用后才会更新节点'; $('#status').dataset.state = 'dirty';
+  $('#status').textContent = 'Unsaved draft · Apply to update the node'; $('#status').dataset.state = 'dirty';
   if (updateControls) refresh();
   if (updatePreview) schedulePreview();
 }
@@ -142,7 +142,7 @@ async function captureGuide(width = doc.width, height = doc.height) {
   const input = guideSource(doc), captureRevision = revision;
   if (input.kind === 'pose') return studio.captureOpenPose(width, height);
   if (input.kind === 'image') return (await imageCanvas(assetURL(input.asset.name), width, height)).toDataURL('image/png');
-  if (input.kind === 'missing') throw new Error('请先生成、导入或连接当前引导图');
+  if (input.kind === 'missing') throw new Error('Generate, import, or connect the current guide first.');
   if (input.kind === 'scene') return studio.capture(width, height);
   if (input.kind === 'depth-scene') return studio.capture(width, height, { depth: true });
   const source = input.kind === 'canny-image' ? assetURL(input.asset.name) : await studio.capture(width, height, { canny: true });
@@ -172,7 +172,7 @@ async function renderPreview() {
       $('#guide').src = $('#stage-guide').src = png;
       previewRevision = version; refresh();
     }
-  } catch (e) { previewRevision = -1; refresh(); $('#stage-guide-message').textContent = e.message || '预览生成失败，请重试'; error(e); }
+  } catch (e) { previewRevision = -1; refresh(); $('#stage-guide-message').textContent = e.message || 'Preview generation failed. Try again.'; error(e); }
   finally { previewRunning = false; }
 }
 function refresh() {
@@ -185,19 +185,19 @@ function refresh() {
   const imageIndex = doc.version === 3 || castMapping ? manifest.guide?.index || 1 : guideImageIndex(doc.conditioning), promptMode = doc.conditioning.promptMode || 'default';
   const referenceIndex = castMapping ? manifest.references.find(reference => reference.asset.name === doc.reference?.name)?.index
     : promptMode === 'single' ? null : 3 - imageIndex;
-  $('#reference-heading').innerHTML = `原图 <small>· ${referenceIndex ? `image_${referenceIndex}` : '姿势 / 重建来源'}</small>`;
+  $('#reference-heading').innerHTML = `Source Image <small>· ${referenceIndex ? `image_${referenceIndex}` : 'Pose / Reconstruction Source'}</small>`;
   const staticGuide = input.kind === 'image' || input.kind === 'canny-image';
   const poseImage = guide === 'pose' && input.kind === 'image';
   if (previewGuide !== guide) { previewGuide = guide; previewVisible = guide !== 'coarse'; }
   $('#stage').classList.toggle('previewing-guide', previewVisible);
   $('#stage-guide-view').hidden = !previewVisible;
   $('#stage-guide-title').textContent = GUIDE_LABELS[guide];
-  $('#stage-guide-detail').textContent = `实际输出 · image_${imageIndex} · ${doc.width} × ${doc.height}`;
+  $('#stage-guide-detail').textContent = `Output · image_${imageIndex} · ${doc.width} × ${doc.height}`;
   $('#stage-guide').hidden = !hasGuide() || previewRevision !== revision;
   $('#stage-guide-empty').hidden = hasGuide() && previewRevision === revision;
-  $('#stage-guide-message').textContent = hasGuide() ? '正在生成引导图预览…'
-    : guide === 'coarse' ? '先从原图重建三维主体' : '请在右侧生成或导入引导图';
-  $('#view-detail').textContent = previewVisible ? `${GUIDE_LABELS[guide]} · 实际输出` : '三维工作台 · 调整机位与姿势';
+  $('#stage-guide-message').textContent = hasGuide() ? 'Generating guide preview…'
+    : guide === 'coarse' ? 'Rebuild the subject from the source first' : 'Generate or import a guide in the right panel';
+  $('#view-detail').textContent = previewVisible ? `${GUIDE_LABELS[guide]} · Output` : '3D Workspace · Adjust camera and pose';
   for (const [id, active] of [['view-output', previewVisible], ['view-scene', !previewVisible]]) {
     $(`#${id}`).classList.toggle('active', active); $(`#${id}`).setAttribute('aria-pressed', String(active));
   }
@@ -211,10 +211,10 @@ function refresh() {
   $('#pose-category').value = (doc.randomMaster || doc.poseRandom)?.category || 'mixed';
   if (document.activeElement !== $('#pose-seed')) $('#pose-seed').value = (doc.randomMaster || doc.poseRandom)?.seed || 0;
   for (const id of ['camera-heading', 'camera-eyebrow', 'camera-sliders', 'view-presets', 'shot-shelf', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
-  $('#stage-help').textContent = previewVisible ? staticGuide ? '原图结构与构图 · 应用到节点后输出当前引导图' : '当前三维机位的引导图 · 切换 3D 工作台调整机位'
-    : studio?.mode === 'position' ? '点选人物 · 拖动调整站位 · 右键环绕 · 中键平移'
-    : studio?.mode === 'edit' ? '点选关节 / 拖 IK 手脚 · 右键环绕 · 中键平移'
-      : '黄框为输出范围 · 拖动调整机位 · 中键或 Shift 平移 · 滚轮缩放';
+  $('#stage-help').textContent = previewVisible ? staticGuide ? 'Source composition and structure · Apply to output this guide' : 'Guide from the current camera · Switch to 3D Workspace to adjust the view'
+    : studio?.mode === 'position' ? 'Select a character · Drag to place · Right-drag to orbit · Middle-drag to pan'
+    : studio?.mode === 'edit' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan'
+      : 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom';
   for (const control of controls.values()) control.refresh();
   $('#width').value = doc.width; $('#height').value = doc.height;
   $('#background').value = doc.background;
@@ -228,12 +228,12 @@ function refresh() {
   $('#front').closest('.control').hidden = human || splat || empty;
   $('#scale').closest('.control').hidden = splat || empty;
   $('#calibration-hint').textContent = splat
-    ? '原图重建主体与预测机位已对齐，姿势固定。请用拍摄相机调整角度、缩放和构图。'
-    : empty ? '连接原图并重建主体，或导入 GLB 后调整场景。'
-      : human ? '人偶可调整资产尺度；姿势、手势和关节可在编辑场景中修改。'
-        : 'GLB 默认 Y 轴朝上。旋转资产以校准正面；资产尺度与镜头缩放相互独立。';
-  $('#asset-label').textContent = empty ? '等待原图重建' : human ? 'MakeHuman · 手动人偶' : doc.source.label || 'GLB 场景';
-  $('#source-badge').textContent = empty ? 'PHOTO → 3D' : splat ? doc.source.keep_background ? 'TRIPOSPLAT · 保留背景' : 'TRIPOSPLAT · 原图主体' : human ? 'HUMAN · 手动人偶' : 'GLB · 场景';
+    ? 'The reconstructed subject is aligned with the estimated source camera. Use the camera to adjust the angle, zoom, and composition.'
+    : empty ? 'Connect a source image and rebuild the subject, or import a GLB to adjust the scene.'
+      : human ? 'Adjust mannequin scale here. Use Edit Scene to change poses, hand poses, and joints.'
+        : 'GLB uses Y-up by default. Rotate the asset to align its front. Asset scale and camera zoom adjust independently.';
+  $('#asset-label').textContent = empty ? 'Waiting for source reconstruction' : human ? 'MakeHuman · Posable Mannequin' : doc.source.label || 'GLB Scene';
+  $('#source-badge').textContent = empty ? 'PHOTO → 3D' : splat ? doc.source.keep_background ? 'TRIPOSPLAT · Background Included' : 'TRIPOSPLAT · Source Subject' : human ? 'HUMAN · Posable Mannequin' : 'GLB · Scene';
   for (const id of ['pose-panel', 'hands-panel', 'body-panel', 'joint-panel']) {
     $(`#${id}`).classList.toggle('disabled-panel', !human);
     $(`#${id}`).inert = !human || id !== 'pose-panel' && !!activeActor(doc)?.locked;
@@ -249,26 +249,26 @@ function refresh() {
   $('#reference-button').disabled = $('#reference-drop').disabled = linkedReference.connected;
   $('#read-reference').hidden = !linkedReference.connected;
   $('#read-reference').disabled = !!linkedReference.pending;
-  $('#reference-origin').textContent = linkedReference.connected ? linkedReference.message : '支持节点左侧 IMAGE 连线，也可上传原图。';
+  $('#reference-origin').textContent = linkedReference.connected ? linkedReference.message : 'Connect an IMAGE input on the node or upload a source image.';
   $('#reconstruction-state').hidden = !doc.reference;
   const keepBackground = doc.reconstruction.keepBackground;
   $('#keep-background').checked = keepBackground;
   $('#keep-background').disabled = !doc.reference || !!linkedReference.pending;
   const reconstructionChanged = splat && !!doc.source.keep_background !== keepBackground;
-  $('#reconstruction-state').textContent = splat ? '原图 3D 保持重建姿势，无可编辑骨架；拖动相机改变视角。需要手动摆姿可切换人偶。' : '从原图重建对应主体，再调整机位。';
+  $('#reconstruction-state').textContent = splat ? 'The reconstruction keeps its source pose. Move the camera for a different view or switch to a mannequin to edit the pose.' : 'Rebuild the subject from the source image, then adjust the camera.';
   $('#reconstruct').disabled = !doc.reference;
-  if (reconstructionChanged) $('#reconstruction-state').textContent = '背景选项已改变 · 点击重建后应用；当前预览仍为上次结果。';
-  $('#reconstruct').textContent = reconstructionChanged ? '按新设置重新重建 3D' : keepBackground ? '保留背景重建 3D' : splat ? '重新载入原图 3D' : '从原图重建 3D';
+  if (reconstructionChanged) $('#reconstruction-state').textContent = 'Background setting changed · Rebuild to apply it. The preview shows the last result.';
+  $('#reconstruct').textContent = reconstructionChanged ? 'Rebuild 3D with New Settings' : keepBackground ? 'Rebuild 3D with Background' : splat ? 'Reload Source Reconstruction' : 'Rebuild 3D from Source';
   $('#empty-scene').hidden = !empty;
   $('#coarse-inputs').hidden = guide !== 'coarse';
   $('#extract-coarse').disabled = !doc.reference || !!linkedReference.pending;
   $('#preview-coarse').disabled = empty;
-  $('#coarse-status').textContent = splat ? doc.source.keep_background ? '保留背景的三维重建已就绪，可预览或调整机位；大场景效果仍属实验。' : '原图三维主体已就绪，可预览或调整新机位。'
-    : human ? '当前场景是手动人偶；重建原图后可生成对应主体的粗图。'
-      : empty ? '先从原图重建三维主体，再输出拍摄机位粗图。' : '当前 GLB 场景可直接渲染粗图。';
+  $('#coarse-status').textContent = splat ? doc.source.keep_background ? 'Reconstruction with background is ready. Preview it or adjust the camera. Large scenes are experimental.' : 'The reconstructed subject is ready. Preview it or adjust the camera.'
+    : human ? 'The scene uses a posable mannequin. Rebuild the source to render its subject.'
+      : empty ? 'Rebuild the subject from the source before rendering a camera view.' : 'Render a guide directly from the GLB scene.';
   $('#model-anyangle').classList.toggle('active', !base); $('#model-base').classList.toggle('active', base);
   $('#model-anyangle').disabled = promptMode === 'single';
-  $('#model-anyangle').title = promptMode === 'single' ? '单引导图模式使用 Qwen 底模' : '';
+  $('#model-anyangle').title = promptMode === 'single' ? 'Guide Image Only uses the Qwen Base Model.' : '';
   $('#model-badge').textContent = base ? 'QWEN 2.1' : 'ANYANGLE';
   document.querySelectorAll('[data-guide]').forEach(button => {
     button.classList.toggle('active', button.dataset.guide === guide);
@@ -276,8 +276,8 @@ function refresh() {
   });
   $('#openpose-panel').hidden = !base || guide !== 'pose';
   $('#pose-source-description').textContent = poseImage
-    ? '直接输出原图的彩色骨架，保留原构图。可复制可见关节到人偶，画外肢体保持原姿势。'
-    : '当前输出三维场景骨架，随人物动作、站位和拍摄机位变化。也可从原图提取或导入骨架，再复制到人偶。';
+    ? 'Output the source skeleton in its original composition. Copy visible joints to a mannequin while keeping off-frame limbs in their current pose.'
+    : 'The 3D skeleton follows the pose, placement, and camera view. You can also extract or import a skeleton to copy to a mannequin.';
   $('#extract-pose').disabled = !doc.reference || !!linkedReference.pending;
   $('#map-inputs').hidden = !base || !['depth', 'canny'].includes(guide);
   $('#extract-depth').hidden = guide !== 'depth';
@@ -296,66 +296,66 @@ function refresh() {
   $('#generate-canny').disabled = !doc.reference || !!linkedReference.pending;
   $('#generate-scene-canny').hidden = guide !== 'canny';
   $('#generate-scene-canny').disabled = empty;
-  $('#import-map').textContent = guide === 'depth' ? '导入 Depth Anything 图' : '导入 Canny 图';
+  $('#import-map').textContent = guide === 'depth' ? 'Import Depth Anything Map' : 'Import Canny Image';
   $('#read-map').hidden = !linkedStructure.connected;
   $('#read-map').disabled = !!linkedStructure.pending;
   $('#import-map').disabled = linkedStructure.connected;
-  $('#map-status').textContent = guide === 'depth' && input.kind === 'depth-scene' ? '全场共享深度范围 · 随当前拍摄机位变化；仅 Mesh 场景可用。'
-    : guide === 'depth' && doc.conditioning.mapOrigin === 'da3' && doc.conditioning.map ? '已从原图估计深度；对应原机位。'
-    : guide === 'canny' && input.kind === 'canny-image' ? '当前输出原图 Canny 轮廓。'
-    : guide === 'canny' && input.kind === 'canny-scene' ? '当前输出三维机位 Canny 轮廓。'
-    : linkedStructure.connected ? linkedStructure.message || '结构图已连接'
-    : doc.conditioning.map && doc.conditioning.mapKind === guide ? `已导入 ${doc.conditioning.map.label || GUIDE_LABELS[guide]}`
-      : guide === 'depth' ? '可从原图直接估计，也可接入深度 IMAGE 或导入 PNG。'
-        : '可从原图或三维机位生成，也可导入外部 Canny 图。';
+  $('#map-status').textContent = guide === 'depth' && input.kind === 'depth-scene' ? 'Shared depth range across the scene · Updates with the camera in mesh scenes.'
+    : guide === 'depth' && doc.conditioning.mapOrigin === 'da3' && doc.conditioning.map ? 'Depth was estimated from the source and matches its camera view.'
+    : guide === 'canny' && input.kind === 'canny-image' ? 'Outputting Canny edges from the source.'
+    : guide === 'canny' && input.kind === 'canny-scene' ? 'Outputting Canny edges from the 3D view.'
+    : linkedStructure.connected ? linkedStructure.message || 'Structure guide connected'
+    : doc.conditioning.map && doc.conditioning.mapKind === guide ? `Imported ${doc.conditioning.map.label || GUIDE_LABELS[guide]}`
+      : guide === 'depth' ? 'Estimate from the source, connect a depth IMAGE, or import a PNG.'
+        : 'Generate from the source or 3D view, or import a Canny image.';
   $('#canny-options').hidden = !base || guide !== 'canny' || !!doc.conditioning.map;
   $('#canny-low').value = doc.conditioning.cannyLow; $('#canny-high').value = doc.conditioning.cannyHigh;
-  $('#guide-explanation').textContent = !base ? '同一场景的新机位粗图，配合 AnyAngle LoRA 使用。'
-    : guide === 'depth' ? '深度图决定空间层次；从原图估计的深度仍对应原机位。'
-      : guide === 'pose' ? poseImage ? '输出原图可见骨架，中央预览与节点输出一致。' : '输出三维人偶在当前机位的骨架，可调整姿势与相机。'
+  $('#guide-explanation').textContent = !base ? 'Use a coarse render of the new view with the AnyAngle LoRA.'
+    : guide === 'depth' ? 'Depth guides spatial layering. Source depth keeps the original view.'
+      : guide === 'pose' ? poseImage ? 'The center previews the source skeleton sent to the node.' : 'Output the 3D mannequin skeleton from the current view. Adjust the pose and camera as needed.'
         : guide === 'canny' ? input.kind === 'canny-scene' && !studio?.splat
-          ? '使用高对比灰模提取几何轮廓，保留当前机位与遮挡；阈值可调整。'
-          : '中央显示实际轮廓图；阈值调整会直接更新边缘。'
-          : '底模参考粗图，机位遵循程度需实测。';
+          ? 'Extract outlines from a high-contrast render using the current camera and occlusion. Adjust thresholds as needed.'
+          : 'The center shows the output edges. Adjust thresholds to update them.'
+          : 'The base model uses the coarse render as guidance. Camera matching can vary.';
   $('#guide-heading').innerHTML = `${GUIDE_LABELS[guide]} <small>· image_${imageIndex}</small>`;
-  $('#guide').alt = `当前会输出到 image_${imageIndex} 的引导图`;
+  $('#guide').alt = `Guide image sent to image_${imageIndex}`;
   $('#prompt-mode').value = promptMode; $('#image-order').value = manifest.imageOrder;
   $('#image-order-row').hidden = promptMode === 'single';
   $('#custom-prompt-row').hidden = promptMode !== 'custom'; $('#prompt-extra-row').hidden = promptMode === 'custom';
   if (document.activeElement !== $('#custom-prompt')) $('#custom-prompt').value = doc.conditioning.customPrompt || '';
   if (document.activeElement !== $('#prompt-extra')) $('#prompt-extra').value = doc.conditioning.promptExtra || '';
-  $('#image-wiring').textContent = promptMode === 'single' ? '当前引导图 → image_1；无需连接原图。用附加描述定义人物、场景与风格。'
-    : `原图 → image_${3 - imageIndex}；当前引导图 → image_${imageIndex}。更改顺序后请对应调整编码器连线。`;
-  $('#prompt-mode-hint').textContent = promptMode === 'custom' ? '提示词按原文输出，不自动改写图片编号；可留空并在工作流中自行拼接。'
-    : promptMode === 'single' ? '单图模式关闭 AnyAngle LoRA；请连接强度输出或移除旧工作流的 LoRA。'
-      : '保持原有双图模板，可调整图片编号并附加描述。';
+  $('#image-wiring').textContent = promptMode === 'single' ? 'Current guide → image_1. Use Additional Description for characters, setting, and style.'
+    : `Source → image_${3 - imageIndex} · Current guide → image_${imageIndex}. Update the encoder connections if you change the order.`;
+  $('#prompt-mode-hint').textContent = promptMode === 'custom' ? 'Studio outputs the prompt as written, including image numbers. Leave it blank to build the prompt in the workflow.'
+    : promptMode === 'single' ? 'Single-image mode disables the AnyAngle LoRA. Connect the strength output or remove the LoRA from the workflow.'
+      : 'Use the two-image template with optional reordering and an additional description.';
   $('#mouse-pitch').checked = doc.interaction?.mousePitch !== false;
   $('#preview-quality').value = doc.interaction?.quality || 'balanced';
   $('#live-preview').checked = doc.interaction?.livePreview !== false;
   $('#prompt-preview').textContent = scenePrompt(doc, manifest);
   if (castMapping && !multi && !manifest.references.length && promptMode !== 'custom') {
-    $('#image-wiring').textContent = '当前结构图 → image_1；没有共享原图，使用引导图与附加描述生成。人物绑定保留。';
-    $('#prompt-mode-hint').textContent = '当前静态结构图使用单图模板；切回三维引导后恢复人物身份映射。';
+    $('#image-wiring').textContent = 'Current structure guide → image_1. Generate from the guide and additional description. Character bindings are kept.';
+    $('#prompt-mode-hint').textContent = 'The static guide uses the single-image template. Switch back to 3D guidance to restore the identity mapping.';
   }
   if (multi && doc.version !== 3) {
-    $('#image-wiring').textContent = `引导图 → image_${manifest.guide.index}；${manifest.references.map(ref => `人物照片 → image_${ref.index} (${ref.actorIds.length} 人共用)`).join('；') || '人物使用文字身份'}。连接“多人编码 · T8”读取实际映射。`;
-    $('#prompt-mode-hint').textContent = `${manifest.guide.index === 1 ? `首张引导图按 32 对齐编码；请求 ${doc.width} × ${doc.height}。` : '首张人物照片及编码节点的参考预算决定画幅。'}实际尺寸在多人编码节点的 latent 输出旁显示。${doc.width % 32 || doc.height % 32 ? '推荐把输出宽高设为 32 的整数倍。' : ''}`;
-    $('#prompt-mode-hint').textContent += ` ${manifest.warnings.join(' ') || `${manifest.imageCount} 张参考 · 官方参考预算为 10 张。角色绑定与实际图片编号自动同步。`}`;
-    if (promptMode === 'custom') $('#prompt-mode-hint').textContent += ' 左侧原图需绑定人物才用于身份；自定义提示词按原文输出，图片编号由用户维护。';
+    $('#image-wiring').textContent = `Guide → image_${manifest.guide.index} · ${manifest.references.map(ref => `Character photo → image_${ref.index} (${ref.actorIds.length} characters share it)`).join(' · ') || 'Characters use text descriptions'}. Connect Multi-Image Encode to use these assignments.`;
+    $('#prompt-mode-hint').textContent = `${manifest.guide.index === 1 ? `The first guide is aligned to a multiple of 32. Requested size: ${doc.width} × ${doc.height}.` : 'The first character photo and encoder reference budget determine the output size.'} See the actual size beside the encoder’s latent output.${doc.width % 32 || doc.height % 32 ? ' Use width and height that are multiples of 32.' : ''}`;
+    $('#prompt-mode-hint').textContent += ` ${manifest.warnings.join(' ') || `${manifest.imageCount} references · Qwen recommends up to 10. Character assignments follow the actual image order.`}`;
+    if (promptMode === 'custom') $('#prompt-mode-hint').textContent += ' Assign the source to a character to use it for identity. Custom prompts keep the image numbers you enter.';
   }
-  $('#lora-hint').textContent = base ? 'LoRA 强度输出 0 → 使用底模' : 'LoRA 强度输出 1 → AnyAngle';
-  $('#protocol-hint').textContent = base && unwiredAnyAngle ? '当前工作流的 AnyAngle LoRA 强度仍固定。请连接 Studio 的强度输出，或移除 LoRA 加载器。'
-    : base ? `底模使用 image_${imageIndex} 作为引导图；结构遵循程度需实测。`
-    : human ? '修改人物动作请选 Qwen 底模 + POSE 姿势；AnyAngle 用于改变机位。'
-      : 'AnyAngle 推荐原图 1 / 当前机位粗图 2，并保留清晰原图；对调图序可能削弱机位跟随。请把 LoRA 强度输出接至加载器。';
+  $('#lora-hint').textContent = base ? 'LoRA strength 0 → Base model' : 'LoRA strength 1 → AnyAngle';
+  $('#protocol-hint').textContent = base && unwiredAnyAngle ? 'The workflow still uses a fixed AnyAngle LoRA strength. Connect Studio’s strength output or remove the LoRA loader.'
+    : base ? `The base model uses image_${imageIndex} as a guide. Structure matching can vary.`
+    : human ? 'Use Qwen Base Model with Pose guidance to change poses. Use AnyAngle to change the camera angle.'
+      : 'For AnyAngle, put the clear source image first and the camera render second. Reversing them may weaken camera matching. Connect the LoRA strength output to its loader.';
   $('#protocol-hint').classList.toggle('wiring-warning', base && unwiredAnyAngle);
   $('#openpose-status').textContent = doc.openpose ? poseImage ? doc.openpose.fullBody === false
-    ? '已提取可见骨架；半身或遮挡照片直接输出原图姿势。' : '已生成原图骨架；可直接输出或选择三维编辑。'
-    : '当前输出三维人偶骨架 · 可调整姿势与机位。' : '可提取原图或导入骨架；当前人偶可手动摆姿。';
+    ? 'Visible joints extracted. Cropped or occluded photos can output the source pose directly.' : 'Source skeleton ready. Output it directly or edit the pose in 3D.'
+    : 'Outputting the 3D mannequin skeleton · Adjust the pose and camera as needed.' : 'Extract a pose from the source or import a skeleton. You can also pose the mannequin by hand.';
   $('#retarget-pose').hidden = !doc.openpose?.rawAsset && !doc.conditioning.map;
-  $('#retarget-pose').textContent = poseImage ? '用三维人偶调整姿势' : '重新复制照片姿势';
+  $('#retarget-pose').textContent = poseImage ? 'Adjust Pose on 3D Mannequin' : 'Copy Photo Pose Again';
   $('#retarget-pose').disabled = false;
-  $('#retarget-pose').title = '复制可见关节；旧版半身骨架需要重新提取';
+  $('#retarget-pose').title = 'Copy visible joints. Extract older partial-body skeletons again.';
   $('#pose-copy-mode').value = doc.openpose?.retargetMode || (doc.openpose?.origin === 'import' ? 'estimated' : 'conservative');
   $('#pose-copy-mode').querySelector('[value="estimated"]').disabled = doc.openpose?.fullBody === false;
   $('#pose-original').hidden = !doc.openpose?.rawAsset || poseImage;
@@ -368,26 +368,26 @@ function refresh() {
   $('#guide').hidden = !hasGuide() || previewRevision !== revision;
   const emptyCanny = ['canny-scene', 'canny-image'].includes(input.kind) && cannyWarningRevision === revision;
   $('#guide-state').classList.toggle('wiring-warning', emptyCanny);
-  $('#guide-state').textContent = emptyCanny ? EMPTY_CANNY_WARNING : !hasGuide() ? guide === 'pose' ? '先连接原图提取姿势，或导入 OpenPose 图。'
-    : guide === 'depth' ? '先从原图估计深度，或导入、连接深度图。'
-      : guide === 'canny' ? '请连接原图或载入三维主体，也可导入 Canny 图。'
-        : '请先载入三维主体。'
-    : guide === 'coarse' ? '网格与控制器不会进入粗图。' : `预览即将输出到 image_${imageIndex} 的实际引导图。`;
+  $('#guide-state').textContent = emptyCanny ? EMPTY_CANNY_WARNING : !hasGuide() ? guide === 'pose' ? 'Connect a source to extract a pose, or import an OpenPose image.'
+    : guide === 'depth' ? 'Estimate depth from the source, or import or connect a depth map.'
+      : guide === 'canny' ? 'Connect a source, load a 3D subject, or import a Canny image.'
+        : 'Load a 3D subject first.'
+    : guide === 'coarse' ? 'The render excludes the workspace grid and controls.' : `Preview of the guide sent to image_${imageIndex}.`;
   $('#save-shot').disabled = $('#fit-frame').disabled = empty;
   $('#open-batch').disabled = !supportsCameraBatch(doc);
-  $('#open-batch').title = supportsCameraBatch(doc) ? '按角度步进或收藏机位批量渲染 / 生成'
-    : '需使用三维粗图、人偶骨架或三维 Canny；原图提取的结构图保持原视角';
+  $('#open-batch').title = supportsCameraBatch(doc) ? 'Render or generate a batch from a range or saved views.'
+    : 'Use a 3D coarse render, mannequin skeleton, or 3D Canny guide for this feature. Extracted guides keep the source view.';
   $('#download-guide').disabled = !hasGuide();
   $('#apply').disabled = busy || !ready || !hasGuide() || (linkedReference.connected && (!linkedReference.asset || linkedReference.pending))
     || (linkedStructure.connected && !!linkedStructure.pending && !usesLocalGuide(guide));
   $('#edit-mode').disabled = splat || empty;
   $('#position-mode').disabled = !human;
-  $('#edit-mode').title = splat ? '原图重建主体没有可编辑骨架；请使用拍摄机位' : empty ? '请先载入三维主体' : '';
+  $('#edit-mode').title = splat ? 'Use Camera mode to change the view of a reconstructed subject.' : empty ? 'Load a 3D subject first.' : '';
   $('#mode-hint').hidden = !splat;
-  $('#fit-frame').textContent = splat ? '回到原图机位' : '适合画幅';
-  $('.eyebrow').textContent = `${splat ? '原图预测机位' : '场景正面'} · Y-UP · 透视`;
-  $('[data-angle="0"]').textContent = splat ? '原图机位' : '正面';
-  $('#bone-name').textContent = selectedBone || '未选择';
+  $('#fit-frame').textContent = splat ? 'Return to Source Camera' : 'Fit to Frame';
+  $('.eyebrow').textContent = `${splat ? 'Estimated Source Camera' : 'Scene Front'} · Y-Up · Perspective`;
+  $('[data-angle="0"]').textContent = splat ? 'Source Camera' : 'Front';
+  $('#bone-name').textContent = selectedBone || 'None Selected';
   $('#bone-select').value = selectedBone;
   for (const axis of ['x', 'y', 'z']) controls.get(`bone-${axis}`)?.refresh();
   refreshActorsUI();
@@ -424,11 +424,11 @@ function makeControl(container, { id, label, min, max, step = 1, unit = '', read
 }
 
 for (const [key, label, min, max, step, unit] of [
-  ['azimuth', '方位角', -180, 180, 0.1, '°'], ['elevation', '俯仰角', -89, 89, 0.1, '°'],
-  ['zoom', '构图缩放', 0.1, 8, 0.01, '×'],
+  ['azimuth', 'Azimuth', -180, 180, 0.1, '°'], ['elevation', 'Pitch', -89, 89, 0.1, '°'],
+  ['zoom', 'Composition Zoom', 0.1, 8, 0.01, '×'],
 ]) makeControl('#camera-sliders', { id: key, label, min, max, step, unit,
   read: () => doc.camera[key], write: value => { doc.camera[key] = value; studio.updateShot(); } });
-makeControl('#focal-sliders', { id: 'focal-length', label: '焦距', min: 12, max: 200, step: 1, unit: 'mm',
+makeControl('#focal-sliders', { id: 'focal-length', label: 'Focal Length', min: 12, max: 200, step: 1, unit: 'mm',
   read: () => doc.camera.focalLength || 50, write: value => { doc.camera.focalLength = value; studio.updateShot(); } });
 $('#lens-mode').onchange = event => {
   begin(); doc.camera.focalLength = event.target.value === 'custom' ? 50 : 0; studio.updateShot(true); changed();
@@ -437,29 +437,29 @@ document.querySelectorAll('[data-focal]').forEach(button => { button.onclick = (
   begin(); doc.camera.focalLength = Number(button.dataset.focal); studio.updateShot(true); changed();
 }; });
 for (const [key, label, min, max, step] of [
-  ['age', '年龄', 18, 75, 1], ['gender', '体型特征', 0, 1, 0.01], ['weight', '体重', 0, 1, 0.01], ['muscle', '肌肉', 0, 1, 0.01], ['height', '身高', 0, 1, 0.01],
+  ['age', 'Age', 18, 75, 1], ['gender', 'Body Shape', 0, 1, 0.01], ['weight', 'Weight', 0, 1, 0.01], ['muscle', 'Muscle', 0, 1, 0.01], ['height', 'Height', 0, 1, 0.01],
 ]) makeControl('#body-sliders', { id: `body-${key}`, label, min, max, step,
   read: () => doc.mesh[key], write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
-for (const axis of ['x', 'y', 'z']) makeControl('#bone-sliders', { id: `bone-${axis}`, label: `旋转 ${axis.toUpperCase()}`, min: -180, max: 180, step: 1, unit: '°',
+for (const axis of ['x', 'y', 'z']) makeControl('#bone-sliders', { id: `bone-${axis}`, label: `Rotate ${axis.toUpperCase()}`, min: -180, max: 180, step: 1, unit: '°',
   read: () => (studio?.viewer.bones[selectedBone]?.rotation[axis] || 0) * 180 / Math.PI,
   write: value => {
     const bone = studio.viewer.bones[selectedBone]; if (!bone) return;
     bone.rotation[axis] = value * Math.PI / 180; bone.updateMatrixWorld(true);
     studio.viewer.updateIKEffectorPositions(); studio.viewer.updateMarkers(); studio.viewer.requestRender();
   } });
-for (const [key, label, min, max, step, unit] of [['front', 'GLB 正面校准', -180, 180, 1, '°'], ['scale', '资产尺度', 0.25, 3, 0.01, '×']]) {
+for (const [key, label, min, max, step, unit] of [['front', 'GLB Front Alignment', -180, 180, 1, '°'], ['scale', 'Asset Scale', 0.25, 3, 0.01, '×']]) {
   makeControl('#scene-sliders', { id: key, label, min, max, step, unit, read: () => doc[key], write: value => { doc[key] = value; }, commit: async () => { studio.syncPose(); await studio.restore(doc); } });
 }
-for (const [key, label] of [['offsetX', '构图水平偏移'], ['offsetY', '构图垂直偏移']]) {
+for (const [key, label] of [['offsetX', 'Horizontal Framing Offset'], ['offsetY', 'Vertical Framing Offset']]) {
   makeControl('#scene-sliders', { id: key, label, min: -20, max: 20, step: 0.01,
     read: () => doc.camera[key], write: value => { doc.camera[key] = value; studio.updateShot(); } });
 }
 
-for (const [side, label] of [['l', '左手'], ['r', '右手']]) {
+for (const [side, label] of [['l', 'Left Hand'], ['r', 'Right Hand']]) {
   const row = document.createElement('div'); row.className = 'hand-row';
   const title = document.createElement('h3'); title.textContent = label;
   const buttons = document.createElement('div'); buttons.className = 'three-buttons';
-  for (const [key, text] of [['OPEN', '放松'], ['CHOP', '并拢'], ['FIST', '握拳']]) {
+  for (const [key, text] of [['OPEN', 'Relaxed'], ['CHOP', 'Flat'], ['FIST', 'Fist']]) {
     const button = document.createElement('button'); button.textContent = text;
     button.onclick = () => { begin(); studio.hand(side, key); changed(); }; buttons.append(button);
   }
@@ -473,10 +473,10 @@ function setMode(mode) {
   $('#position-mode').classList.toggle('active', mode === 'position'); $('#position-mode').setAttribute('aria-pressed', String(mode === 'position'));
   $('#camera-mode').setAttribute('aria-pressed', String(mode === 'camera')); $('#edit-mode').setAttribute('aria-pressed', String(mode === 'edit'));
   $('#use-view').hidden = mode !== 'edit';
-  $('#stage-help').textContent = mode === 'camera' ? '黄框为输出范围 · 拖动调整机位 · 中键或 Shift 平移 · 滚轮缩放'
-    : mode === 'position' ? '点选人物 · 拖动调整站位 · 右键环绕 · 中键平移'
-    : doc.source.kind === 'human' ? '点选关节 / 拖 IK 手脚 · 右键环绕 · 中键平移 · 拍摄机位保持不变'
-      : '右键环绕 · 中键平移 · 可将当前视图设为机位';
+  $('#stage-help').textContent = mode === 'camera' ? 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom'
+    : mode === 'position' ? 'Select a character · Drag to place · Right-drag to orbit · Middle-drag to pan'
+    : doc.source.kind === 'human' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan · Camera stays in place'
+      : 'Right-drag to orbit · Middle-drag to pan · Set this view as the camera';
 }
 $('#view-output').onclick = () => { previewVisible = true; refresh(); renderPreview(); };
 $('#view-scene').onclick = () => { previewVisible = false; setMode(studio.mode); refresh(); };
@@ -572,11 +572,11 @@ document.addEventListener('keydown', event => {
 async function upload(file, preserveAlpha = false) {
   const form = new FormData(); form.append('file', file);
   const response = await fetch(`/anyangle-studio/assets${preserveAlpha ? '?alpha=preserve' : ''}`, { method: 'POST', body: form });
-  const result = await response.json(); if (!response.ok) throw new Error(result.error || '导入失败'); return result;
+  const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Import failed'); return result;
 }
 async function applyOpenPoseAsset(asset, detectedPoints = null, fullBody = null, visibleOnly = false) {
   begin();
-  doc.openpose = { name: asset.label || 'OpenPose 骨架', sourceName: asset.name, rawAsset: asset,
+  doc.openpose = { name: asset.label || 'OpenPose skeleton', sourceName: asset.name, rawAsset: asset,
     origin: detectedPoints ? 'dwpose' : 'import', points: detectedPoints, fullBody, visibleOnly,
     referenceName: detectedPoints ? doc.reference?.name : null, acceptStoredSource: false,
     retargetMode: detectedPoints ? 'conservative' : 'estimated', flips: {} };
@@ -590,9 +590,9 @@ async function retargetPose() {
   const mode = doc.openpose?.retargetMode || (doc.openpose?.origin === 'dwpose' ? 'conservative' : 'estimated');
   if (doc.openpose?.origin === 'dwpose' && doc.openpose.fullBody === false
       && (!doc.openpose.visibleOnly || mode === 'estimated'))
-    throw new Error('半身照片请重新提取，并选择保守平面复制；推测立体需要全身关节');
+    throw new Error('Extract the partial-body pose again and choose 2D Transfer. Estimated 3D requires full-body joints.');
   const asset = doc.openpose?.rawAsset || doc.conditioning.map;
-  if (!asset) throw new Error('请先提取或导入骨架图');
+  if (!asset) throw new Error('Extract or import a skeleton first.');
   let people;
   if (doc.openpose?.points) people = [doc.openpose.points];
   else {
@@ -603,14 +603,14 @@ async function retargetPose() {
     const candidates = people.map((raw, i) => {
       const inferred = people.inferredByPerson?.[i] || people.inferredJoints || [], points = Object.fromEntries(Object.entries(raw).filter(([key])=>!inferred.includes(key))), values = Object.values(points);
       return { id: `png-${i}`, points, fullBody: !!(points.la && points.ra), canEstimate3D: !inferred.length, inferredJoints: inferred,
-        warning: inferred.length ? '近似补全点不参与复制；缺失肢体保持原姿势' : '', bbox: [Math.min(...values.map(p=>p[0])), Math.min(...values.map(p=>p[1])), Math.max(...values.map(p=>p[0])), Math.max(...values.map(p=>p[1]))], canvasWidth: asset.width, canvasHeight: asset.height };
+        warning: inferred.length ? 'Inferred keypoints are skipped. Missing limbs keep their pose.' : '', bbox: [Math.min(...values.map(p=>p[0])), Math.min(...values.map(p=>p[1])), Math.max(...values.map(p=>p[0])), Math.max(...values.map(p=>p[1]))], canvasWidth: asset.width, canvasHeight: asset.height };
     });
     return chooseDetectedPeople(candidates, asset, { origin: 'import' });
   }
   const inferred = people.inferredByPerson?.[0] || people.inferredJoints || [];
   const points = people[0] && Object.fromEntries(Object.entries(people[0]).filter(([key])=>!inferred.includes(key)));
   const copyMode = inferred.length ? 'conservative' : mode;
-  if (!points) throw new Error('没有找到可用的 OpenPose 身体骨架');
+  if (!points) throw new Error('No usable OpenPose body skeleton found.');
   const previous = clone(doc), rollbackHistory = begin();
   try {
     if (doc.source.kind !== 'human') {
@@ -625,9 +625,9 @@ async function retargetPose() {
     setMode('camera');
     previewVisible = false;
     changed();
-    const notes = [copyMode === 'conservative' ? '已复制可见方向；画外肢体保持原姿势' : facingAway ? '识别为背面' : '识别为正面'];
-    if (inferred.length) notes.push('近似补全点未参与复制');
-    $('#openpose-status').textContent = `${asset.label || 'OpenPose 骨架'}：${notes.join('，')}`;
+    const notes = [copyMode === 'conservative' ? 'Copied visible orientations. Off-frame limbs kept their pose.' : facingAway ? 'Back view detected' : 'Front view detected'];
+    if (inferred.length) notes.push('Inferred keypoints skipped');
+    $('#openpose-status').textContent = `${asset.label || 'OpenPose skeleton'} · ${notes.join(' · ')}`;
     return true;
   } catch (error) {
     doc = previous; rollbackHistory?.();
@@ -652,9 +652,9 @@ async function applyStructureAsset(asset) {
 }
 $('#import-openpose').onclick = () => $('#openpose-file').click();
 async function extractPhotoPose(copyToHuman = false) {
-  if (!doc.reference?.name) throw new Error('请先连接或导入原图');
-  $('#loading-text').textContent = '正在从原图提取姿势';
-  $('#loading-detail').textContent = '首次使用可能需要下载 DWPose 模型';
+  if (!doc.reference?.name) throw new Error('Connect or import a source image first.');
+  $('#loading-text').textContent = 'Extracting pose from the source';
+  $('#loading-detail').textContent = 'First use may require downloading the DWPose model.';
   $('#loading').hidden = false;
   try {
     const response = await fetch('/anyangle-studio/dwpose', {
@@ -662,20 +662,20 @@ async function extractPhotoPose(copyToHuman = false) {
       body: JSON.stringify({ reference: doc.reference.name }),
     });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'DWPose 提取失败');
+    if (!response.ok) throw new Error(result.error || 'DWPose extraction failed');
     await applyOpenPoseAsset(result.asset, result.points, result.fullBody, result.visibleOnly);
     doc.openpose.people = result.people || [];
-    if (copyToHuman) { const copied = await retargetPose(); toast(copied ? '已复制照片可见姿势到人偶，可继续编辑、撤销或保存' : '已取消复制；原图骨架保留，场景人物未修改'); }
-    else toast(result.fullBody ? '原图姿势已提取，中央预览为实际输出骨架' : '原图可见姿势已提取，未显示的肢体不会补成人偶姿势');
+    if (copyToHuman) { const copied = await retargetPose(); toast(copied ? 'Copied the visible pose to the mannequin. You can edit, undo, or save it.' : 'Pose transfer canceled. The source skeleton and scene characters are kept.'); }
+    else toast(result.fullBody ? 'Source pose extracted. The center shows the output skeleton.' : 'Visible pose extracted. Hidden limbs keep their mannequin pose.');
   } finally { $('#loading').hidden = true; }
 }
 $('#extract-pose').onclick = () => run(() => extractPhotoPose());
 $('#copy-photo-pose').onclick = () => run(() => extractPhotoPose(true));
 $('#import-map').onclick = () => $('#map-file').click();
 $('#extract-depth').onclick = () => run(async () => {
-  if (!doc.reference?.name) throw new Error('请先连接或导入原图');
-  $('#loading-text').textContent = '正在估计原图深度';
-  $('#loading-detail').textContent = '首次使用可能需要下载 Depth Anything 3 Small 模型';
+  if (!doc.reference?.name) throw new Error('Connect or import a source image first.');
+  $('#loading-text').textContent = 'Estimating source depth';
+  $('#loading-detail').textContent = 'First use may require downloading the Depth Anything 3 Small model.';
   $('#loading').hidden = false;
   try {
     const response = await fetch('/anyangle-studio/depth', {
@@ -683,7 +683,7 @@ $('#extract-depth').onclick = () => run(async () => {
       body: JSON.stringify({ reference: doc.reference.name }),
     });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error || '深度估计失败');
+    if (!response.ok) throw new Error(result.error || 'Depth estimation failed');
     begin(); doc.conditioning.map = result.asset; doc.conditioning.mapKind = 'depth';
     doc.conditioning.mapOrigin = 'da3'; doc.conditioning.mapReference = doc.reference.name; doc.conditioning.acceptStoredSource = false;
     doc.derivedGuideStale = false; previewVisible = true; changed();
@@ -691,12 +691,12 @@ $('#extract-depth').onclick = () => run(async () => {
 });
 async function generateCanny(origin) {
   await run(async () => {
-    if (origin === 'reference' && !doc.reference) throw new Error('请先连接或导入原图');
-    if (origin === 'auto' && doc.source.kind === 'empty') throw new Error('请先重建或载入三维场景');
+    if (origin === 'reference' && !doc.reference) throw new Error('Connect or import a source image first.');
+    if (origin === 'auto' && doc.source.kind === 'empty') throw new Error('Rebuild or load a 3D scene first.');
     begin(); doc.conditioning.map = null; doc.conditioning.mapKind = null;
     doc.conditioning.mapOrigin = origin; previewVisible = true; changed();
   });
-  if (previewRevision === revision) toast(cannyWarningRevision === revision ? EMPTY_CANNY_WARNING : 'Canny 轮廓已生成，中央预览为实际输出');
+  if (previewRevision === revision) toast(cannyWarningRevision === revision ? EMPTY_CANNY_WARNING : 'Canny edges generated. The center shows the output.');
 }
 $('#generate-canny').onclick = () => generateCanny('reference');
 $('#generate-scene-canny').onclick = () => generateCanny('auto');
@@ -714,9 +714,9 @@ $('#openpose-file').onchange = event => run(async () => {
     const missingCanvas = frame?.canvas_width == null && frame?.canvas_height == null;
     const response = await fetch('/anyangle-studio/pose-people', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keypoints, canvas_width: canvasWidth, canvas_height: canvasHeight }) });
-    const result = await response.json(); if (!response.ok) throw new Error(result.error || '骨架 JSON 无效');
+    const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Invalid skeleton JSON');
     await applyOpenPoseAsset(result.asset, result.points, result.fullBody, result.visibleOnly); doc.openpose.people = result.people; doc.openpose.origin = 'json'; changed();
-    if (missingCanvas) toast(`JSON 未带画布尺寸；按${photoCanvas ? '原图' : '当前输出'} ${canvasWidth} × ${canvasHeight} 像素坐标导入，请确保与骨架坐标一致。`);
+    if (missingCanvas) toast(`The JSON has no canvas size. Importing in ${photoCanvas ? 'source image' : 'current output'} coordinates (${canvasWidth} × ${canvasHeight}). Check that the skeleton uses the same coordinates.`);
     return;
   }
   await applyOpenPoseAsset(await upload(file));
@@ -727,7 +727,7 @@ $('#map-file').onchange = event => run(async () => {
 });
 $('#read-map').onclick = $('#read-openpose').onclick = () => {
   explicitStructureRead = true;
-  linkedStructure = { ...linkedStructure, connected: true, pending: true, message: '正在读取上游结构图…' };
+  linkedStructure = { ...linkedStructure, connected: true, pending: true, message: 'Reading connected structure guide…' };
   refresh(); send('anyangle-read-structure');
 };
 document.querySelectorAll('[data-flip]').forEach(button => {
@@ -741,7 +741,7 @@ document.querySelectorAll('[data-flip]').forEach(button => {
 });
 $('#reference-button').onclick = $('#reference-drop').onclick = () => $('#reference-file').click();
 $('#read-reference').onclick = () => {
-  linkedReference = { ...linkedReference, connected: true, pending: true, message: '正在读取上游图像…' };
+  linkedReference = { ...linkedReference, connected: true, pending: true, message: 'Reading connected image…' };
   refresh(); send('anyangle-read-reference');
 };
 $('#reference-file').onchange = event => run(async () => {
@@ -753,37 +753,37 @@ $('#reference-file').onchange = event => run(async () => {
 });
 const referenceCamera = () => ({ azimuth: 0, elevation: 0, zoom: 1, offsetX: 0, offsetY: 0, offsetZ: 0 });
 const reconstructionModelLabels = {
-  background_removal: '背景移除 · BiRefNet', clip_vision: '图像编码 · DINOv3', diffusion_models: '三维重建 · TripoSplat',
-  vae_encoder: '图像 VAE · Flux2', vae_decoder: '三维解码 · TripoSplat VAE',
+  background_removal: 'Background Removal · BiRefNet', clip_vision: 'Image Encoding · DINOv3', diffusion_models: '3D Reconstruction · TripoSplat',
+  vae_encoder: 'Image VAE · Flux2', vae_decoder: '3D Decoding · TripoSplat VAE',
 };
 function showModelStatus(config) {
-  $('#reconstruction-model-state').textContent = config.available ? `${doc.reconstruction.keepBackground ? '4 个重建模型已就绪 · 保留背景时无需 BiRefNet' : '5 个模型已就绪'} · 下次重建使用当前选择`
-    : `尚需选择或准备：${config.missing.join('、')}`;
+  $('#reconstruction-model-state').textContent = config.available ? `${doc.reconstruction.keepBackground ? '4 models ready · Including the background skips BiRefNet' : '5 models ready'} · Next reconstruction uses this selection`
+    : `Select or install: ${config.missing.join(', ')}`;
 }
 async function loadReconstructionModels() {
-  $('#reconstruction-model-state').textContent = '正在读取本机模型列表…';
+  $('#reconstruction-model-state').textContent = 'Reading local models…';
   $('#reconstruction-model-save').disabled = true;
   try {
     const config = await reconstructionConfig({}, doc.reconstruction.keepBackground);
-    if (!config.choices) throw new Error('请重启 ComfyUI 以启用新版模型选择功能');
+    if (!config.choices) throw new Error('Restart ComfyUI to enable the updated model selector.');
     const selected = selectedReconstructionModels(), fields = $('#reconstruction-model-fields');
     fields.replaceChildren();
     for (const [role, title] of Object.entries(reconstructionModelLabels)) {
       const label = document.createElement('label'), select = document.createElement('select');
       label.textContent = title; select.dataset.role = role; select.setAttribute('aria-label', title);
       if (role === 'background_removal' && doc.reconstruction.keepBackground) {
-        label.textContent += ' · 当前模式不使用'; select.disabled = true;
+        label.textContent += ' · Unused in this mode'; select.disabled = true;
       }
       const automatic = document.createElement('option'); automatic.value = '';
-      automatic.textContent = '自动识别 · ' + (config.ambiguous[role] ? '同名文件需选择'
-        : config.choices[role].includes(config.models[role]) ? config.models[role] : '未找到');
+      automatic.textContent = 'Auto-detect · ' + (config.ambiguous[role] ? 'Choose from duplicate filenames'
+        : config.choices[role].includes(config.models[role]) ? config.models[role] : 'Missing');
       select.append(automatic);
       for (const name of config.choices[role]) {
         const option = document.createElement('option'); option.value = option.textContent = name; select.append(option);
       }
       if (selected[role] && !config.choices[role].includes(selected[role])) {
         const missing = document.createElement('option'); missing.value = selected[role];
-        missing.textContent = `文件已移动 · ${selected[role]}`; missing.disabled = true; select.append(missing);
+        missing.textContent = `File moved · ${selected[role]}`; missing.disabled = true; select.append(missing);
       }
       select.value = selected[role] || ''; label.append(select); fields.append(label);
     }
@@ -801,7 +801,7 @@ $('#reconstruction-model-save').onclick = () => run(async () => {
   for (const select of $('#reconstruction-model-fields').querySelectorAll('select'))
     if (select.value) selections[select.dataset.role] = select.value;
   const config = await saveReconstructionModels(selections, doc.reconstruction.keepBackground);
-  showModelStatus(config); toast('模型选择已保存 · 点击从原图重建 3D 使用新选择');
+  showModelStatus(config); toast('Model selection saved. Choose Rebuild 3D from Source to use it.');
 });
 async function reconstructPhoto() {
   if (!doc.reference) return;
@@ -811,29 +811,29 @@ async function reconstructPhoto() {
   const previous = clone(doc);
   let rollbackHistory;
   $('#loading').hidden = false;
-  $('#loading-text').textContent = keepBackground ? '准备保留背景重建' : '准备从原图重建主体';
-  $('#loading-detail').textContent = keepBackground ? '本地 TripoSplat · 完整图像 → 三维重建 → 对齐参考机位'
-    : '本地 TripoSplat · 去背景 → 三维重建 → 对齐参考机位';
+  $('#loading-text').textContent = keepBackground ? 'Preparing reconstruction with background' : 'Preparing source subject reconstruction';
+  $('#loading-detail').textContent = keepBackground ? 'Local TripoSplat · Full image → 3D reconstruction → Source camera alignment'
+    : 'Local TripoSplat · Background removal → 3D reconstruction → Source camera alignment';
   try {
     const source = await reconstruct(reference, text => { $('#loading-text').textContent = text; }, true, keepBackground);
-    if (doc.reference?.name !== reference.name) throw new Error('原图已改变，请重新重建');
+    if (doc.reference?.name !== reference.name) throw new Error('The source changed. Rebuild it again.');
     rollbackHistory = begin();
     if (doc.source.name !== source.name || !!doc.source.keep_background !== !!source.keep_background) doc.shots = [];
     doc.source = source; doc.front = 0; doc.scale = 1; doc.camera = referenceCamera();
     const outputScale = Math.min(1, 1536 / Math.max(reference.width, reference.height));
     doc.width = Math.max(64, Math.round(reference.width * outputScale));
     doc.height = Math.max(64, Math.round(reference.height * outputScale));
-    $('#loading-text').textContent = '载入三维主体和参考机位';
+    $('#loading-text').textContent = 'Loading the 3D subject and source camera';
     await studio.restore(doc);
     doc.conditioning.guide = 'coarse';
     doc.sourceStale = false; doc.derivedGuideStale = false;
     previewGuide = 'coarse'; previewVisible = false; studio.setMode('camera');
     changed(); renderShots();
-    $('#status').textContent = '原图三维重建已载入 · 拖动调整机位后应用';
+    $('#status').textContent = 'Reconstruction loaded · Adjust the camera, then apply';
   } catch (e) {
     doc = previous; rollbackHistory?.();
     try { await studio.restore(doc); } catch { /* Keep the original reconstruction error. */ }
-    $('#status').textContent = '原图重建未完成 · 可重试'; throw e;
+    $('#status').textContent = 'Reconstruction incomplete · Retry available'; throw e;
   } finally { $('#loading').hidden = true; refresh(); schedulePreview(); }
 }
 $('#reconstruct').onclick = () => run(reconstructPhoto);
@@ -854,7 +854,7 @@ $('#glb-file').onchange = event => run(async () => {
     try { await studio.restore(doc); } catch { /* Keep the original GLB error. */ }
     throw e;
   }
-  changed(); toast('GLB 已载入。可在场景与构图中调整正面与尺度。');
+  changed(); toast('GLB loaded. Adjust its front alignment and scale under Scene and Composition.');
 });
 $('#human').onclick = () => run(async () => {
   const rollbackHistory = begin();
@@ -887,11 +887,11 @@ $('#retry-human').onclick = () => {
 };
 $('#repair-human').onclick = async () => {
   $('#repair-human').disabled = $('#retry-human').disabled = true;
-  $('#repair-state').textContent = '正在校验本机资源，缺失文件将从固定来源下载，请稍候…';
+  $('#repair-state').textContent = 'Checking local assets and downloading missing files…';
   try {
     const response = await fetch('/anyangle-studio/repair-human', { method: 'POST' });
-    const result = await response.json(); if (!response.ok) throw new Error(result.error || '资源修复失败');
-    $('#repair-state').textContent = '资源已通过校验，正在重新加载。'; $('#retry-human').onclick();
+    const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Asset repair failed');
+    $('#repair-state').textContent = 'Assets verified. Reloading…'; $('#retry-human').onclick();
   } catch (e) { $('#repair-state').textContent = e.message || String(e); }
   finally { $('#repair-human').disabled = $('#retry-human').disabled = false; }
 };
@@ -904,10 +904,10 @@ function askName(title, initial) {
 function iconButton(icon, label) { const button = document.createElement('button'); button.className = 'icon-button'; button.title = label; button.setAttribute('aria-label', label); const image = document.createElement('img'); image.src = `../icons/${icon}.svg`; image.alt = ''; button.append(image); return button; }
 function renderShots() {
   $('#shots').replaceChildren(); $('#shot-count').textContent = String(doc.shots.length);
-  if (!doc.shots.length) { const note = document.createElement('p'); note.className = 'empty-note'; note.textContent = '把满意的机位留在这里。切换收藏只改变相机，姿势保持当前状态。'; $('#shots').append(note); }
+  if (!doc.shots.length) { const note = document.createElement('p'); note.className = 'empty-note'; note.textContent = 'Save camera views here. Selecting a saved view keeps the current pose.'; $('#shots').append(note); }
   for (const shot of doc.shots) {
     const item = document.createElement('div'); item.className = 'shot';
-    const thumb = document.createElement('button'); thumb.className = 'shot-thumb'; thumb.classList.toggle('active', selectedShot === shot.id); thumb.title = `应用机位 ${shot.name}`;
+    const thumb = document.createElement('button'); thumb.className = 'shot-thumb'; thumb.classList.toggle('active', selectedShot === shot.id); thumb.title = `Apply view ${shot.name}`;
     const image = document.createElement('img'); image.src = shot.thumbnail; image.alt = shot.name; thumb.append(image);
     thumb.onclick = () => {
       begin(); doc.camera = { ...defaultScene().camera, ...clone(shot.camera) };
@@ -915,14 +915,14 @@ function renderShots() {
       doc.width = shot.width; doc.height = shot.height; previewVisible = false; setMode('camera'); changed(); selectedShot = shot.id; renderShots();
     };
     const caption = document.createElement('div'); caption.className = 'shot-caption';
-    const rename = document.createElement('button'); rename.className = 'rename'; rename.textContent = shot.name; rename.title = '重命名机位';
-    rename.onclick = async () => { const name = await askName('重命名机位', shot.name); if (name) { begin(); shot.name = name; changed(); renderShots(); } };
-    const remove = iconButton('trash', `删除机位 ${shot.name}`); remove.onclick = () => { begin(); doc.shots = doc.shots.filter(s => s.id !== shot.id); changed(); renderShots(); };
+    const rename = document.createElement('button'); rename.className = 'rename'; rename.textContent = shot.name; rename.title = 'Rename View';
+    rename.onclick = async () => { const name = await askName('Rename View', shot.name); if (name) { begin(); shot.name = name; changed(); renderShots(); } };
+    const remove = iconButton('trash', `Delete view ${shot.name}`); remove.onclick = () => { begin(); doc.shots = doc.shots.filter(s => s.id !== shot.id); changed(); renderShots(); };
     caption.append(rename, remove); item.append(thumb, caption); $('#shots').append(item);
   }
 }
 $('#save-shot').onclick = async () => {
-  const name = await askName('收藏当前机位', `机位 ${doc.shots.length + 1}`); if (!name) return;
+  const name = await askName('Save Current View', `View ${doc.shots.length + 1}`); if (!name) return;
   return run(async () => {
     const previous = clone(doc), previousMode = studio.mode, previousShot = selectedShot, rollbackHistory = begin();
     try {
@@ -931,7 +931,7 @@ $('#save-shot').onclick = async () => {
       const shot = { id: uuid(), name, camera: clone(doc.camera), width: doc.width, height: doc.height, thumbnail };
       if (doc.source.kind === 'human') shot.cameraTarget = studio.baseTarget.toArray();
       doc.shots.push(shot); changed(); selectedShot = shot.id; renderShots();
-      toast('机位已收藏 · 点击缩略图切换；应用到节点后保存收藏。');
+      toast('View saved to draft. Apply to Node to keep it.');
     } catch (error) {
       doc = previous; rollbackHistory?.(); selectedShot = previousShot;
       try { await studio.restore(doc); } catch { /* Keep the original thumbnail error. */ }
@@ -952,7 +952,7 @@ $('#export-pose').onclick = () => run(async () => {
   const poseSource = activeActor(doc)?.poseSource ?? (doc.actors?.length > 1 ? null : doc.openpose ?? null);
   const response = await fetch('/anyangle-studio/poses', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ version: 1, kind: 'anyangle-pose', mesh: doc.mesh, pose: studio.pose(), openpose: poseSource }) });
-  const result = await response.json(); if (!response.ok) throw new Error(result.error || '姿势导出失败');
+  const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Pose export failed');
   download(`/anyangle-studio/poses/${encodeURIComponent(result.id)}`, 'anyangle-pose.json');
 });
 $('#download-guide').onclick = () => run(async () => {
@@ -960,14 +960,14 @@ $('#download-guide').onclick = () => run(async () => {
   const blob = await (await fetch(png)).blob();
   const asset = await upload(new File([blob], 'anyangle-guide.png', { type: 'image/png' }));
   download(assetURL(asset.name), `${currentGuide()}-guide.png`);
-  toast('引导图 PNG 已导出');
+  toast('Guide PNG exported');
 });
 
 function send(type, payload = {}) { parent.postMessage({ type, session, ...payload }, location.origin); }
 function batchRequest(action, payload = {}) {
   const requestId = uuid();
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { batchReplies.delete(requestId); reject(new Error('批量提交未收到确认，请检查 ComfyUI 队列；本机位不会自动重复提交')); }, 60000);
+    const timer = setTimeout(() => { batchReplies.delete(requestId); reject(new Error('No confirmation received. Check the ComfyUI queue. Studio will skip automatic resubmission for this view.')); }, 60000);
     batchReplies.set(requestId, { resolve, reject, timer });
     send('anyangle-batch-request', { requestId, action, ...payload });
   });
@@ -978,7 +978,7 @@ function batchSettings() {
 }
 function currentBatchPlan(scene) {
   const entries = $('#batch-pose-mode').value === 'library' ? poseCatalog.batchEntries() : [];
-  if ($('#batch-pose-mode').value === 'library' && !entries.length) throw new Error('请先在姿势库中将动作加入姿势批量');
+  if ($('#batch-pose-mode').value === 'library' && !entries.length) throw new Error('Add poses to the batch from the Pose Library first.');
   return entries.length ? poseCameraPlan(scene, batchSettings(), entries, poseCatalog.batchOptions(), cameraBatchPlan) : cameraBatchPlan(scene, batchSettings());
 }
 function updateBatchPlan() {
@@ -987,7 +987,7 @@ function updateBatchPlan() {
   try {
     const plan = currentBatchPlan(doc);
     const posing = $('#batch-pose-mode').value === 'library';
-    $('#batch-count').textContent = `${plan.count} 个${posing ? '任务' : '机位'} · ${posing ? `${poseCatalog.batchEntries().length} 姿势 × 机位组合；保留身份、俯仰与构图` : $('#batch-mode').value === 'saved' ? '使用收藏的相机与尺寸，保留当前姿势' : '保留当前姿势、俯仰角与构图'} · 沿用工作流采样设置`;
+    $('#batch-count').textContent = `${plan.count} ${posing ? 'jobs' : 'views'} · ${posing ? `${poseCatalog.batchEntries().length} poses × views. Keeps identity, pitch, and composition` : $('#batch-mode').value === 'saved' ? 'Uses saved camera settings and size with the current pose' : 'Keeps current pose, pitch, and composition'} · Uses workflow sampling settings`;
     $('#batch-guides').disabled = false; $('#batch-final').disabled = !embedded;
   } catch (e) {
     $('#batch-count').textContent = e.message; $('#batch-guides').disabled = $('#batch-final').disabled = true;
@@ -1007,7 +1007,7 @@ function freezeReferenceInputs(scene) {
   return scene;
 }
 async function runGallery(task) {
-  if (busy) throw new Error('工作台正在处理另一项操作，请稍后再试');
+  if (busy) throw new Error('Studio is busy. Try again shortly.');
   let failure;
   await run(async () => { try { await task(); } catch (error) { failure = error; } });
   if (failure) throw failure;
@@ -1017,7 +1017,7 @@ async function runGalleryBatch(plan, queueFinal, signal, onProgress) {
   const original = doc;
   const save = async (scene, png) => {
     const response = await fetch('/anyangle-studio/snapshots', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scene, png }) });
-    const saved = await response.json(); if (!response.ok) throw new Error(saved.error || '图库场景保存失败'); return saved;
+    const saved = await response.json(); if (!response.ok) throw new Error(saved.error || 'Could not save the gallery scene'); return saved;
   };
   try {
     if (queueFinal) {
@@ -1032,7 +1032,7 @@ async function runGalleryBatch(plan, queueFinal, signal, onProgress) {
     if (result.views.length) {
       const response = await fetch('/anyangle-studio/batches', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ views: result.views }) });
       const saved = await response.json();
-      if (!response.ok) result.error ||= new Error(saved.error || '批量回执保存失败');
+      if (!response.ok) result.error ||= new Error(saved.error || 'Could not save the batch receipt');
       else result.batchId = saved.id;
     }
     return result;
@@ -1043,16 +1043,16 @@ async function startCameraBatch(queueFinal) {
   const plan = currentBatchPlan(freezeReferenceInputs(clone(doc))), original = doc, originalCannyWarning = cannyWarningRevision;
   const posing = $('#batch-pose-mode').value === 'library', floorY=studio.grid?.position.y;
   batchRunning = true; batchController = new AbortController(); batchViews = []; batchId = null;
-  $('#batch-options').inert = true; $('#batch-stop').disabled = false; $('#batch-close').textContent = '停止后续机位';
+  $('#batch-options').inert = true; $('#batch-stop').disabled = false; $('#batch-close').textContent = 'Stop Submitting';
   $('#batch-zip').disabled = $('#batch-manifest').disabled = true;
-  $('#batch-state').textContent = queueFinal ? '正在准备当前生成工作流…' : '正在准备批量粗图…';
+  $('#batch-state').textContent = queueFinal ? 'Preparing the workflow…' : 'Preparing the guide batch…';
   try {
     if (queueFinal) {
       const response = await fetch('/anyangle-studio/snapshots', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scene: freezeReferenceInputs(clone(doc)), png: await captureGuide() }) });
-      const snapshot = await response.json(); if (!response.ok) throw new Error(snapshot.error || '无法冻结当前场景');
+      const snapshot = await response.json(); if (!response.ok) throw new Error(snapshot.error || 'Could not capture a fixed scene for the batch');
       await batchRequest('prepare', { snapshot });
-      $('#batch-state').textContent = '素材与正负提示词已冻结；全文模式各机位复用原文，补充模式追加各机位 Studio 文本。';
+      $('#batch-state').textContent = 'References and prompts are fixed for the batch. Full Input reuses the supplied text. Studio Plus Input combines it with each view’s Studio prompt.';
     }
     const result = await runCameraBatch(plan, {
       signal: batchController.signal,
@@ -1064,23 +1064,23 @@ async function startCameraBatch(queueFinal) {
       save: async (scene, png) => {
         const response = await fetch('/anyangle-studio/snapshots', { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ scene, png }) });
-        const saved = await response.json(); if (!response.ok) throw new Error(saved.error || '批量粗图保存失败'); return saved;
+        const saved = await response.json(); if (!response.ok) throw new Error(saved.error || 'Could not save the guide batch'); return saved;
       },
       queue: queueFinal ? async snapshot => await batchRequest('queue', { snapshot }) : null,
       onProgress: ({ index, total, label, phase }) => {
-        $('#batch-state').textContent = phase === 'capture' ? `渲染 ${index + 1} / ${total} · ${label}`
-          : `${phase === 'queued' ? '已入队' : '已保存'} ${index} / ${total} · ${label}`;
+        $('#batch-state').textContent = phase === 'capture' ? `Rendering ${index + 1} / ${total} · ${label}`
+          : `${phase === 'queued' ? 'Queued' : 'Saved'} ${index} / ${total} · ${label}`;
       },
     });
     batchViews = result.views;
     const queued = batchViews.filter(view => view.prompt_id).length;
-    $('#batch-state').textContent = `${result.error ? '提交中止' : result.stopped ? '已停止后续机位' : '批量准备完成'} · 粗图 ${batchViews.length} 张${queueFinal ? ` · 已入队 ${queued} 个生成任务` : ''}`;
+    $('#batch-state').textContent = `${result.error ? 'Submission stopped' : result.stopped ? 'Stopped submitting views' : 'Batch prepared'} · ${batchViews.length} guides${queueFinal ? ` · ${queued} generation jobs queued` : ''}`;
     if (result.error) error(result.error);
     if (batchViews.length) {
       $('#batch-manifest').disabled = false;
       const response = await fetch('/anyangle-studio/batches', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ views: batchViews }) });
-      const saved = await response.json(); if (!response.ok) throw new Error(saved.error || '批量清单保存失败');
+      const saved = await response.json(); if (!response.ok) throw new Error(saved.error || 'Could not save the batch manifest');
       batchId = saved.id; $('#batch-zip').disabled = false;
     }
   } catch (e) { $('#batch-state').textContent = e.message; throw e; }
@@ -1091,7 +1091,7 @@ async function startCameraBatch(queueFinal) {
       studio.updateShot();
     } finally {
       batchRunning = false; $('#batch-options').inert = false; $('#batch-stop').disabled = true;
-      $('#batch-close').textContent = '关闭'; refresh(); updateBatchPlan();
+      $('#batch-close').textContent = 'Close'; refresh(); updateBatchPlan();
     }
   }
 }
@@ -1104,12 +1104,12 @@ $('#apply').onclick = () => run(async () => {
   const frozen = clone(doc), appliedRevision = revision;
   const png = await captureGuide();
   const response = await fetch('/anyangle-studio/snapshots', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scene: frozen, png }) });
-  const result = await response.json(); if (!response.ok) throw new Error(result.error || '保存失败');
-  if (revision !== appliedRevision) throw new Error('场景在保存时发生变化，请重新应用');
+  const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Save failed');
+  if (revision !== appliedRevision) throw new Error('The scene changed while saving. Apply it again.');
   snapshot = result;
   if (embedded) send('anyangle-apply', { snapshot: result, revision: appliedRevision });
-  else { const url = new URL(location.href); url.searchParams.set('snapshot', result.id); history.replaceState(null, '', url); toast('已保存快照，可在 ComfyUI 节点中载入该场景'); }
-  $('#status').textContent = embedded ? '快照已保存 · 正在应用到节点' : '场景快照已保存'; $('#status').dataset.state = embedded ? 'dirty' : 'saved';
+  else { const url = new URL(location.href); url.searchParams.set('snapshot', result.id); history.replaceState(null, '', url); toast('Snapshot saved. You can load this scene from the ComfyUI node.'); }
+  $('#status').textContent = embedded ? 'Snapshot saved · Applying to node' : 'Scene snapshot saved'; $('#status').dataset.state = embedded ? 'dirty' : 'saved';
 });
 
 async function buildPresetCards() {
@@ -1154,8 +1154,8 @@ async function start(token, reference = { connected: false }, structure = { conn
       const response = await fetch(`/anyangle-studio/snapshots/${encodeURIComponent(token.id)}`);
       const saved = await response.json().catch(() => ({}));
       if (response.ok) { doc = saved.scene; snapshot = token; }
-      else if (response.status === 404) toast('上次应用的场景不在本机，已回到空白场景 · 重建主体或导入 GLB 后再应用');
-      else throw new Error(saved.error || `读取快照失败（HTTP ${response.status}）`);
+      else if (response.status === 404) toast('The last applied scene is missing on this computer. Rebuild the subject or import a GLB, then apply the new scene.');
+      else throw new Error(saved.error || `Could not load snapshot (HTTP ${response.status})`);
     }
     restoreSceneDefaults(doc);
     if (!snapshot && doc.version === 3 && initialSettings?.model === 'base') {
@@ -1168,7 +1168,7 @@ async function start(token, reference = { connected: false }, structure = { conn
     const referenceChanged = reference.connected && !!reference.asset && reference.asset.name !== doc.reference?.name;
     if (reference.connected) { const previous = doc.reference; doc.reference = reference.asset || null; sourceChanged(doc, previous); }
     if (doc.version !== 3 && doc.source.kind === 'splat' && doc.source.reference?.name !== doc.reference?.name) doc.source = { kind: 'empty' };
-    studio = new StudioScene($('#viewport'), { begin, change: changed, camera: () => { revision++; refresh(); schedulePreview(); $('#status').textContent = '机位草稿 · 尚未应用'; $('#status').dataset.state = 'dirty'; }, pick: selectRole, select: (name, updateControls = true) => { selectedBone = name || ''; if (updateControls) refresh(); }, error });
+    studio = new StudioScene($('#viewport'), { begin, change: changed, camera: () => { revision++; refresh(); schedulePreview(); $('#status').textContent = 'Camera draft · Apply to save'; $('#status').dataset.state = 'dirty'; }, pick: selectRole, select: (name, updateControls = true) => { selectedBone = name || ''; if (updateControls) refresh(); }, error });
     await studio.init(doc);
     if (doc.source.kind === 'human') await ensureHumanTools();
     if (structure.asset && doc.conditioning.model === 'base' && ['pose', 'depth', 'canny'].includes(doc.conditioning.guide)
@@ -1177,9 +1177,9 @@ async function start(token, reference = { connected: false }, structure = { conn
     selectedShot = doc.shots.find(shot => shot.width === doc.width && shot.height === doc.height
       && Object.keys(doc.camera).every(key => Number(shot.camera[key] || 0) === Number(doc.camera[key] || 0)))?.id || null;
     ready = true; $('#loading').hidden = true; refresh(); renderShots(); renderLibrary();
-    $('#status').textContent = snapshot ? '已载入上次应用的场景' : '连接或上传原图，重建对应的三维主体';
+    $('#status').textContent = snapshot ? 'Loaded last applied scene' : 'Connect or upload a source image to rebuild the subject in 3D';
     $('#status').dataset.state = snapshot ? 'saved' : 'dirty';
-    if (referenceChanged) { $('#status').textContent = '连线原图已更新 · 应用后保存到场景'; $('#status').dataset.state = 'dirty'; }
+    if (referenceChanged) { $('#status').textContent = 'Connected source updated · Apply to save it to the scene'; $('#status').dataset.state = 'dirty'; }
     setBusy(false); await renderPreview();
     if (requiresGuide() && doc.reference && doc.source.kind === 'empty' && currentGuide() === 'coarse') await run(reconstructPhoto);
   } catch (e) { showLoadError(e); error(e); }
@@ -1265,19 +1265,19 @@ if (embedded) {
         if (event.data.error) pending.reject(new Error(event.data.error)); else pending.resolve(event.data.result);
       }
     } else if (event.data.type === 'anyangle-apply-error') {
-      $('#status').textContent = '尚未应用到节点'; $('#status').dataset.state = 'dirty'; toast(event.data.message);
+      $('#status').textContent = 'Apply to update the node'; $('#status').dataset.state = 'dirty'; toast(event.data.message);
     }
   });
   send('anyangle-ready');
 } else {
-  $('#apply').lastChild.textContent = '保存场景'; $('#cancel').textContent = '重载';
+  $('#apply').lastChild.textContent = 'Save Scene'; $('#cancel').textContent = 'Reload';
   start(params.has('snapshot') ? { version: 1, id: params.get('snapshot') } : null);
 }
 window.addEventListener('pagehide', () => {
   poseCatalog?.destroy();
   galleryActions?.destroy();
   batchController?.abort();
-  for (const pending of batchReplies.values()) { clearTimeout(pending.timer); pending.reject(new Error('工作台已关闭')); }
+  for (const pending of batchReplies.values()) { clearTimeout(pending.timer); pending.reject(new Error('Studio closed')); }
   batchReplies.clear(); clearTimeout(previewTimer); studio?.dispose();
 });
 

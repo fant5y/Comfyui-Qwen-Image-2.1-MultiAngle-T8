@@ -1,11 +1,11 @@
 export function promptForSnapshot(compiled, nodeId, snapshot, frozenScene = null, frozenPrompts = null) {
-  if (snapshot?.version !== 1 || !/^[a-f0-9]{64}$/.test(snapshot.id)) throw new Error('无效的批量场景快照');
+  if (snapshot?.version !== 1 || !/^[a-f0-9]{64}$/.test(snapshot.id)) throw new Error('Invalid batch scene snapshot');
   const prompt = structuredClone(compiled), id = String(nodeId);
-  if (prompt.output[id]?.class_type !== 'AnyAngleStudioT8') throw new Error('当前 Studio 节点未包含在可执行工作流中');
+  if (prompt.output[id]?.class_type !== 'AnyAngleStudioT8') throw new Error('This Studio node is absent from the runnable workflow.');
   const value = JSON.stringify(snapshot);
   prompt.output[id].inputs.snapshot = value;
   const node = prompt.workflow.nodes.find(node => String(node.id) === id);
-  if (!node) throw new Error('工作流缺少 Studio 节点，请重新打开工作台');
+  if (!node) throw new Error('The workflow is missing the Studio node. Reopen Studio.');
   node.widgets_values[0] = value;
   if ([2, 3].includes(frozenScene?.version)) {
     // The batch snapshot owns its photos and guide. Re-evaluating a random upstream
@@ -21,7 +21,7 @@ export function promptForSnapshot(compiled, nodeId, snapshot, frozenScene = null
   }
   for (const [encoderId, frozen] of Object.entries(frozenPrompts || {})) {
     const encoder = prompt.output[encoderId];
-    if (encoder?.class_type !== 'AnyAngleMultiPersonEncodeT8') throw new Error('批量编码节点已改变，请重新准备');
+    if (encoder?.class_type !== 'AnyAngleMultiPersonEncodeT8') throw new Error('The batch encoder changed. Prepare the batch again.');
     Object.assign(encoder.inputs, frozen);
     const gui = prompt.workflow.nodes.find(node => String(node.id) === encoderId);
     if (gui) {
