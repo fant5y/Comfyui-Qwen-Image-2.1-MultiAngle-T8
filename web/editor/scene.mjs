@@ -11,8 +11,8 @@ import { SplatScene } from './splat.mjs?v=20261116en';
 import { capturePNG } from './capture.mjs?v=20261116en';
 import { liftOpenPose, copyVisiblePose, WORLD_KEYPOINT_NAMES, ORDER, LIMBS, COLORS } from './openpose.mjs?v=20261116en';
 import { createActor, ensureActors, activeActor, bindActor, saveActor, visibleActors } from './actors.mjs?v=20261116en';
-import { loadProp, disposeProp, placeProp } from './props.mjs?v=20261116sharedscene';
-import { emptyLibrary } from './reference-library.mjs?v=20261116sharedscene';
+import { loadProp, disposeProp, placeProp } from './props.mjs?v=20261116referenceroles';
+import { emptyLibrary } from './reference-library.mjs?v=20261116referenceroles';
 
 export const PRESETS = [
   { name: 'Natural Stand', bones: { upperarm_l: [0, 0, -8], upperarm_r: [0, 0, 8] } },

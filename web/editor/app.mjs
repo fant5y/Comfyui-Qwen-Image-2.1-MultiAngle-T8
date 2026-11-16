@@ -1,20 +1,20 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116sharedscene';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116referenceroles';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116sharedscene';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116sharedscene';
+import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116referenceroles';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116referenceroles';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116sharedscene';
-import { installGalleryActions } from './gallery-actions.mjs?v=20261116sharedscene';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116referenceroles';
+import { installGalleryActions } from './gallery-actions.mjs?v=20261116referenceroles';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116sharedscene';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116referenceroles';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
-import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116sharedscene';
+import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116referenceroles';
 
 const $ = selector => document.querySelector(selector);
 const clone = value => structuredClone(value);

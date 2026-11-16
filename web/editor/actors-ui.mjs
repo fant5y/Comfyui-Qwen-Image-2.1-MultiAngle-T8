@@ -1,10 +1,10 @@
 import { createActor, activeActor, ensureActors, bindActor, cloneActor, removeActor, editableActors, actorSeed, applySceneTemplate } from './actors.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { installCastTools } from './cast-tools.mjs?v=20261116sharedscene';
+import { installCastTools } from './cast-tools.mjs?v=20261116referenceroles';
 import { poseCopyIssue, ORDER } from './openpose.mjs?v=20261116en';
 import { guideSource } from './guides.mjs?v=20261116en';
-import { addReference, newUse } from './reference-library.mjs?v=20261116sharedscene';
+import { addReference, newUse } from './reference-library.mjs?v=20261116referenceroles';
 
 let context, renderKey, renderedDoc, renderedRoles = [], references = [];
 const $ = id => document.getElementById(id);

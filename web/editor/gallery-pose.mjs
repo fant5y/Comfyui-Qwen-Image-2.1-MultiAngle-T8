@@ -1,6 +1,6 @@
 import { createActor, bindActor, ensureActors } from './actors.mjs?v=20261116en';
 import { poseCopyIssue } from './openpose.mjs?v=20261116en';
-import { addReference, newUse, upgradeReferences, libraryManifest } from './reference-library.mjs?v=20261116sharedscene';
+import { addReference, newUse, upgradeReferences, libraryManifest } from './reference-library.mjs?v=20261116referenceroles';
 
 const clone = value => structuredClone(value);
 

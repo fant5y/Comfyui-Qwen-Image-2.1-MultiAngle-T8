@@ -1,7 +1,7 @@
 """Image uses, targets and the exact image list passed to native Qwen 2.1."""
 import re
 
-KINDS = ("free", "identity", "clothing", "accessory", "scene", "style", "layout", "pose")
+KINDS = ("free", "character", "identity", "clothing", "accessory", "scene", "style", "layout", "pose")
 IMAGE = re.compile(r"[a-f0-9]{64}\.png\Z")
 INPUT = re.compile(r"actor_reference_[1-9][0-9]*\Z")
 
@@ -192,6 +192,7 @@ def library_prompt(scene, manifest):
             lines.append(f"Model {index}{color} in <image{guide['index']}> is {model['label']}. Keep its size, placement and orientation.{description}")
     rules = {
         "free": "Use the relevant content as a general reference",
+        "character": "Use the depicted character’s appearance, hairstyle, clothing and accessories; follow the scene composition and leave out the reference background",
         "identity": "Use only the face identity and hairstyle; do not copy the clothing, pose or background",
         "clothing": "Use only the clothing design; do not copy the model's identity, pose or background",
         "accessory": "Use only the accessory or product design; do not add people from this reference",

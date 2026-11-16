@@ -1,6 +1,6 @@
 import { guideSource } from './guides.mjs?v=20261116en';
 import { uuid } from '../uuid.mjs?v=20261116en';
-export const USES = { free: 'General Reference', identity: 'Identity / Face', clothing: 'Clothing', accessory: 'Accessories / Products', scene: 'Scene / Background', style: 'Style / Lighting', layout: 'Layout / Composition', pose: 'Pose' };
+export const USES = { free: 'General Reference', character: 'Character Appearance', identity: 'Identity / Face', clothing: 'Clothing', accessory: 'Accessories / Products', scene: 'Scene / Background', style: 'Style / Lighting', layout: 'Layout / Composition', pose: 'Pose' };
 const copy = value => JSON.parse(JSON.stringify(value));
 const uid = prefix => `${prefix}-${uuid()}`;
 export const emptyLibrary = () => ({ version: 1, mode: 'guided', items: [], firstReferenceId: null, firstResolution: 0, templates: [] });
@@ -141,7 +141,8 @@ export function libraryPrompt(scene, manifest) {
       lines.push(`Model ${index + 1}${color} in <image${guide.index}> is ${model.label}. Keep its size, placement and orientation.${appearance ? ` ${appearance}` : ''}`);
     }
   }
-  const rules = { free: 'Use the relevant content as a general reference', identity: 'Use only the face identity and hairstyle; do not copy the clothing, pose or background',
+  const rules = { free: 'Use the relevant content as a general reference',
+    character: 'Use the depicted character’s appearance, hairstyle, clothing and accessories; follow the scene composition and leave out the reference background', identity: 'Use only the face identity and hairstyle; do not copy the clothing, pose or background',
     clothing: "Use only the clothing design; do not copy the model's identity, pose or background", accessory: 'Use only the accessory or product design; do not add people from this reference',
     scene: 'Use the environment and background; do not add people from this reference', style: 'Use the visual style, lighting and color palette; do not copy the subject or pose', layout: 'Use the arrangement and composition; do not copy subject identities',
     pose: 'Use only the body pose, limb directions and gesture; do not copy the face, body shape, clothing, background or drawing style' };

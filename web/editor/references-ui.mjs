@@ -1,4 +1,4 @@
-import { USES, newUse, addReference, upgradeReferences, libraryManifest, libraryPrompt, staleGuide } from './reference-library.mjs?v=20261116sharedscene';
+import { USES, newUse, addReference, upgradeReferences, libraryManifest, libraryPrompt, staleGuide } from './reference-library.mjs?v=20261116referenceroles';
 import { uuid } from '../uuid.mjs?v=20261116en';
 const $ = id => document.getElementById(id);
 const copy = value => JSON.parse(JSON.stringify(value));
@@ -88,10 +88,70 @@ export function installReferencesUI(value) {
   document.body.append(crop); installCropDrag();
 }
 
+function assignRole(item, kind, target) {
+  edit(() => {
+    item.enabled = true;
+    const matches = use => use.kind === kind && use.target.kind === target.kind
+      && use.target.text === target.text && use.target.ids.length === target.ids.length
+      && target.ids.every(id => use.target.ids.includes(id));
+    const existing = item.usages.find(matches);
+    if (existing) {
+      existing.enabled = true;
+      return;
+    }
+    const initial = item.usages.length === 1 && item.usages[0];
+    if (initial && initial.kind === 'free' && initial.target.kind === 'scene'
+        && !initial.sourceText && !initial.instruction) item.usages = [];
+    item.usages.push(newUse(kind, target));
+  });
+}
+
+function chooseCharacter(scene, item) {
+  const targets = [];
+  if (['human', 'splat'].includes(scene.source?.kind)) {
+    for (const actor of scene.actors || []) if (actor.visible !== false) targets.push({ kind: 'actors', item: actor });
+  }
+  if (scene.source?.kind === 'human') {
+    for (const model of scene.props || []) if (model.visible !== false) targets.push({ kind: 'props', item: model });
+  }
+  const dialog = el('dialog', '', 'reference-character-dialog');
+  const form = el('form'); form.method = 'dialog';
+  const description = el('input');
+  description.placeholder = 'For example, the person beside the chair';
+  description.maxLength = 16000;
+  const descriptionField = field('Character in the Generated Scene', description);
+  const updateFields = value => {
+    descriptionField.hidden = value !== 'text';
+    description.required = value === 'text';
+  };
+  const picker = select([...targets.map(({ item }, index) => [String(index), item.label]), ['text', 'Describe a Character']],
+    targets.length ? '0' : 'text', updateFields);
+  updateFields(picker.value);
+  const buttons = el('div');
+  const cancel = button('Cancel', () => dialog.close());
+  const apply = el('button', 'Assign Character', 'primary'); apply.type = 'submit';
+  buttons.append(cancel, apply);
+  form.append(el('h2', 'Use as Character'), field('Target', picker), descriptionField, buttons);
+  form.onsubmit = event => {
+    event.preventDefault();
+    const selected = targets[Number(picker.value)], text = description.value.trim();
+    if (picker.value === 'text' && !text) { description.focus(); return; }
+    dialog.close();
+    if (context.doc() !== scene || !scene.referenceLibrary.items.includes(item)) return;
+    assignRole(item, 'character', selected
+      ? { kind: selected.kind, ids: [selected.item.id], text: '' }
+      : { kind: 'text', ids: [], text });
+  };
+  dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  dialog.append(form);
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
 function useControls(scene, item, use) {
   const panel = el('div', '', 'reference-use');
   const usage = select(Object.entries(USES), use.kind, value => edit(() => { use.kind = value; })); panel.append(field('Role', usage));
-  const options = [['scene', 'Entire Scene'], ['text', 'Describe Target in Text'], ...scene.actors.map(actor => [`actor:${actor.id}`, `Character · ${actor.label}`]), ...(scene.props || []).map(prop => [`prop:${prop.id}`, `Prop · ${prop.label}`])];
+  const options = [['scene', 'Entire Scene'], ['text', 'Describe Target in Text'], ...scene.actors.map(actor => [`actor:${actor.id}`, `Character · ${actor.label}`]), ...(scene.props || []).map(prop => [`prop:${prop.id}`, `Model · ${prop.label}`])];
   const selected = use.target.kind === 'scene' || use.target.kind === 'text' ? use.target.kind : `${use.target.kind === 'actors' ? 'actor' : 'prop'}:${use.target.ids[0] || ''}`;
   if (!options.some(([id]) => id === selected)) options.push([selected, 'Target Needs Reassignment']);
   const target = select(options, selected, value => edit(() => {
@@ -152,7 +212,10 @@ function card(scene, item, manifest) {
     if (openId === item.id) openId = null;
   }));
   remove.title = 'Remove from the library. You can undo this. The scene source and characters are kept.';
-  tools.append(source, replace, remove); entry.append(details, tools); return entry;
+  const character = button('Use as Character', () => chooseCharacter(scene, item));
+  const background = button('Use as Background', () => assignRole(item, 'scene', { kind: 'scene', ids: [], text: '' }));
+  character.disabled = background.disabled = !item.asset || item.missing === true;
+  tools.append(source, character, background, replace, remove); entry.append(details, tools); return entry;
 }
 function replaceReference(scene, item) {
   const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.hidden = true; document.body.append(file);
