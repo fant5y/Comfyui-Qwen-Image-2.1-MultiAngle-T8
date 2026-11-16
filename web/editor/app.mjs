@@ -9,7 +9,7 @@ import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges }
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116pawdrag';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116canvas';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
 import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116rig';
@@ -83,11 +83,15 @@ function applyDisabled() {
 }
 function setBusy(value) {
   busy = value; $('#workspace').inert = value; $('#apply').disabled = applyDisabled();
+  $('#clear-canvas').disabled = value || !ready || !canvasHasObjects();
   $('#undo').disabled = value || !undo.length; $('#redo').disabled = value || !redo.length;
   if (!value && pendingReference) queueMicrotask(readPendingReference);
   if (!value && pendingStructure) queueMicrotask(readPendingStructure);
   if (!value && pendingActors) queueMicrotask(readPendingActors);
   if (!value && pendingKeypoints) queueMicrotask(readPendingKeypoints);
+}
+function canvasHasObjects() {
+  return doc.source.kind !== 'empty' || !!(doc.actors?.length || doc.props?.length);
 }
 async function run(task) {
   if (busy) return;
@@ -252,6 +256,8 @@ function refresh() {
     panel.hidden = !available || staticGuide;
   }
   $('#body-sliders').hidden = animal;
+  for (const button of document.querySelectorAll('[data-body-shape]'))
+    button.setAttribute('aria-pressed', String(doc.mesh.gender === Number(button.dataset.bodyShape)));
   $('#animal-body-sliders').hidden = !animal;
   $('#import-animal-pose').hidden = !animal || activeActor(doc)?.source.shape === 'owl';
   for (const id of ['presets', 'pose-actions', 'saved-poses']) $(`#${id}`).inert = !human || !!activeActor(doc)?.locked;
@@ -398,6 +404,7 @@ function refresh() {
     : 'Use a 3D coarse render, mannequin skeleton, or 3D Canny guide for this feature. Extracted guides keep the source view.';
   $('#download-guide').disabled = !hasGuide();
   $('#apply').disabled = applyDisabled();
+  $('#clear-canvas').disabled = busy || !ready || !canvasHasObjects();
   $('#edit-mode').disabled = splat || empty;
   $('#position-mode').disabled = !mannequinScene;
   $('#edit-mode').title = splat ? 'Use Camera mode to change the view of a reconstructed subject.' : empty ? 'Load a 3D subject first.' : '';
@@ -471,8 +478,14 @@ $('#lens-mode').onchange = event => {
 document.querySelectorAll('[data-focal]').forEach(button => { button.onclick = () => {
   begin(); doc.camera.focalLength = Number(button.dataset.focal); studio.updateShot(true); changed();
 }; });
+for (const button of document.querySelectorAll('[data-body-shape]')) button.onclick = () => run(async () => {
+  const actor = activeActor(doc), gender = Number(button.dataset.bodyShape);
+  if (actor?.source.kind !== 'human' || actor.locked || doc.mesh.gender === gender) return;
+  begin(); doc.mesh.gender = gender;
+  await studio.morph(); changed();
+});
 for (const [key, label, min, max, step] of [
-  ['age', 'Age', 18, 75, 1], ['gender', 'Body Shape', 0, 1, 0.01], ['weight', 'Weight', 0, 1, 0.01], ['muscle', 'Muscle', 0, 1, 0.01], ['height', 'Height', 0, 1, 0.01],
+  ['age', 'Age', 18, 75, 1], ['gender', 'Female to Male', 0, 1, 0.01], ['weight', 'Weight', 0, 1, 0.01], ['muscle', 'Muscle', 0, 1, 0.01], ['height', 'Height', 0, 1, 0.01],
 ]) makeControl('#body-sliders', { id: `body-${key}`, label, min, max, step,
   read: () => doc.mesh[key], write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
 makeControl('#animal-body-sliders', { id: 'animal-size', label: 'Size', min: 0.25, max: 4, step: 0.01, unit: '×',
@@ -1309,6 +1322,20 @@ $('#batch-guides').onclick = () => run(() => startCameraBatch(false));
 $('#batch-final').onclick = () => run(() => startCameraBatch(true));
 function closeWorkbench() { if (embedded) send('anyangle-close'); else location.reload(); }
 $('#cancel').onclick = closeWorkbench;
+$('#clear-canvas').onclick = () => run(async () => {
+  if (!canvasHasObjects()) return;
+  const rollback = begin(), previous = doc;
+  const defaults = defaultScene();
+  doc = { ...doc, source: defaults.source, actors: [], props: [], contacts: [], activeActorId: null,
+    selectedActorIds: [], cameraTarget: null, mesh: defaults.mesh, pose: defaults.pose, front: 0, scale: 1,
+    sourceStale: false, derivedGuideStale: false, derivedGuideSource: null, openpose: null,
+    conditioning: { ...doc.conditioning, guide: 'coarse', map: null, mapKind: null, mapOrigin: 'auto' } };
+  try { await studio.restore(doc); }
+  catch (error) { doc = previous; rollback?.(); await studio.restore(doc); throw error; }
+  selectedBone = '';
+  previewVisible = false;
+  setMode('camera'); changed();
+});
 $('#apply').onclick = () => run(async () => {
   clearTimeout(previewTimer); studio.syncPose();
   const frozen = clone(doc), appliedRevision = revision;

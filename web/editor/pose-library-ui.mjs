@@ -1,11 +1,25 @@
 import { StudioScene, defaultScene } from './scene.mjs?v=20261116pawdrag';
 import { activeActor, createActor, bindActor, editableActors } from './actors.mjs?v=20261116en';
 import { applyCatalogTransaction, catalogPoseTargets, filterCatalog, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installPoseGallery, galleryImage } from './pose-gallery-ui.mjs?v=20261116en';
+import { installPoseGallery, galleryImage, galleryLabel } from './pose-gallery-ui.mjs?v=20261116canvas';
 
 const clone = value => structuredClone(value);
 const $ = id => document.getElementById(id);
 const API = '/anyangle-studio/pose-library';
+const englishLabels = new Map(Object.entries({
+  '站姿': 'Standing', '坐姿': 'Seated', '躺姿': 'Lying', '运动': 'Movement', '舞蹈': 'Dance',
+  '跪蹲': 'Kneeling and Squatting', '多人编排': 'Group Arrangement',
+  'AnyAngle内置': 'AnyAngle Built-in', 'AnyAngle内置编排': 'AnyAngle Built-in Arrangements',
+  '项目原创姿势': 'Original project pose', '项目原创编排': 'Original project arrangement',
+  '本地导入': 'Local Import', '用户提供': 'User-provided', '未命名姿势': 'Untitled Pose',
+  '精选姿势 · Arekejoker': 'Curated Poses · Arekejoker', '通用姿势 · Totemistyk': 'General Poses · Totemistyk',
+  '芭蕾 · Totemistyk': 'Ballet · Totemistyk', '主姿势库 · MIUProject': 'Main Pose Library · MIUProject',
+  '扩充姿势 · MIUProject': 'Extended Poses · MIUProject', '上游未声明许可': 'No upstream license declared',
+  '自然站立': 'Standing', '拳击准备': 'Boxing Stance', '直拳': 'Fighting Straight Punch',
+  '跳跃': 'Jumping', '踢腿': 'Kicking', '席地而坐': 'Seated on Floor', '侧身行走': 'Walking Profile',
+  '站立叉腰': 'Standing Hand on Hip', '单腿抬起': 'Standing One Leg Up', '交叉坐姿': 'Sitting Legs Crossed',
+}));
+const englishLabel = value => englishLabels.get(value) || value;
 async function readResult(response) {
   const result=await response.json().catch(()=>null);
   if(!response.ok)throw new Error(result?.error || `Pose Library request failed (HTTP ${response.status})${response.status===413?'. Reduce the file or preview size.':''}`);
@@ -62,14 +76,22 @@ export function installPoseLibrary(context) {
     return execute(task).finally(()=>{writing=false;if(!disposed)render();});
   };
   const entry = () => matches().find(item=>item.id===selected) || [...catalog.items,...gallery.items()].find(item => item.id === selected && (!item.hidden || $('pl-tab').value==='hidden'));
-  const accept = next => {if(next.revision>=catalog.revision)catalog=next;};
+  const accept = next => {
+    if (next.revision < catalog.revision) return;
+    for (const item of next.items) {
+      item.category = englishLabel(item.category);
+      if (item.name !== item.originalName && englishLabels.has(item.name)) item.name = englishLabel(item.name);
+      if (item.source) { item.source.name = englishLabel(item.source.name); item.source.license = englishLabel(item.source.license); }
+    }
+    catalog = next;
+  };
   async function reload() {
     const [poses]=await Promise.all([api(),gallery.reload()]);accept(poses);
     $('pl-total').textContent = `${catalog.items.filter(item => !item.hidden).length} items`;
     const cat = $('pl-category').value, source = $('pl-source').value;
     const all=[...catalog.items,...gallery.items()];
-    $('pl-category').replaceChildren(new Option('All Poses',''), ...[...new Set(all.map(item => item.category))].sort().map(value => new Option(value,value))); $('pl-category').value = cat;
-    $('pl-source').replaceChildren(new Option('All Sources',''), ...[...new Map(all.map(item => [item.source?.id || 'local',item.source?.name || 'Local Import'])).entries()].map(([value,name]) => new Option(value==='builtin'?'AnyAngle Built-in':value==='local'?'Locally Saved / Imported':name,value))); $('pl-source').value = source;
+    $('pl-category').replaceChildren(new Option('All Poses',''), ...[...new Set(all.map(item => item.category))].sort().map(value => new Option(galleryLabel(value),value))); $('pl-category').value = cat;
+    $('pl-source').replaceChildren(new Option('All Sources',''), ...[...new Map(all.map(item => [item.source?.id || 'local',item.source?.name || 'Local Import'])).entries()].map(([value,name]) => new Option(value==='builtin'?'AnyAngle Built-in':value==='local'?'Locally Saved / Imported':galleryLabel(name),value))); $('pl-source').value = source;
     if(!filtersRestored){filtersRestored=true;gallery.restoreFilters();}
     $('pl-sources').replaceChildren();
     for (const source of catalog.catalog || []) $('pl-sources').append(control(`Load ${source.name}`, () => execute(() => readSource(source))));
@@ -114,8 +136,8 @@ export function installPoseLibrary(context) {
       const card = control('', () => { selected = item.id; render(); execute(showPreview); if (matchMedia('(max-width:700px)').matches) dialog.querySelector('.pl-detail:not([hidden])').scrollIntoView({block:'start',behavior:'smooth'}); }, 'pl-card' + (selected === item.id ? ' selected' : ''));
       if(item.kind==='reference-set'){const img=document.createElement('img'),view=item.views.find(view=>view.id===item.matchedViewIds?.[0])||item.views[0];img.src=galleryImage(view.thumbnail.name);img.loading='lazy';img.alt=`${item.name} · ${view.label}`;card.append(img);}
       else if (item.preview || (item.builtin && !item.pose?.shape)) { const img = document.createElement('img'); img.src = item.preview ? `${API}/previews/${encodeURIComponent(item.preview)}` : new URL(`./pose-previews/${encodeURIComponent(item.id)}.png`,import.meta.url).href; img.loading = 'lazy'; img.alt = item.name; card.append(img); }
-      else { const graphic = document.createElement('span'); graphic.className='pl-placeholder'; graphic.textContent = item.category === '舞蹈' ? '✧' : ['Movement', '运动'].includes(item.category) ? '↗' : '◯'; card.append(graphic); }
-      const name = document.createElement('strong'); name.textContent = item.name;
+      else { const graphic = document.createElement('span'); graphic.className='pl-placeholder'; graphic.textContent = item.category === 'Dance' ? '✧' : item.category === 'Movement' ? '↗' : '◯'; card.append(graphic); }
+      const name = document.createElement('strong'); name.textContent = item.kind === 'reference-set' ? galleryLabel(item.name) : item.name;
       const meta = document.createElement('small'); meta.textContent = `${item.favorite ? '★ ' : ''}${item.kind==='reference-set'?`${item.people} people · ${item.views.length} views`:item.kind==='composition' ? `${item.slots.length}-character arrangement` : item.category} · ${item.builtin ? 'Built-in' : 'Imported'}${batchIds.has(item.id) ? ' · Added to batch' : ''}`;
       card.append(name,meta); $('pl-grid').append(card);
     }
@@ -130,7 +152,7 @@ export function installPoseLibrary(context) {
       $('pl-preview-hint').textContent = 'Select a pose to preview it in 3D';
     }
     $('pl-name').textContent = item?.name || 'Select a Pose';
-    $('pl-description').textContent = item ? `${item.originalName} · ${item.warnings?.join(' · ') || 'Editable rig pose'}` : 'Click a card to preview. Click Apply to update the character.';
+    $('pl-description').textContent = item ? item.warnings?.join(' · ') || 'Editable rig pose' : 'Click a card to preview. Click Apply to update the character.';
     $('pl-provenance').textContent = item ? JSON.stringify({source:item.source,rigProfile:item.rigProfile,poseHash:item.poseHash},null,2) : '';
     $('pl-favorite').textContent = item?.favorite ? 'Remove from Favorites' : 'Add to Favorites';
     for (const id of ['pl-favorite','pl-rename','pl-delete','pl-batch','pl-export-one']) $(id).disabled = writing || !item;

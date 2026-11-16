@@ -27,11 +27,11 @@ MAX_PACK = 64 * 1024 * 1024
 MAX_FILES = 2048
 FORBIDDEN = {"__proto__", "prototype", "constructor"}
 SOURCES = [
-    {"id": "arekejoker", "name": "精选姿势 · Arekejoker", "repo": "Arekejoker/qwen21-nsfw-pose-skill", "host": "github", "license": "第三方动作许可待核实，供用户本地导入", "prefix": "pose_library/", "ref": "b2690b8dd9ec479039967551dc38c77950b022fb"},
-    {"id": "general", "name": "通用姿势 · Totemistyk", "repo": "Totemistyk/General_Poses_PoseStudio", "host": "huggingface", "license": "上游未声明许可", "ref": "23468b2be53ab91fe493754b241d27dcfeb965ed"},
-    {"id": "ballet", "name": "芭蕾 · Totemistyk", "repo": "Totemistyk/Ballet_PoseStudio", "host": "huggingface", "license": "上游README声明MIT", "ref": "14d658f5891ac752126f47fabc54993a48980f23"},
-    {"id": "miu-main", "name": "主姿势库 · MIUProject", "repo": "MIUProject/VNCCS_PoseLibrary_Main", "host": "huggingface", "license": "上游未声明许可", "ref": "baef0455ef9d3cc31ce3e2a407f722069355c617"},
-    {"id": "miu-super", "name": "扩充姿势 · MIUProject", "repo": "MIUProject/MySuperPoseRepo", "host": "huggingface", "license": "上游未声明许可", "ref": "75931b865e95b0ab97aaca2a3756f4d0fab83a32"},
+    {"id": "arekejoker", "name": "Curated Poses · Arekejoker", "repo": "Arekejoker/qwen21-nsfw-pose-skill", "host": "github", "license": "Third-party pose license unverified. Available for local import.", "prefix": "pose_library/", "ref": "b2690b8dd9ec479039967551dc38c77950b022fb"},
+    {"id": "general", "name": "General Poses · Totemistyk", "repo": "Totemistyk/General_Poses_PoseStudio", "host": "huggingface", "license": "No upstream license declared", "ref": "23468b2be53ab91fe493754b241d27dcfeb965ed"},
+    {"id": "ballet", "name": "Ballet · Totemistyk", "repo": "Totemistyk/Ballet_PoseStudio", "host": "huggingface", "license": "Upstream README declares the MIT license", "ref": "14d658f5891ac752126f47fabc54993a48980f23"},
+    {"id": "miu-main", "name": "Main Pose Library · MIUProject", "repo": "MIUProject/VNCCS_PoseLibrary_Main", "host": "huggingface", "license": "No upstream license declared", "ref": "baef0455ef9d3cc31ce3e2a407f722069355c617"},
+    {"id": "miu-super", "name": "Extended Poses · MIUProject", "repo": "MIUProject/MySuperPoseRepo", "host": "huggingface", "license": "No upstream license declared", "ref": "75931b865e95b0ab97aaca2a3756f4d0fab83a32"},
 ]
 
 
@@ -45,46 +45,46 @@ def digest(value):
 
 def read_json(data):
     if len(data) > MAX_FILE:
-        raise ValueError("单个姿势JSON超过2 MiB")
+        raise ValueError("A pose JSON file exceeds 2 MiB")
     def pairs(items):
         result = {}
         for key, value in items:
             if key in FORBIDDEN or key in result:
-                raise ValueError("姿势包含保留或重复的字段")
+                raise ValueError("The pose contains reserved or duplicate fields")
             result[key] = value
         return result
     return json.loads(data.decode("utf-8-sig"), object_pairs_hook=pairs,
-                      parse_constant=lambda value: (_ for _ in ()).throw(ValueError("非有限数字")))
+                      parse_constant=lambda value: (_ for _ in ()).throw(ValueError("Non-finite number")))
 
 
 def rig_names():
     with (ROOT / "web/vendor/assets/pose_studio_makehuman.v2.bin").open("rb") as handle:
         prefix = handle.read(12)
         if prefix[:8] != b"VNMHJS02":
-            raise ValueError("本地人偶骨架资源损坏")
+            raise ValueError("The local mannequin rig is damaged")
         length = struct.unpack("<I", prefix[8:])[0]
         if length > 4 * 1024 * 1024:
-            raise ValueError("骨架头过大")
+            raise ValueError("The rig header is too large")
         header = json.loads(handle.read(length))
     return {bone["name"] for bone in header["bones"]}
 
 
 def vectors(value, size=3):
     if not isinstance(value, dict) or len(value) > 1000:
-        raise ValueError("无效的骨骼旋转表")
+        raise ValueError("Invalid joint rotations")
     result = {}
     for name, values in value.items():
         if name in FORBIDDEN or not isinstance(name, str) or len(name) > 100:
-            raise ValueError("无效的骨骼名称")
+            raise ValueError("Invalid joint name")
         if not isinstance(values, list) or len(values) != size or not all(type(v) in (int, float) and math.isfinite(v) for v in values):
-            raise ValueError(f"无效的骨骼旋转：{name}")
+            raise ValueError(f"Invalid joint rotation: {name}")
         result[name] = list(values)
     return result
 
 
 def normalize_pose(data, names=None):
     if not isinstance(data, dict):
-        raise ValueError("请选择姿势JSON对象")
+        raise ValueError("Choose a pose JSON object")
     names = rig_names() if names is None else names
     kind = "anyangle"
     if data.get("kind") == "anyangle-pose" and data.get("version") == 1:
@@ -96,19 +96,19 @@ def normalize_pose(data, names=None):
         poses = actor.get("poses")
         tab = data.get("activeTab", 0)
         if not isinstance(poses, list) or not poses or type(tab) is not int or not 0 <= tab < len(poses):
-            raise ValueError("VNCCS活动人物/姿势不存在")
+            raise ValueError("VNCCS active character or pose not found")
         pose = poses[tab]
     elif isinstance(data.get("bones"), dict) and not any(key in data for key in ("source", "actors", "referenceLibrary")):
         kind, pose = "vnccs", data
     else:
-        raise ValueError("无法识别姿势；支持AnyAngle姿势和VNCCS骨骼JSON")
+        raise ValueError("Unrecognized pose. Use an AnyAngle pose or VNCCS rig JSON.")
     if not isinstance(pose, dict):
-        raise ValueError("缺少姿势内容")
+        raise ValueError("Missing pose data")
     bones = vectors(pose.get("bones"))
     unknown = sorted(set(bones) - names)
     known = {key: value for key, value in bones.items() if key in names}
     if not known:
-        raise ValueError("姿势中没有本地人偶可识别的骨骼")
+        raise ValueError("The pose has no joints recognized by the local mannequin")
     result = {"bones": known}
     if kind == "anyangle":
         # Local saved poses already use this runtime's shaped-rest coordinate system.
@@ -117,27 +117,21 @@ def normalize_pose(data, names=None):
                 result[key] = vectors(pose[key])
         if pose.get("modelRotation"):
             result["modelRotation"] = vectors({"rotation": pose["modelRotation"]})["rotation"]
-    warnings = ["未映射骨骼：" + ", ".join(unknown)] if unknown else []
+    warnings = ["Unmapped bones: " + ", ".join(unknown)] if unknown else []
     if kind == "vnccs" and pose.get("hipBonePosition"):
-        warnings.append("已保留目标体型；骨盆与接触位置可继续手动微调")
+        warnings.append("Target body shape preserved. You can adjust the pelvis and contact points manually.")
     return result, warnings
 
 
 def category(name):
     lower = name.lower()
-    for key, words in [("舞蹈", ("ballet", "dance", "arabesque", "attitude", "plie", "pirouette")),
-                       ("坐姿", ("sit", "seat", "chair")), ("躺姿", ("lay", "lying", "prone", "fetal")),
-                       ("运动", ("box", "fight", "punch", "kick", "jump", "run", "walk", "step")),
-                       ("跪蹲", ("kneel", "squat", "crawl"))]:
+    for key, words in [("Dance", ("ballet", "dance", "arabesque", "attitude", "plie", "pirouette")),
+                       ("Seated", ("sit", "seat", "chair")), ("Lying", ("lay", "lying", "prone", "fetal")),
+                       ("Movement", ("box", "fight", "punch", "kick", "jump", "run", "walk", "step")),
+                       ("Kneeling and Squatting", ("kneel", "squat", "crawl"))]:
         if any(word in lower for word in words):
             return key
-    return "站姿"
-
-
-TRANSLATIONS = {"Standing": "自然站立", "Boxing Stance": "拳击准备", "Fighting Straight Punch": "直拳",
-                "Jumping": "跳跃", "Kicking": "踢腿", "Seated on Floor": "席地而坐",
-                "Walking profile": "侧身行走", "Standing Hand on Hip": "站立叉腰",
-                "Standing One Leg Up": "单腿抬起", "Sitting legs crossed": "交叉坐姿"}
+    return "Standing"
 
 
 def normalized_entry(data, name, source=None, names=None):
@@ -163,32 +157,32 @@ def normalized_entry(data, name, source=None, names=None):
     if isinstance(data, dict) and data.get("kind") == "anyangle-composition" and data.get("version") == 1:
         slots = data.get("slots")
         if not isinstance(slots, list) or not 2 <= len(slots) <= 128:
-            raise ValueError("多人编排需要2至128个人物槽")
+            raise ValueError("A group arrangement needs 2 to 128 character slots")
         normalized = []
         for slot in slots:
             pose, _ = normalize_pose({"version": 1, "kind": "anyangle-pose", "pose": slot.get("pose")}, names)
             transform = {"x": 0, "y": 0, "z": 0, "yaw": 0, **slot.get("transform", {})}
             if not all(type(transform.get(key)) in (int, float) and math.isfinite(transform[key]) for key in ("x", "y", "z", "yaw")):
-                raise ValueError("无效的编排站位")
-            normalized.append({"label": str(slot.get("label", "人物"))[:80], "pose": pose,
+                raise ValueError("Invalid character placement in arrangement")
+            normalized.append({"label": str(slot.get("label", "Character"))[:80], "pose": pose,
                                "transform": {key: transform[key] for key in ("x", "y", "z", "yaw")}})
         align = data.get("align", [])
         if not isinstance(align, list) or len(align) > 128:
-            raise ValueError("无效的编排接触关系")
+            raise ValueError("Invalid arrangement contacts")
         for pair in align:
             if (not isinstance(pair, dict) or not isinstance(pair.get("slots"), list) or len(pair["slots"]) != 2
                     or not all(type(i) is int and 0 <= i < len(slots) for i in pair["slots"]) or pair["slots"][0] == pair["slots"][1]
                     or pair.get("hands") not in (["l", "l"], ["l", "r"], ["r", "l"], ["r", "r"])):
-                raise ValueError("无效的双人手部映射")
+                raise ValueError("Invalid two-character hand mapping")
         entry = normalized_entry({"version": 1, "kind": "anyangle-pose", "pose": normalized[0]["pose"]}, name, source, names)
-        entry.update(kind="composition", slots=normalized, align=align, category="多人编排", poseHash=digest({"slots": normalized, "align": align}))
+        entry.update(kind="composition", slots=normalized, align=align, category="Group Arrangement", poseHash=digest({"slots": normalized, "align": align}))
         return entry
     pose, warnings = normalize_pose(data, names)
     if source is not None and not isinstance(source, dict):
-        raise ValueError("无效的姿势来源")
-    source = {"id": "local", "name": "本地导入", "license": "用户提供", **copy.deepcopy(source or {})}
-    name = str(name).strip()[:160] or "未命名姿势"
-    return {"kind": "pose", "name": TRANSLATIONS.get(name, name), "originalName": name,
+        raise ValueError("Invalid pose source")
+    source = {"id": "local", "name": "Local Import", "license": "User-provided", **copy.deepcopy(source or {})}
+    name = str(name).strip()[:160] or "Untitled Pose"
+    return {"kind": "pose", "name": name, "originalName": name,
             "category": category(name), "tags": [], "pose": pose, "source": source,
             "rigProfile": "makehuman-v2-degrees", "warnings": warnings, "favorite": False,
             "poseHash": digest(pose)}
@@ -196,10 +190,10 @@ def normalized_entry(data, name, source=None, names=None):
 
 def preview_png(data):
     if len(data) > 4 * 1024 * 1024:
-        raise ValueError("预览图超过4 MiB")
+        raise ValueError("Preview exceeds 4 MiB")
     with Image.open(io.BytesIO(data)) as image:
         if image.format not in ("PNG", "JPEG", "WEBP") or image.width * image.height > 4_000_000:
-            raise ValueError("预览图格式或像素不受支持")
+            raise ValueError("Unsupported preview format or dimensions")
         image = image.convert("RGB")
         image.thumbnail((320, 320))
         output = io.BytesIO(); image.save(output, "PNG")
@@ -208,16 +202,16 @@ def preview_png(data):
 
 def safe_member(name):
     if not isinstance(name, str) or "\\" in name or ":" in name:
-        raise ValueError("无效的导入路径")
+        raise ValueError("Invalid import path")
     parts = PurePosixPath(name).parts
     if name.startswith("/") or ".." in parts or not parts:
-        raise ValueError("导入路径越界")
+        raise ValueError("Import path is outside the selected folder")
     return "/".join(parts)
 
 
 def inspect_files(files, source=None):
     if len(files) > MAX_FILES or sum(len(data) for data in files.values()) > MAX_PACK:
-        raise ValueError("姿势包超过2048个文件或64 MiB")
+        raise ValueError("Pose pack exceeds 2,048 files or 64 MiB")
     clean = {safe_member(name): data for name, data in files.items()}
     names, entries, errors = rig_names(), [], []
     for path, data in clean.items():
@@ -246,22 +240,22 @@ def inspect_files(files, source=None):
 
 def inspect_zip(data):
     if len(data) > MAX_PACK:
-        raise ValueError("姿势ZIP超过64 MiB")
+        raise ValueError("Pose ZIP exceeds 64 MiB")
     files = {}
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         members = archive.infolist()
         if len(members) > MAX_FILES or sum(item.file_size for item in members) > MAX_PACK:
-            raise ValueError("姿势ZIP解压量超过限制")
+            raise ValueError("Extracted pose ZIP exceeds its size limit")
         for item in members:
             name = safe_member(item.filename)
             if item.is_dir():
                 continue
             if item.external_attr >> 16 & 0o170000 == 0o120000:
-                raise ValueError("姿势包不能包含符号链接")
+                raise ValueError("Pose packs cannot contain symbolic links")
             if name in files:
-                raise ValueError("姿势包存在重名文件")
+                raise ValueError("Pose pack contains duplicate filenames")
             if item.file_size > 4 * 1024 * 1024 or item.file_size > max(1, item.compress_size) * 1000:
-                raise ValueError("姿势包单项过大或压缩比异常")
+                raise ValueError("A pose pack entry is too large or has an invalid compression ratio")
             if Path(name).suffix.lower() in (".json", ".png", ".webp", ".jpg", ".jpeg"):
                 files[name] = archive.read(item)
     manifests = [(name, raw) for name, raw in files.items() if PurePosixPath(name).name == "manifest.json"]
@@ -284,13 +278,13 @@ def inspect_zip(data):
 def builtin_entries():
     presets = json.loads((ROOT / "web/editor/builtin-poses.json").read_text("utf-8"))
     entries = [{**normalized_entry({"version": 1, "kind": "anyangle-pose", "pose": {"bones": p["bones"]}}, p["name"],
-                               {"id": "builtin", "name": "AnyAngle内置", "license": "项目原创姿势"}),
+                               {"id": "builtin", "name": "AnyAngle Built-in", "license": "Original project pose"}),
              "id": "builtin-" + str(i), "builtin": True, "category": p.get("category", "站姿")}
             for i, p in enumerate(presets)]
     for i, (name, yaw, align) in enumerate((("双人合影", [0, 0], []), ("双人对话", [70, -70], []), ("双人握手", [90, -90], [{"slots": [0, 1], "hands": ["r", "r"]}]))):
         slots = [{"label": f"人物{j+1}", "pose": {"bones": presets[0]["bones"]}, "transform": {"x": j * (4 if align else 7), "y": 0, "z": 0, "yaw": yaw[j]}} for j in range(2)]
         entry = normalized_entry({"version": 1, "kind": "anyangle-composition", "slots": slots, "align": align}, name,
-                                 {"id": "builtin", "name": "AnyAngle内置编排", "license": "项目原创编排"})
+                                 {"id": "builtin", "name": "AnyAngle Built-in Arrangements", "license": "Original project arrangement"})
         entries.append({**entry, "id": f"builtin-composition-{i}", "builtin": True})
     english_names = {
         "自然站立": "Natural Stand", "迈步": "Step Forward", "坐姿": "Seated",
@@ -323,15 +317,15 @@ class PoseLibraryStore:
     def __init__(self, root):
         self.root = Path(root).absolute()
         if any(path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction()) for path in [self.root, *self.root.parents]):
-            raise ValueError("姿势库不能使用链接目录")
+            raise ValueError("The pose library cannot use linked folders")
         self.root.mkdir(parents=True, exist_ok=True)
 
     def path(self, name):
         if name != "index.json" and not re.fullmatch(r"[a-f0-9]{64}\.(json|png)", name):
-            raise ValueError("无效的姿势库资源名")
+            raise ValueError("Invalid pose library asset name")
         path = self.root / name
         if path.is_symlink() or path.resolve().parent != self.root.resolve():
-            raise ValueError("姿势库资源路径越界")
+            raise ValueError("Pose library asset path is outside its storage directory")
         return path
 
     def write(self, name, data):
@@ -348,7 +342,7 @@ class PoseLibraryStore:
             return {"version": 1, "revision": 0, "items": [], "sources": {}}
         value = json.loads(path.read_text("utf-8"))
         if value.get("version") != 1 or not isinstance(value.get("items"), list):
-            raise ValueError("姿势库索引损坏，请从导出包恢复")
+            raise ValueError("The pose library index is damaged. Restore it from an export.")
         return value
 
     def list(self):
@@ -365,7 +359,7 @@ class PoseLibraryStore:
         with LOCK:
             index = self.read()
             if type(revision) is not int or revision != index["revision"]:
-                raise RevisionConflict("姿势库已在另一窗口更新，请刷新列表后重试")
+                raise RevisionConflict("The pose library changed in another window. Refresh and try again.")
             operation(index)
             index["revision"] += 1
             self.write("index.json", json.dumps(index, ensure_ascii=False, allow_nan=False).encode())
@@ -373,12 +367,12 @@ class PoseLibraryStore:
 
     def import_entries(self, entries, revision):
         if not isinstance(entries, list) or not entries or len(entries) > MAX_FILES:
-            raise ValueError("请选择要入库的有效姿势")
+            raise ValueError("Choose valid poses to add to the library")
         prepared = []
         builtins = {(row['originalName'], row['poseHash']): row['id'] for row in builtin_entries()}
         for row in entries:
             if not isinstance(row, dict):
-                raise ValueError("无效的姿势条目")
+                raise ValueError("Invalid pose entry")
             data = ({"kind": "anyangle-composition", "version": 1, "slots": row.get("slots"), "align": row.get("align", [])}
                     if row.get("kind") == "composition" else {"kind": "anyangle-pose", "version": 1, "pose": row.get("pose")})
             if row.get("rigProfile") == "anyangle-animal-radians" and isinstance(row.get("pose"), dict):
@@ -387,19 +381,19 @@ class PoseLibraryStore:
             for key in ("name", "category"):
                 if key in row:
                     if not isinstance(row[key], str) or len(row[key]) > 160:
-                        raise ValueError("姿势名称或分类过长")
+                        raise ValueError("Pose name or category is too long")
                     entry[key] = row[key]
             tags = row.get("tags", [])
             if not isinstance(tags, list) or len(tags) > 64 or not all(isinstance(tag, str) and len(tag) < 100 for tag in tags):
-                raise ValueError("无效的姿势标签")
+                raise ValueError("Invalid pose tags")
             entry["tags"], entry["favorite"] = tags, bool(row.get("favorite"))
             warnings = row.get("warnings", [])
             if not isinstance(warnings, list) or not all(isinstance(value, str) and len(value) < 1000 for value in warnings):
-                raise ValueError("无效的兼容性说明")
+                raise ValueError("Invalid compatibility notes")
             entry["warnings"] = list(dict.fromkeys(entry["warnings"] + warnings))
             source = entry["source"]
             if not isinstance(source, dict) or len(json.dumps(source)) > 4096:
-                raise ValueError("无效的姿势来源")
+                raise ValueError("Invalid pose source")
             identity = {"source": source.get("id", "local"), "path": source.get("path", entry["originalName"])}
             if identity["source"] == "local":
                 identity["pose"] = entry["poseHash"]
@@ -443,11 +437,11 @@ class PoseLibraryStore:
     def patch(self, item_id, values, revision):
         builtin = next((row for row in builtin_entries() if row["id"] == item_id), None)
         if not builtin and not TOKEN.fullmatch(item_id or ""):
-            raise ValueError("无效的姿势条目")
+            raise ValueError("Invalid pose entry")
         def update(index):
             entry = index.setdefault("overrides", {}).setdefault(item_id, {}) if builtin else next((row for row in index["items"] if row["id"] == item_id), None)
             if entry is None:
-                raise ValueError("姿势不存在")
+                raise ValueError("Pose not found")
             for key, value in values.items():
                 if key in ("name", "category") and isinstance(value, str) and 0 < len(value.strip()) <= 160:
                     entry[key] = value.strip()
@@ -461,17 +455,17 @@ class PoseLibraryStore:
                     self.write(name, raw)
                     entry["preview"] = name
                 else:
-                    raise ValueError("无效的姿势修改字段")
+                    raise ValueError("Invalid pose edit field")
         return self.commit(revision, update)
 
     def delete(self, ids, revision):
         if not isinstance(ids, list) or not all(isinstance(value, str) and TOKEN.fullmatch(value) for value in ids):
-            raise ValueError("请选择用户姿势；内置姿势只能隐藏")
+            raise ValueError("Choose a user pose. Built-in poses can be hidden.")
         return self.commit(revision, lambda index: index.update(items=[row for row in index["items"] if row["id"] not in ids]))
 
     def export(self, ids=None):
         if ids is not None and (not isinstance(ids, list) or not all(isinstance(value, str) for value in ids)):
-            raise ValueError("导出姿势ID必须是列表")
+            raise ValueError("Pose IDs to export must be a list")
         items = self.list()["items"]
         if ids is not None:
             items = [row for row in items if row["id"] in ids]
@@ -500,14 +494,14 @@ def remote_bytes(url, maximum=MAX_FILE):
     with urllib.request.urlopen(request, timeout=30) as response:
         data = response.read(maximum + 1)
     if len(data) > maximum:
-        raise ValueError("来源文件超过容量限制")
+        raise ValueError("Source file exceeds the size limit")
     return data
 
 
 def fetch_source(source_id, latest=False, progress=None):
     source = next((row for row in SOURCES if row["id"] == source_id), None)
     if not source:
-        raise ValueError("请选择内置的姿势来源")
+        raise ValueError("Choose a built-in pose source")
     source = dict(source); repo = source["repo"]; ref = source["ref"]
     if source["host"] == "github":
         if latest:
@@ -526,7 +520,7 @@ def fetch_source(source_id, latest=False, progress=None):
         paths = [path for path in sorted(all_paths) if path.lower().endswith(".json") and path != "pose_library.json"]
         base = f"https://huggingface.co/{repo}/resolve/{ref}/"
     if len(paths) > MAX_FILES:
-        raise ValueError("来源文件数量超过限制")
+        raise ValueError("Source exceeds the file count limit")
     manifest = {}
     if "pose_library.json" in all_paths:
         document = json.loads(remote_bytes(base + "pose_library.json"))
@@ -541,10 +535,10 @@ def fetch_source(source_id, latest=False, progress=None):
             provenance = {**source, "path": path, "sha256": hashlib.sha256(raw).hexdigest()}
             metadata = manifest.get(path, {})
             if metadata.get("json_sha256") and metadata["json_sha256"] != provenance["sha256"]:
-                raise ValueError("来源JSON与清单SHA256不一致")
+                raise ValueError("Source JSON SHA-256 does not match the manifest")
             entry = normalized_entry(read_json(raw), metadata.get("name") or PurePosixPath(path).stem, provenance, names)
             if source_id == "ballet":
-                entry["category"] = "舞蹈"
+                entry["category"] = "Dance"
             entry["tags"] = metadata.get("tags", [])
             image_path = metadata.get("preview_path")
             if not image_path:
@@ -554,10 +548,10 @@ def fetch_source(source_id, latest=False, progress=None):
                 try:
                     image = remote_bytes(base + urllib.parse.quote(safe_member(image_path), safe="/"), 4 * 1024 * 1024)
                     if metadata.get("preview_sha256") and metadata["preview_sha256"] != hashlib.sha256(image).hexdigest():
-                        raise ValueError("来源预览与清单SHA256不一致")
+                        raise ValueError("Source preview SHA-256 does not match the manifest")
                     entry["previewData"] = base64.b64encode(preview_png(image)).decode()
                 except (OSError, ValueError, Image.DecompressionBombError) as error:
-                    entry["warnings"].append(f"预览未读取：{error}")
+                    entry["warnings"].append(f"Preview could not be loaded: {error}")
             result.append(entry)
         except (ValueError, TypeError, OSError, AttributeError, KeyError) as error:
             errors.append({"path": path, "error": str(error)})

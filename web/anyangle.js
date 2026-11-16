@@ -7,7 +7,7 @@ import { promptForSnapshot } from './batch-queue.mjs?v=20261116en';
 let graphRevision = 0;
 let closeActive = null;
 const extensionURL = new URL('./editor/index.html', import.meta.url);
-extensionURL.searchParams.set('v', '20261116clearsource');
+extensionURL.searchParams.set('v', '20261116canvas');
 
 function openEditor(node, widget) {
   closeActive?.();
@@ -15,7 +15,7 @@ function openEditor(node, widget) {
   let initialSnapshot = null;
   try { initialSnapshot = initial ? JSON.parse(initial) : null; } catch { /* Studio can replace a damaged widget. */ }
   const dialog = document.createElement('dialog');
-  Object.assign(dialog.style, { width: 'min(1600px, 97vw)', height: '94vh', maxWidth: 'none', maxHeight: 'none', padding: '0', border: '1px solid #3a5265', borderRadius: '12px', background: '#101920', overflow: 'hidden' });
+  Object.assign(dialog.style, { width: '96vw', height: '94vh', maxWidth: 'none', maxHeight: 'none', padding: '0', border: '1px solid #3a5265', borderRadius: '12px', background: '#101920', overflow: 'hidden' });
   const frame = document.createElement('iframe');
   const url = new URL(extensionURL); url.searchParams.set('session', session);
   frame.src = url; frame.title = 'AnyAngle Studio · 3D Camera and Pose Editor';

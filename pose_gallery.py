@@ -20,7 +20,7 @@ CONTENT_LOCK = threading.RLock()
 MAX_FILE = 16 * 1024 * 1024
 MAX_PACK = 2 * 1024 * 1024 * 1024
 MAX_FILES = 12000
-SOURCE = {"id": "ai-pose-gallery-zh", "name": "AI Pose Gallery 中文",
+SOURCE = {"id": "ai-pose-gallery-zh", "name": "AI Pose Gallery (Chinese Edition)",
           "url": "https://github.com/anhao/ai-pose-gallery-zh",
           "authorUrl": "https://ai-pose-gallery.pages.dev/"}
 ANGLES = {"front": "正面", "side": "侧面", "diag": "斜侧", "high": "俯视", "low": "仰视"}
@@ -51,18 +51,18 @@ def encoded(value):
 
 def safe_path(name):
     if not isinstance(name, str) or len(name) > 512 or "\\" in name or ":" in name or "\x00" in name:
-        raise ValueError("图库文件名无效")
+        raise ValueError("Invalid gallery filename")
     path = PurePosixPath(name)
     if path.is_absolute() or not path.parts or any(part in ("..", ".") or part.endswith((" ", ".")) for part in name.split("/")):
-        raise ValueError("图库文件路径越界")
+        raise ValueError("Gallery file is outside its storage directory")
     if any(part.split(".")[0].upper() in {"CON", "PRN", "AUX", "NUL", *[f"COM{i}" for i in range(1, 10)], *[f"LPT{i}" for i in range(1, 10)]} for part in path.parts):
-        raise ValueError("图库文件名是保留名称")
+        raise ValueError("Gallery filename is reserved")
     return path
 
 
 def bounded_text(value, maximum=500):
     if not isinstance(value, str) or len(value) > maximum:
-        raise ValueError("图库文字字段无效或过长")
+        raise ValueError("Gallery text field is invalid or too long")
     return value.strip()
 
 
@@ -72,10 +72,10 @@ def group_id(source_id, system, number):
 
 def image_info(data):
     if not data or len(data) > MAX_FILE:
-        raise ValueError("单张图片须小于16 MiB")
+        raise ValueError("Each image must be smaller than 16 MiB")
     with Image.open(io.BytesIO(data)) as image:
         if image.format not in ("PNG", "JPEG", "WEBP") or image.width * image.height > 32_000_000:
-            raise ValueError("图库只接受32百万像素以内的PNG/JPEG/WebP")
+            raise ValueError("The gallery accepts PNG, JPEG, or WebP up to 32 megapixels")
         image.load()
         extension = {"PNG": "png", "JPEG": "jpg", "WEBP": "webp"}[image.format]
         return {"name": hashlib.sha256(data).hexdigest() + "." + extension,
@@ -87,7 +87,7 @@ class GalleryFiles:
     def __init__(self, path):
         self.path = Path(path)
         if is_link(self.path):
-            raise ValueError("图库导入不接受链接目录或文件")
+            raise ValueError("Gallery imports cannot contain linked files or folders")
         self.archive = None
         self.entries = {}
         total = 0
@@ -101,22 +101,22 @@ class GalleryFiles:
                     for name in directories + files:
                         child = Path(parent) / name
                         if is_link(child):
-                            raise ValueError("图库导入不接受链接目录或文件")
+                            raise ValueError("Gallery imports cannot contain linked files or folders")
                     candidates.extend((str((Path(parent) / name).relative_to(self.path)).replace("\\", "/"), Path(parent) / name) for name in files)
             if len(candidates) > MAX_FILES:
-                raise ValueError("图库文件超过12000项，请分包导入")
+                raise ValueError("The gallery exceeds 12,000 files. Split the import into smaller packs.")
             seen = set()
             for name, item in candidates:
                 safe_path(name)
                 if name.casefold() in seen:
-                    raise ValueError("图库包含重复文件路径")
+                    raise ValueError("The gallery contains duplicate file paths")
                 seen.add(name.casefold())
                 size = item.file_size if self.archive else item.stat().st_size
                 if self.archive and stat.S_ISLNK(item.external_attr >> 16):
-                    raise ValueError("图库压缩包不接受链接")
+                    raise ValueError("Gallery ZIP files cannot contain links")
                 total += size
                 if size > MAX_FILE or total > MAX_PACK:
-                    raise ValueError("图库资源超过单文件16 MiB或整包2 GiB限制")
+                    raise ValueError("The gallery exceeds 16 MiB per file or 2 GiB per pack")
                 self.entries[name] = item
         except Exception:
             self.close()
@@ -129,24 +129,24 @@ class GalleryFiles:
     def read(self, name):
         safe_path(name)
         if name not in self.entries:
-            raise ValueError(f"图库缺少文件：{name}")
+            raise ValueError(f"Missing gallery file: {name}")
         item = self.entries[name]
         if self.archive:
             with self.archive.open(item) as handle:
                 data = handle.read(MAX_FILE + 1)
         else:
             if is_link(item) or not item.resolve().is_relative_to(self.path.resolve()):
-                raise ValueError("图库文件路径已变化")
+                raise ValueError("The gallery file path changed")
             with item.open("rb") as handle:
                 data = handle.read(MAX_FILE + 1)
         if len(data) > MAX_FILE:
-            raise ValueError("图库文件超过16 MiB")
+            raise ValueError("Gallery file exceeds 16 MiB")
         return data
 
     def manifest(self):
         matches = [name for name in self.entries if PurePosixPath(name).name in ("pose-zh.json", "anyangle-gallery.json")]
         if len(matches) != 1:
-            raise ValueError("请选择包含一份pose-zh.json或anyangle-gallery.json的完整图库")
+            raise ValueError("Choose a complete gallery containing one pose-zh.json or anyangle-gallery.json")
         name = matches[0]
         prefix = str(PurePosixPath(name).parent)
         prefix = "" if prefix == "." else prefix + "/"
@@ -156,7 +156,7 @@ class GalleryFiles:
 
 def source_groups(files, prefix, rows):
     if not isinstance(rows, list) or not rows or len(rows) > 6000:
-        raise ValueError("图库索引必须含1至6000个视角")
+        raise ValueError("Gallery index must contain 1 to 6,000 views")
     original_path = prefix + "pose.json"
     originals = json.loads(files.read(original_path).decode("utf-8-sig")) if original_path in files.entries else []
     originals = {row["id"]: row for row in originals}
@@ -164,13 +164,13 @@ def source_groups(files, prefix, rows):
     asset_prefix = prefix[:-5] if prefix.endswith("data/") else prefix
     source = dict(SOURCE)
     source["revision"] = hashlib.sha256(encoded(rows)).hexdigest()
-    source["license"] = files.read(asset_prefix + "LICENSE").decode("utf-8-sig") if asset_prefix + "LICENSE" in files.entries else "来源未附许可文件"
+    source["license"] = files.read(asset_prefix + "LICENSE").decode("utf-8-sig") if asset_prefix + "LICENSE" in files.entries else "The source includes no license file"
     groups, seen = {}, set()
     for row in rows:
         view_id = bounded_text(row.get("id"))
         match = re.fullmatch(r"([a-z][a-z0-9_]*)_(P\d+)_(front|side|diag|high|low)", view_id)
         if not match or view_id in seen:
-            raise ValueError("图库视角ID无效或重复")
+            raise ValueError("Invalid or duplicate gallery view ID")
         seen.add(view_id)
         system, number, angle = match.groups()
         key = group_id(source["id"], system, number)
@@ -184,7 +184,7 @@ def source_groups(files, prefix, rows):
                            "people": 2 if "双人" in system_name else 1,
                            "frame": "upper" if "上半身" in system_name else "full", "tags": [], "views": []}
         if groups[key]["name"] != name:
-            raise ValueError(f"同组动作名称不一致：{view_id}")
+            raise ValueError(f"Pose names in the set do not match: {view_id}")
         original = str(safe_path(bounded_text(row.get("原图"))))
         thumbnail = str(safe_path(bounded_text(row.get("缩略图"))))
         groups[key]["views"].append({"id": view_id, "angle": angle, "label": ANGLES[angle],
@@ -194,50 +194,50 @@ def source_groups(files, prefix, rows):
 
 def portable_groups(value):
     if not isinstance(value, dict) or value.get("kind") != "anyangle-image-pose-library" or value.get("version") != 1:
-        raise ValueError("图片姿势包版本不支持")
+        raise ValueError("Unsupported image pose pack version")
     groups = copy.deepcopy(value.get("items"))
     if not isinstance(groups, list) or not groups or len(groups) > 6000:
-        raise ValueError("图片姿势包没有有效动作")
+        raise ValueError("The image pose pack has no valid poses")
     ids, views = set(), set()
     for item in groups:
         if not isinstance(item, dict) or not GROUP.fullmatch(str(item.get("id", ""))) or item["id"] in ids or item.get("kind") != "reference-set":
-            raise ValueError("动作组ID无效或重复")
+            raise ValueError("Invalid or duplicate pose set ID")
         ids.add(item["id"])
         for key in ("name", "originalName", "system", "systemName", "number", "category"):
             item[key] = bounded_text(item.get(key, ""))
         if item.get("people") not in (1, 2) or item.get("frame") not in ("full", "upper"):
-            raise ValueError("动作人数或画幅无效")
+            raise ValueError("Invalid pose group size or framing")
         source = item.get("source", {})
         if not isinstance(source, dict) or any(not isinstance(v, str) or len(v) > 20000 for v in source.values()):
-            raise ValueError("图库来源信息无效")
+            raise ValueError("Invalid gallery source details")
         if item["id"] != group_id(source.get("id"), item["system"], item["number"]):
-            raise ValueError("动作组ID与来源不一致")
+            raise ValueError("Pose set ID does not match its source")
         item["tags"] = text_list(item.get("tags", []))
         if "sourceMissing" in item and type(item["sourceMissing"]) is not bool:
-            raise ValueError("图库来源状态无效")
+            raise ValueError("Invalid gallery source status")
         if not isinstance(item.get("views"), list) or not 1 <= len(item["views"]) <= 20:
-            raise ValueError("动作组视角无效")
+            raise ValueError("Invalid pose set views")
         angles = set()
         for view in item["views"]:
             if not isinstance(view, dict) or view.get("angle") not in ANGLES or view["angle"] in angles:
-                raise ValueError("视角无效或重复")
+                raise ValueError("Invalid or duplicate view")
             angles.add(view["angle"])
             view["id"] = bounded_text(view.get("id"))
             if view["id"] in views:
-                raise ValueError("图片姿势包包含重复视角")
+                raise ValueError("Image pose pack contains duplicate views")
             views.add(view["id"])
             view["label"] = ANGLES[view["angle"]]
             for field in ("original", "thumbnail"):
                 name = view.get(field, {}).get("name", "")
                 if not BLOB.fullmatch(name):
-                    raise ValueError("图片资源hash无效")
+                    raise ValueError("Invalid image asset hash")
                 view[field + "Path"] = "blobs/" + name
     return groups
 
 
 def text_list(values):
     if not isinstance(values, list) or len(values) > 100:
-        raise ValueError("标签须为最多100项的文字列表")
+        raise ValueError("Tags must be a list of up to 100 text entries")
     return list(dict.fromkeys(bounded_text(value, 120) for value in values if value))
 
 
@@ -245,12 +245,12 @@ class GalleryStore:
     def __init__(self, root):
         self.root = Path(root).absolute()
         if any(is_link(p) for p in [self.root, *self.root.parents]):
-            raise ValueError("图库不能使用链接目录")
+            raise ValueError("The gallery cannot use linked folders")
         self.root.mkdir(parents=True, exist_ok=True)
         for folder in ("blobs", "jobs", "exports"):
             path = self.root / folder
             if is_link(path):
-                raise ValueError("图库子目录不能使用链接")
+                raise ValueError("Gallery subfolders cannot use links")
             path.mkdir(exist_ok=True)
 
     def write_json(self, path, value):
@@ -258,7 +258,7 @@ class GalleryStore:
 
     def write(self, path, data):
         if path.is_symlink() or not path.resolve().is_relative_to(self.root.resolve()):
-            raise ValueError("图库写入路径越界")
+            raise ValueError("Write path is outside the gallery directory")
         temporary = None
         try:
             with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as handle:
@@ -272,12 +272,12 @@ class GalleryStore:
     def read(self):
         path = self.root / "index.json"
         if path.is_symlink():
-            raise ValueError("图库索引不能使用链接")
+            raise ValueError("The gallery index cannot use links")
         if not path.exists():
             return {"version": 1, "revision": 0, "items": [], "overrides": {}, "presets": [], "collections": [], "lastFilters": {}}
         value = json.loads(path.read_text("utf-8"))
         if value.get("version") != 1 or not isinstance(value.get("items"), list):
-            raise ValueError("图片库索引损坏，请从备份恢复")
+            raise ValueError("The gallery index is damaged. Restore it from a backup.")
         return value
 
     def list(self):
@@ -293,17 +293,17 @@ class GalleryStore:
 
     def blob_path(self, name):
         if not isinstance(name, str) or not BLOB.fullmatch(name):
-            raise ValueError("无效的图片库资源")
+            raise ValueError("Invalid gallery asset")
         path = self.root / "blobs" / name
         if path.is_symlink() or path.resolve().parent != (self.root / "blobs").resolve():
-            raise ValueError("图库资源路径越界")
+            raise ValueError("Gallery asset is outside its storage directory")
         return path
 
     def commit(self, revision, update):
         with LOCK:
             data = self.read()
             if type(revision) is not int or data["revision"] != revision:
-                raise GalleryConflict("图片姿势库已在另一窗口更新，请刷新后重试")
+                raise GalleryConflict("The image gallery changed in another window. Refresh and try again.")
             update(data)
             data["revision"] += 1
             self.write_json(self.root / "index.json", data)
@@ -311,12 +311,12 @@ class GalleryStore:
 
     def patch(self, item_id, changes, revision):
         if not isinstance(changes, dict) or set(changes) - {"name", "favorite", "hidden", "tags", "used"}:
-            raise ValueError("不支持的图库修改")
+            raise ValueError("Unsupported gallery edit")
         values = {}
         for key, value in changes.items():
             if key in ("favorite", "hidden", "used"):
                 if type(value) is not bool:
-                    raise ValueError("图库状态必须是布尔值")
+                    raise ValueError("Gallery status must be true or false")
                 if key == "used":
                     if value:
                         values["lastUsed"] = time.time()
@@ -327,10 +327,10 @@ class GalleryStore:
             else:
                 values[key] = bounded_text(value)
                 if not values[key]:
-                    raise ValueError("动作名称不能为空")
+                    raise ValueError("Pose name cannot be empty")
         def update(data):
             if not any(item["id"] == item_id for item in data["items"]):
-                raise ValueError("动作组不存在")
+                raise ValueError("Pose set not found")
             data["overrides"].setdefault(item_id, {}).update(values)
         return self.commit(revision, update)
 
@@ -351,7 +351,7 @@ class GalleryStore:
             settings = validate_preferences({key: value.get(key, {} if key == "lastFilters" else []) for key in ("presets", "collections", "lastFilters")}) if portable else {}
             overrides = value.get("overrides", {}) if portable else {}
             if not isinstance(overrides, dict):
-                raise ValueError("无效的图库用户设置")
+                raise ValueError("Invalid gallery preferences")
             overrides = {key: validate_override(row) for key, row in overrides.items()}
             total = sum(len(item["views"]) * 2 for item in groups)
             done = 0
@@ -366,7 +366,7 @@ class GalleryStore:
                         content = files.read(source_path)
                         info = image_info(content)
                         if portable and info["name"] != view[field]["name"]:
-                            raise ValueError(f"图片内容与hash不一致：{view['id']}")
+                            raise ValueError(f"Image data does not match its hash: {view['id']}")
                         target = self.blob_path(info["name"])
                         if not target.exists() or target.read_bytes() != content:
                             self.write(target, content)
@@ -395,7 +395,7 @@ class GalleryStore:
                         merged = {row["id"]: row for row in settings[key]}
                         merged.update({row["id"]: row for row in data[key]})
                         if len(merged) > 200:
-                            raise ValueError("合并后的预设或收藏夹超过200项，请先清理")
+                            raise ValueError("The merged presets or collections exceed 200 entries. Remove some entries before merging.")
                         data[key] = list(merged.values())
                     if not data["lastFilters"]:
                         data["lastFilters"] = settings["lastFilters"]
@@ -414,15 +414,15 @@ class GalleryStore:
             value = self.read()
         if ids is not None:
             if not isinstance(ids, list) or any(not isinstance(v, str) for v in ids):
-                raise ValueError("请选择有效的动作组")
+                raise ValueError("Choose a valid pose set")
             selected = set(ids)
             value["items"] = [item for item in value["items"] if item["id"] in selected]
             if len(value["items"]) != len(selected):
-                raise ValueError("所选动作组已不存在")
+                raise ValueError("The selected pose set no longer exists")
             value["overrides"] = {key: data for key, data in value["overrides"].items() if key in selected}
             value["collections"] = [{**row, "ids": [key for key in row["ids"] if key in selected]} for row in value["collections"] if any(key in selected for key in row["ids"])]
         if not value["items"]:
-            raise ValueError("没有可导出的图片动作")
+            raise ValueError("No image poses to export")
         value["kind"] = "anyangle-image-pose-library"
         key = hashlib.sha256(encoded(value)).hexdigest()
         output = self.export_path(key + ".zip")
@@ -442,7 +442,7 @@ class GalleryStore:
                             if name not in written:
                                 path = self.blob_path(name)
                                 if not path.is_file():
-                                    raise ValueError("部分图片尚未导入，请恢复原图后再导出")
+                                    raise ValueError("Some full images are missing. Resume the import before exporting.")
                                 archive.write(path, "blobs/" + name)
                                 written.add(name)
             os.replace(temporary, output)
@@ -452,15 +452,15 @@ class GalleryStore:
 
     def export_path(self, name):
         if not isinstance(name, str) or not re.fullmatch(r"[a-f0-9]{64}\.zip", name):
-            raise ValueError("无效的图库下载")
+            raise ValueError("Invalid gallery download")
         path = self.root / "exports" / name
         if path.is_symlink() or path.resolve().parent != (self.root / "exports").resolve():
-            raise ValueError("图库下载路径越界")
+            raise ValueError("Download path is outside the gallery directory")
         return path
 
     def clear_cache(self):
         if not CONTENT_LOCK.acquire(blocking=False):
-            raise GalleryConflict("图库正在导入或导出，请稍后清理")
+            raise GalleryConflict("Wait for the gallery import or export before clearing the cache")
         try:
             with LOCK:
                 data = self.read()
@@ -480,21 +480,21 @@ class GalleryStore:
 
 def validate_preferences(changes):
     if not isinstance(changes, dict) or set(changes) - {"presets", "collections", "lastFilters"}:
-        raise ValueError("未知图库设置")
+        raise ValueError("Unknown gallery setting")
     result = {}
     for key, rows in changes.items():
         if key == "lastFilters":
             result[key] = filters(rows)
             continue
         if not isinstance(rows, list) or len(rows) > 200:
-            raise ValueError("预设或收藏夹最多200项")
+            raise ValueError("Presets or collections are limited to 200 entries")
         seen, clean = set(), []
         for row in rows:
             if not isinstance(row, dict):
-                raise ValueError("无效的预设或收藏夹")
+                raise ValueError("Invalid preset or collection")
             ident, name = bounded_text(row.get("id"), 100), bounded_text(row.get("name"), 120)
             if not ident or not name or ident in seen:
-                raise ValueError("预设或收藏夹ID/名称无效")
+                raise ValueError("Invalid preset or collection ID or name")
             seen.add(ident)
             item = {"id": ident, "name": name}
             if key == "presets":
@@ -502,7 +502,7 @@ def validate_preferences(changes):
             else:
                 ids = row.get("ids", [])
                 if not isinstance(ids, list) or len(ids) > 6000 or any(not isinstance(v, str) or not GROUP.fullmatch(v) for v in ids):
-                    raise ValueError("收藏夹动作ID无效")
+                    raise ValueError("Invalid pose ID in collection")
                 item["ids"] = list(dict.fromkeys(ids))
             clean.append(item)
         result[key] = clean
@@ -512,25 +512,25 @@ def validate_preferences(changes):
 def filters(value):
     allowed = {"query", "category", "type", "people", "frame", "angle", "tab", "source", "sort", "collection", "offline"}
     if not isinstance(value, dict) or set(value) - allowed:
-        raise ValueError("未知搜索筛选")
+        raise ValueError("Unknown search filter")
     return {key: bounded_text(item, 500) for key, item in value.items()}
 
 
 def validate_override(value):
     if not isinstance(value, dict) or set(value) - {"name", "tags", "favorite", "hidden", "lastUsed"}:
-        raise ValueError("无效的图库用户设置")
+        raise ValueError("Invalid gallery preferences")
     result = {}
     for key, item in value.items():
         if key in ("favorite", "hidden"):
             if type(item) is not bool:
-                raise ValueError("无效的收藏/隐藏状态")
+                raise ValueError("Invalid favorite or hidden state")
         elif key == "name":
             item = bounded_text(item)
             if not item:
-                raise ValueError("名称不能为空")
+                raise ValueError("Name cannot be empty")
         elif key == "tags":
             item = text_list(item)
         elif type(item) not in (int, float) or not 0 <= item < 100_000_000_000:
-            raise ValueError("最近使用时间无效")
+            raise ValueError("Invalid last-used timestamp")
         result[key] = item
     return result

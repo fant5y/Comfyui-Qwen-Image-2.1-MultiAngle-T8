@@ -35,7 +35,7 @@ def register_pose_routes(routes, store_factory):
     async def inspect(request):
         async def action():
             if not request.content_type.startswith("multipart/"):
-                raise ValueError("请选择姿势文件、目录或ZIP")
+                raise ValueError("Choose a pose file, folder, or ZIP")
             reader = await request.multipart()
             files, total, archive = {}, 0, None
             while part := await reader.next():
@@ -45,15 +45,15 @@ def register_pose_routes(routes, store_factory):
                 while chunk := await part.read_chunk():
                     total += len(chunk); content.extend(chunk)
                     if total > MAX_PACK:
-                        raise ValueError("导入总量超过64 MiB")
+                        raise ValueError("The import exceeds 64 MiB")
                 name = part.filename
                 if name.lower().endswith(".zip"):
                     if archive is not None or files:
-                        raise ValueError("每次请选择一个姿势ZIP")
+                        raise ValueError("Choose one pose ZIP at a time")
                     archive = bytes(content)
                 else:
                     if archive is not None or name in files:
-                        raise ValueError("重复文件名或混合ZIP导入")
+                        raise ValueError("Duplicate filenames or mixed ZIP import")
                     files[name] = bytes(content)
             if archive is not None:
                 return await asyncio.to_thread(inspect_zip, archive)
@@ -94,7 +94,7 @@ def register_pose_routes(routes, store_factory):
         async def action():
             name = request.match_info["name"]
             if not name.endswith(".png"):
-                raise ValueError("无效的预览资源")
+                raise ValueError("Invalid preview asset")
             return web.Response(body=await asyncio.to_thread(store().path(name).read_bytes), content_type="image/png")
         return await guarded(action)
 
@@ -104,7 +104,7 @@ def register_pose_routes(routes, store_factory):
             data = await request.json()
             # Only this explicit endpoint performs network access. No refresh on startup/list.
             if len([job for job in jobs.values() if job["state"] == "running"]) >= 2:
-                raise ValueError("已有两个来源正在读取，请等待完成")
+                raise ValueError("Two pose sources are already loading. Wait for one to finish.")
             source = request.match_info["source"]
             for old in list(jobs):
                 if jobs[old]["state"] != "running" and time.monotonic() - jobs[old]["started"] > 1800:
@@ -129,6 +129,6 @@ def register_pose_routes(routes, store_factory):
         async def action():
             job = jobs.get(request.match_info["id"])
             if not job:
-                raise ValueError("来源读取任务不存在或已过期")
+                raise ValueError("The source import job is missing or expired")
             return {key: value for key, value in job.items() if key not in ("task", "started")}
         return await guarded(action)

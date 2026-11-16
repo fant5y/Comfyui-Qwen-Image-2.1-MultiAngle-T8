@@ -5,6 +5,18 @@ import { uuid } from '../uuid.mjs?v=20261116en';
 const API='/anyangle-studio/pose-gallery', $=id=>document.getElementById(id);
 const clone=value=>structuredClone(value);
 export const galleryImage=name=>`${API}/blobs/${encodeURIComponent(name)}`;
+const galleryLabels = new Map(Object.entries({
+  'AI Pose Gallery 中文': 'AI Pose Gallery (Chinese Edition)',
+  '站姿': 'Standing', '坐姿': 'Seated', '跪姿': 'Kneeling', '蹲姿': 'Squatting',
+  '仰卧': 'Lying on Back', '俯卧': 'Lying Face Down', '侧卧': 'Lying on Side',
+  '正面': 'Front', '侧面': 'Side', '斜侧': 'Three-Quarter', '俯视': 'High Angle', '仰视': 'Low Angle',
+  '单人': 'One Person', '双人': 'Two People', '全身': 'Full Body', '上半身': 'Upper Body',
+  '单人全身': 'One Person · Full Body', '单人上半身': 'One Person · Upper Body',
+  '双人全身': 'Two People · Full Body', '双人上半身': 'Two People · Upper Body',
+  '举手': 'Raised Hand', '叉腰': 'Hands on Hips', '抱臂': 'Arms Crossed', '握手': 'Handshake',
+  '拥抱': 'Hug', '牵手': 'Holding Hands', '背靠背': 'Back to Back', '面对面': 'Face to Face',
+}));
+export const galleryLabel = value => galleryLabels.get(value) || value;
 async function api(path='',data,method='POST'){
   const response=await fetch(API+path,data===undefined?{}:{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   const result=await response.json().catch(()=>null);
@@ -76,7 +88,7 @@ export function installPoseGallery(context,hooks){
     if(changed){token++;selected=entry.id;viewId=entry.matchedViewIds?.[0]||entry.views[0].id;}
     if(!entry.views.some(row=>row.id===viewId))viewId=entry.views[0].id;
     const current=view();
-    $('pg-name').textContent=entry.name;$('pg-info').textContent=`${entry.systemName} · ${entry.number} · ${entry.people} people · ${entry.views.length} available views${entry.sourceMissing?' · This pose is absent from the latest source index. Local copy retained.':''}`;
+    $('pg-name').textContent=galleryLabel(entry.name);$('pg-info').textContent=`${galleryLabel(entry.systemName)} · ${entry.number} · ${entry.people} people · ${entry.views.length} available views${entry.sourceMissing?' · This pose is absent from the latest source index. Local copy retained.':''}`;
     $('pg-image').src=galleryImage((current.original.ready?current.original:current.thumbnail).name);
     $('pg-image-state').textContent=current.original.ready?'':'Thumbnail only. Full image pending.';
     $('pg-image').onerror=()=>{$('pg-image-state').textContent='Could not load the image. Resume the import or refresh.';};
@@ -91,7 +103,7 @@ export function installPoseGallery(context,hooks){
     $('pg-target').value=[...$('pg-target').options].some(option=>option.value===target)?target:'scene';
     $('pg-favorite').textContent=entry.favorite?'Remove from Favorites':'Add to Favorites';$('pg-hide').textContent=entry.hidden?'Unhide':'Hide Pose';
     $('pg-provenance').textContent=JSON.stringify({source:entry.source,view:current,tags:entry.tags},null,2);
-    if(changed){$('pg-batch-views').replaceChildren();for(const candidate of entry.views){const label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.value=candidate.id;check.checked=selection.has(candidate.id);label.append(check,document.createTextNode(candidate.label));$('pg-batch-views').append(label);}}
+    if(changed){$('pg-batch-views').replaceChildren();for(const candidate of entry.views){const label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.value=candidate.id;check.checked=selection.has(candidate.id);label.append(check,document.createTextNode(galleryLabel(candidate.label)));$('pg-batch-views').append(label);}}
     $('pg-batch-count').textContent=`${selection.size} views selected`;
     $('pg-reference').disabled=busy||entry.hidden||!current.original.ready;$('pg-extract').disabled=busy||entry.hidden||!current.original.ready;
   }

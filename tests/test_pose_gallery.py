@@ -206,12 +206,12 @@ class GalleryTests(unittest.TestCase):
         with zipfile.ZipFile(path, "w") as output:
             output.writestr("A.json", b"{}")
             output.writestr("a.json", b"{}")
-        with self.assertRaisesRegex(ValueError, "重复"):
+        with self.assertRaisesRegex(ValueError, "duplicate"):
             GalleryFiles(path)
         with zipfile.ZipFile(path, "w") as output:
             info = zipfile.ZipInfo("link"); info.external_attr = (0o120777 << 16)
             output.writestr(info, b"../outside")
-        with self.assertRaisesRegex(ValueError, "链接"):
+        with self.assertRaisesRegex(ValueError, "links"):
             GalleryFiles(path)
 
     def test_same_name_different_source_group_is_not_merged(self):
