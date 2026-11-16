@@ -1,5 +1,5 @@
 import { editableActors, bindActor } from './actors.mjs?v=20261116en';
-import { PRESETS } from './scene.mjs?v=20261116modelrotation';
+import { PRESETS } from './scene.mjs?v=20261116sceneselection';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { detachTargets } from './reference-library.mjs?v=20261116en';
 
@@ -56,17 +56,21 @@ export function installCastTools(context) {
   function render() {
     const list = $('prop-list');
     const studio = context.studio();
+    const controls = $('model-controls');
     list.replaceChildren();
+    controls.replaceChildren();
+    controls.hidden = true;
     const actionButton = (label, action, tooltip = label) => {
       const button = document.createElement('button'); button.textContent = label; button.title = tooltip;
       button.setAttribute('aria-label', tooltip); button.onclick = action; return button;
     };
-    for (const prop of context.doc().props || []) {
+    const doc = context.doc(), props = doc.props || [];
+    for (const [index, prop] of props.entries()) {
       const selected = studio?.selectedModelId === prop.id;
       const card = document.createElement('div'); card.className = 'actor-card';
       card.style.setProperty('--actor-color', '#8da8b6');
       card.classList.toggle('active', selected);
-      const title = document.createElement('button'); title.className = 'actor-name'; title.textContent = prop.label;
+      const title = document.createElement('button'); title.className = 'actor-name'; title.textContent = `${String((doc.actors?.length || 0) + index + 1).padStart(2, '0')}  ${prop.label}`;
       title.setAttribute('aria-pressed', String(selected)); title.onclick = () => context.selectModel(prop.id);
       const actions = document.createElement('div'); actions.className = 'actor-card-actions';
       const visible = prop.visible !== false;
@@ -76,11 +80,23 @@ export function installCastTools(context) {
       actions.append(actionButton(prop.locked ? 'Locked' : 'Lock', () => mutate(() => {
         prop.locked = !prop.locked; studio.setMode(studio.mode);
       }), prop.locked ? 'Unlock Model' : 'Lock Model'));
+      for (const [offset, label, tooltip] of [[-1, '↑', 'Move Layer Forward'], [1, '↓', 'Move Layer Back']]) {
+        const destination = index + offset;
+        const move = actionButton(label, () => {
+          context.begin();
+          props.splice(index, 1);
+          props.splice(destination, 0, prop);
+          context.changed(false);
+        }, tooltip);
+        move.disabled = destination < 0 || destination >= props.length;
+        actions.append(move);
+      }
       card.append(title, actions); list.append(card);
     }
     const prop = studio?.selectedModel();
     if (!prop) return;
-    const inspector = document.createElement('div');
+    controls.hidden = false;
+    const inspector = controls;
     const name = document.createElement('label'), nameInput = document.createElement('input');
     nameInput.value = prop.label; nameInput.maxLength = 255;
     nameInput.onchange = () => {
@@ -112,7 +128,11 @@ export function installCastTools(context) {
     const actions = document.createElement('div'); actions.className = 'compact-actions';
     const rotate = actionButton('Rotate in Viewport', () => context.editScene());
     rotate.disabled = prop.locked || prop.visible === false;
-    actions.append(rotate);
+    const ground = actionButton('Ground Selected', () => mutate(() => studio.groundModel(prop)));
+    ground.disabled = rotate.disabled;
+    const fit = actionButton('Fit Selected', () => mutate(() => studio.fit(true)));
+    fit.disabled = prop.visible === false;
+    actions.append(ground, fit, rotate);
     inspector.append(actions);
     const joints = studio.modelJoints();
     if (joints.length) {
@@ -128,11 +148,10 @@ export function installCastTools(context) {
       };
       label.append('Rotation Target', select); inspector.append(label);
     }
-    list.append(inspector);
   }
   let key, renderedDoc, renderedProps = [];
   return () => {
-    const doc = context.doc(), props = doc.props || [], next = JSON.stringify([context.studio()?.selectedModelId, props]);
+    const doc = context.doc(), props = doc.props || [], next = JSON.stringify([context.studio()?.selectedModelId, doc.actors?.length, props]);
     if (next !== key || doc !== renderedDoc || props.some((prop, i) => prop !== renderedProps[i])) {
       key = next; renderedDoc = doc; renderedProps = props.slice(); render();
     }

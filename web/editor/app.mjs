@@ -1,5 +1,5 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116modelrotation';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116sceneselection';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116en';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116sources';
@@ -9,10 +9,10 @@ import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges }
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116modelrotation';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116sceneselection';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116studiostart';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116sceneselection';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116en';
 
@@ -286,13 +286,14 @@ function refresh() {
   $('#guide-size').textContent = `${doc.width} × ${doc.height}`;
   const mannequinScene = doc.source.kind === 'human';
   const selectedModel = studio?.selectedModel();
+  const actorSelected = doc.selectedActorIds?.includes(doc.activeActorId);
   const animal = mannequinScene && activeActor(doc)?.source.kind === 'animal';
   const human = mannequinScene && !animal;
   const splat = doc.source.kind === 'splat', empty = doc.source.kind === 'empty';
   $('#front').disabled = $('#front-number').disabled = mannequinScene || splat || empty;
   $('#scale').disabled = $('#scale-number').disabled = splat || empty || mannequinScene && !!activeActor(doc)?.locked;
   $('#front').closest('.control').hidden = mannequinScene || splat || empty;
-  $('#scale').closest('.control').hidden = splat || empty || !!selectedModel;
+  $('#scale').closest('.control').hidden = splat || empty || !!selectedModel || (mannequinScene && !actorSelected);
   $('#calibration-hint').textContent = splat
     ? 'The reconstructed subject is aligned with the estimated source camera. Use the camera to adjust the angle, zoom, and composition.'
     : empty ? 'Connect a source image and rebuild the subject, or import a GLB to adjust the scene.'
@@ -303,7 +304,7 @@ function refresh() {
   $('#asset-label').textContent = empty ? 'Waiting for source reconstruction' : selectedModel ? selectedModel.label : human ? 'MakeHuman · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Posable Mannequin' : doc.source.label || 'GLB Scene';
   $('#source-badge').textContent = empty ? 'PHOTO → 3D' : splat ? doc.source.keep_background ? 'TRIPOSPLAT · Background Included' : 'TRIPOSPLAT · Source Subject' : selectedModel ? selectedModel.label : human ? 'HUMAN · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Mannequin' : 'GLB · Scene';
   for (const id of ['pose-panel', 'hands-panel', 'body-panel', 'joint-panel']) {
-    const available = !selectedModel && (human || animal && ['joint-panel', 'body-panel'].includes(id));
+    const available = actorSelected && !selectedModel && (human || animal && ['joint-panel', 'body-panel'].includes(id));
     const panel = document.getElementById(id);
     panel.classList.toggle('disabled-panel', !available);
     panel.inert = !available || mannequinScene && id !== 'pose-panel' && !!activeActor(doc)?.locked;
@@ -418,6 +419,7 @@ function refresh() {
   const promptText = doc.conditioning[customPrompt ? 'customPrompt' : 'promptExtra'] ?? '';
   if (promptEditor.value !== promptText) promptEditor.value = promptText;
   $('#prompt-output').hidden = customPrompt;
+  $('#edit-generated-prompt').hidden = customPrompt;
   $('#reset-prompt').disabled = promptMode === 'default' && !doc.conditioning.customPrompt && !doc.conditioning.promptExtra;
   $('#image-wiring').textContent = promptMode === 'single' ? 'Current guide → image_1. Use Additional Description for characters, setting, and style.'
     : `Source → image_${3 - imageIndex} · Current guide → image_${imageIndex}. Update the encoder connections if you change the order.`;
@@ -719,6 +721,14 @@ $('#prompt-editor').oninput = event => {
   const key = doc.conditioning.promptMode === 'custom' ? 'customPrompt' : 'promptExtra';
   doc.conditioning[key] = event.target.value;
   changed(false);
+};
+$('#edit-generated-prompt').onclick = () => {
+  const generated = $('#prompt-preview').textContent;
+  begin();
+  doc.conditioning.customPrompt = generated;
+  doc.conditioning.promptMode = 'custom';
+  changed();
+  $('#prompt-editor').focus();
 };
 $('#reset-prompt').onclick = () => {
   begin();
@@ -1572,7 +1582,7 @@ async function start(token, reference = { connected: false }, structure = { conn
     const referenceChanged = reference.connected && !!reference.asset && reference.asset.name !== doc.reference?.name;
     if (reference.asset) { const previous = doc.reference; doc.reference = reference.asset; sourceChanged(doc, previous); }
     if (doc.version !== 3 && doc.source.kind === 'splat' && doc.source.reference?.name !== doc.reference?.name) doc.source = { kind: 'empty' };
-    studio = new StudioScene($('#viewport'), { begin, change: changed, camera: () => { revision++; refresh(); schedulePreview(); $('#status').textContent = 'Camera draft · Apply to save'; $('#status').dataset.state = 'dirty'; }, pick: selectRole, pickModel: selectModel, select: (name, updateControls = true) => {
+    studio = new StudioScene($('#viewport'), { begin, change: changed, camera: () => { revision++; refresh(); schedulePreview(); $('#status').textContent = 'Camera draft · Apply to save'; $('#status').dataset.state = 'dirty'; }, pick: selectRole, pickModel: selectModel, clearSelection, select: (name, updateControls = true) => {
       selectedBone = name || '';
       if (studio.animal) {
         studio.selectAnimalJoint(selectedBone);

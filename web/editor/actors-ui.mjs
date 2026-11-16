@@ -1,7 +1,7 @@
 import { createActor, activeActor, ensureActors, bindActor, cloneActor, removeActor, moveActor, editableActors, actorSeed, applySceneTemplate } from './actors.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { installCastTools } from './cast-tools.mjs?v=20261116modelrotation';
+import { installCastTools } from './cast-tools.mjs?v=20261116sceneselection';
 import { poseCopyIssue, ORDER } from './openpose.mjs?v=20261116en';
 import { guideSource } from './guides.mjs?v=20261116en';
 import { addReference, newUse } from './reference-library.mjs?v=20261116en';
@@ -29,10 +29,10 @@ export function installActorsUI(options) {
   $('actors-panel').innerHTML = `<summary class="section-heading collapsible-heading"><h2>Scene Characters <small id="actor-count">0</small></h2><span class="tag">CAST</span></summary>
     <div class="actor-toolbar"><button id="add-actor" class="accent-button">＋ Add Character</button><button id="clone-actor">Duplicate</button><button id="delete-actor">Delete</button></div>
     <p class="hint">Select a character to edit. Ctrl-click to select multiple. Visibility controls output. Locking protects poses and positions.</p><div id="actor-list" class="actor-list"></div>
-    <div id="prop-list" class="prop-list"></div><label>Drag Plane<select id="actor-plane"><option value="screen">View Plane · Up / Down / Left / Right</option><option value="ground">Ground Plane · Forward / Back / Left / Right</option></select></label><div id="active-actor-controls"><label>Name<input id="actor-label" maxlength="48"></label><label>Character Color<input id="actor-color" type="color"></label>
+    <div id="prop-list" class="actor-list"></div><label>Drag Plane<select id="actor-plane"><option value="screen">View Plane · Up / Down / Left / Right</option><option value="ground">Ground Plane · Forward / Back / Left / Right</option></select></label><div id="model-controls" hidden></div><div id="active-actor-controls"><label>Name<input id="actor-label" maxlength="48"></label><label>Character Color<input id="actor-color" type="color"></label>
     <div class="actor-position"><label>X<input id="actor-x" type="number" step="0.1"></label><label>Y<input id="actor-y" type="number" step="0.1"></label><label>Z<input id="actor-z" type="number" step="0.1"></label></div>
     <div class="dimensions"><label>Facing °<input id="actor-yaw" type="number" step="1"></label><label>Scale<input id="actor-scale" type="number" min="0.01" step="0.01"></label></div>
-    <div class="compact-actions"><button id="ground-actors">Ground Selected Characters</button><button id="fit-actors">Fit Selected Characters</button></div>
+    <div class="compact-actions"><button id="ground-actors">Ground Selected</button><button id="fit-actors">Fit Selected</button></div>
     <div class="actor-identity"><h3>Identity Reference <small>Separate from pose source</small></h3><label>Source<select id="actor-reference"><option value="text">Text Description</option><option value="upload">Upload Character Photo…</option><option value="reference">Use Scene Source Image</option></select></label><img id="actor-reference-preview" alt="Character identity photo" hidden><label>Describe Character in Group Photo<input id="actor-source-person" placeholder="For example, the person with glasses on the left"></label><label>Appearance / Clothing<textarea id="actor-description" rows="3" maxlength="16000" placeholder="Character appearance, clothing, and style"></textarea></label><p id="actor-binding-state" class="hint"></p></div></div>
     <label class="option-toggle"><input id="actor-identities" type="checkbox"><span>Assign Each Character an Identity<small>Use the Qwen Base Model with Multi-Image Encode.</small></span></label>
     <label class="option-toggle"><input id="color-actors" type="checkbox"><span>Use Character Colors in Coarse Render<small>Distinguishes characters. Pose guides keep standard joint colors.</small></span></label>`;
@@ -141,17 +141,26 @@ export function selectModel(id) {
   if (studio.mode === 'camera') context.placeScene();
   context.refresh();
 }
+export function clearSelection() {
+  const doc = context.doc(), studio = context.studio();
+  if (!studio.selectedModelId && !doc.selectedActorIds?.length) return;
+  doc.selectedActorIds = [];
+  studio.selectedModelId = null;
+  studio.modelJoint = null;
+  studio.setMode(studio.mode);
+  context.refresh();
+}
 export async function selectRole(id, additive = false) {
   await context.run(async () => {
     const doc = context.doc();
     if (additive) doc.selectedActorIds = doc.selectedActorIds?.includes(id) ? doc.selectedActorIds.filter(value => value !== id) : [...doc.selectedActorIds || [], id];
     else doc.selectedActorIds = [id];
     const studio = context.studio();
-    const hadModelSelected = !!studio.selectedModel();
+    const updateMode = id === doc.activeActorId || !!studio.selectedModel();
     studio.finishDrag();
     studio.selectedModelId = null; studio.modelJoint = null;
     await studio.selectActor(id);
-    if (hadModelSelected) studio.setMode(studio.mode);
+    if (updateMode) studio.setMode(studio.mode);
     await context.ensureHumanTools();
     context.refresh();
   });
@@ -171,7 +180,7 @@ export function refreshActorsUI() {
   if (key !== renderKey || doc !== renderedDoc || (doc.actors || []).some((role,index) => role !== renderedRoles[index])) {
     renderKey = key; renderedDoc = doc; renderedRoles = (doc.actors || []).slice(); $('actor-list').replaceChildren();
     for (const [index, role] of (doc.actors || []).entries()) {
-      const card = document.createElement('div'); card.className = 'actor-card'; card.classList.toggle('active', role.id === doc.activeActorId && !context.studio()?.selectedModelId); card.classList.toggle('selected', !context.studio()?.selectedModelId && doc.selectedActorIds?.includes(role.id)); card.style.setProperty('--actor-color', role.editorColor);
+      const card = document.createElement('div'); card.className = 'actor-card'; card.classList.toggle('active', role.id === doc.activeActorId && doc.selectedActorIds?.includes(role.id) && !context.studio()?.selectedModelId); card.classList.toggle('selected', !context.studio()?.selectedModelId && doc.selectedActorIds?.includes(role.id)); card.style.setProperty('--actor-color', role.editorColor);
       const choose = button(`${String(index + 1).padStart(2, '0')}  ${role.label}`, event => { if (human) selectRole(role.id, event.ctrlKey || event.metaKey); }); choose.className = 'actor-name';
       const controls = document.createElement('div'); controls.className = 'actor-card-actions';
       controls.append(button(role.visible === false ? '○' : '◉', () => { context.begin(); role.visible = role.visible === false; context.studio().updateActorTransform(role); context.studio().setMode(context.studio().mode); context.changed(); }, role.visible === false ? 'Show Character' : 'Hide Character'),
@@ -187,8 +196,9 @@ export function refreshActorsUI() {
   }
   $('actor-count').textContent = `${(doc.actors || []).filter(role => role.visible !== false).length} / ${doc.actors?.length || 0}`;
   const modelSelected = doc.props?.some(prop => prop.id === context.studio()?.selectedModelId);
-  $('active-actor-controls').hidden = !actor || !human || modelSelected;
-  $('clone-actor').disabled = $('delete-actor').disabled = !human || !(actor || modelSelected);
+  const actorSelected = actor && doc.selectedActorIds?.includes(actor.id);
+  $('active-actor-controls').hidden = !actorSelected || !human || modelSelected;
+  $('clone-actor').disabled = $('delete-actor').disabled = !human || !(actorSelected || modelSelected);
   if (actor) {
     for (const [id, value] of [['actor-label', actor.label], ['actor-color', actor.editorColor], ...['x', 'y', 'z', 'yaw', 'scale'].map(key => [`actor-${key}`, actor.transform[key]]), ['actor-description', actor.identity.description], ['actor-source-person', typeof actor.identity.sourcePerson === 'string' ? actor.identity.sourcePerson : actor.identity.sourcePerson?.description || '']])
       if (document.activeElement !== $(id)) $(id).value = value;
