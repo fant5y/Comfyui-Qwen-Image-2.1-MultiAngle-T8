@@ -169,7 +169,7 @@ export class StudioScene {
   buildHuman(pose, actor = activeActor(this.doc)) {
     if (this.cachedPack !== this.pack) {
       this.cachedPack = this.pack; this.morphCache = new Map(); this.morphCacheBytes = 0;
-      this.humanStatic = buildStaticModelData(this.pack, false);
+      this.humanStatic = new Map();
     }
     const key = JSON.stringify(this.doc.mesh);
     let cached = this.morphCache.get(key);
@@ -184,10 +184,12 @@ export class StudioScene {
       this.morphCacheBytes -= this.morphCache.get(first).bytes; this.morphCache.delete(first);
     }
     const morph = cached.morph;
+    if (!this.humanStatic.has(morph.includeGenitals))
+      this.humanStatic.set(morph.includeGenitals, buildStaticModelData(this.pack, morph.includeGenitals));
     // Native cached proportion controls belong to a rig, never to its previous occupant.
     this.viewer.headScale = this.viewer.armScale = this.viewer.handScale = this.viewer.footScale = 1;
     this.viewer.setSkinTexture('naked');
-    this.viewer.loadData(modelData(morph, this.humanStatic), true);
+    this.viewer.loadData(modelData(morph, this.humanStatic.get(morph.includeGenitals)), true);
     if (pose?.positionDeltas) {
       pose = structuredClone(pose); pose.bonePositions = { ...pose.bonePositions };
       for (const [name, delta] of Object.entries(pose.positionDeltas)) {

@@ -1,5 +1,5 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116pawdrag';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116anatomymesh';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide } from './reference-library.mjs?v=20261116en';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116en';
@@ -9,7 +9,7 @@ import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges }
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116canvas';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116anatomymesh';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116en';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
 import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116rig';
@@ -488,7 +488,7 @@ for (const button of document.querySelectorAll('[data-body-shape]')) button.oncl
   await studio.morph(); changed();
 });
 for (const [key, label, min, max, step] of [
-  ['age', 'Age', 18, 75, 1], ['gender', 'Female to Male', 0, 1, 0.01], ['breast_size', 'Breast Size', 0, 1, 0.01],
+  ['age', 'Age', 18, 75, 1], ['gender', 'Female to Male', 0, 1, 0.01], ['breast_size', 'Breast Size', 0, 1.5, 0.01],
   ['weight', 'Weight', 0, 1, 0.01], ['muscle', 'Muscle', 0, 1, 0.01], ['height', 'Height', 0, 1, 0.01],
 ]) makeControl('#body-sliders', { id: `body-${key}`, label, min, max, step,
   read: () => doc.mesh[key], write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
