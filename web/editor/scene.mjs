@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.mjs';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pelvis';
+import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 import { PoseViewerCore } from '../vendor/vnccs_pose_studio_core.mjs?v=20261031resize';
 import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs';
@@ -944,7 +944,7 @@ export class StudioScene {
             if (!point) { drag = null; return; }
             Object.assign(drag, { plane, offset: center.sub(point), animalTarget: target ? name : null });
             if (name === 'Pelvis') {
-              drag.feet = this.animal.pelvisLegs.map(([leg, { tip }]) => [leg, tip.getWorldPosition(new THREE.Vector3())]);
+              drag.footLimits = this.animal.pelvisFootLimits(this.grid.position.y + 0.03);
             }
           }
           canvas.setPointerCapture(event.pointerId);
@@ -1012,7 +1012,7 @@ export class StudioScene {
         beginChange();
         drag.animal.restore(drag.pose);
         const destination = point.add(drag.offset);
-        if (drag.feet) drag.animal.dragPelvis(destination, drag.feet);
+        if (drag.footLimits) drag.animal.dragPelvis(destination, drag.footLimits);
         else if (drag.animalTarget) drag.animal.drag(drag.animalTarget, destination);
         else drag.animal.dragLimbBend(drag.joint, destination);
         drag.animal.update(this.animalSelection);

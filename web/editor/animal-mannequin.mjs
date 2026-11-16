@@ -132,12 +132,12 @@ export class AnimalMannequin {
     }
     const radii = [widths[0], ...widths.slice(1).map(width => width * 0.9), Math.min(foot.radii[0], widths.at(-1)) * 0.85];
     this.skin(chain, radii, name.endsWith('wing') ? 0.68 : 0.88);
-    this.volume(joint, foot.offset, foot.radii, foot.color ?? 0);
+    const paw = this.volume(joint, foot.offset, foot.radii, foot.color ?? 0);
     const tip = new THREE.Object3D();
     tip.position.fromArray(foot.offset);
     tip.position.z += foot.radii[2] * 0.65;
     joint.add(tip);
-    this.targets.set(name, { tip, chain });
+    this.targets.set(name, { tip, chain, paw });
   }
 
   quadruped(feline) {
@@ -300,11 +300,23 @@ export class AnimalMannequin {
     if (name === 'Pelvis') this.joints.get(name).position.copy(this.pelvisRest);
   }
 
-  dragPelvis(destination, feet) {
+  pelvisFootLimits(floor) {
+    return this.pelvisLegs.map(([name, { tip, paw }]) => {
+      const clearance = new THREE.Box3().setFromObject(paw, true).min.y - floor;
+      return [name, tip.getWorldPosition(new THREE.Vector3()).y - Math.max(0, clearance)];
+    });
+  }
+
+  dragPelvis(destination, footLimits) {
     const pelvis = this.joints.get('Pelvis');
     const height = pelvis.parent.worldToLocal(destination).y;
     pelvis.position.y = THREE.MathUtils.clamp(height, this.pelvisRest.y - this.maxPelvisDrop, this.pelvisRest.y);
-    for (const [name, position] of feet) this.drag(name, position);
+    for (const [name, minimumY] of footLimits) {
+      const position = this.targets.get(name).tip.getWorldPosition(new THREE.Vector3());
+      if (position.y >= minimumY) continue;
+      position.y = minimumY;
+      this.drag(name, position);
+    }
   }
 
   applyAP10K(points, facing) {
