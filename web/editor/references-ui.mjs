@@ -80,7 +80,7 @@ export function installReferencesUI(value) {
   $('first-reference-resolution').onchange = () => edit(() => { context.doc().referenceLibrary.firstResolution = Number($('first-reference-resolution').value); });
   const send = el('details', '', 'reference-send-plan sidebar-section'); send.id = 'reference-send-plan';
   send.innerHTML = '<summary class="section-heading collapsible-heading"><h2 id="reference-send-summary"></h2></summary><div id="reference-send-images"></div><p id="reference-send-warning" class="hint"></p><p class="hint">Image numbers show the actual input order. The prompt describes targets and source regions. Full Input uses your text as written.</p>';
-  document.querySelector('.guide-section').after(send);
+  $('prompt-editor').closest('.protocol').after(send);
   const preview = el('div', '', 'reference-stage-preview'); preview.id = 'reference-stage-preview';
   preview.innerHTML = '<div class="reference-preview-title"><strong>Reference Preview</strong><span>3D scene retained · No guide output</span></div><img id="reference-stage-image" alt="Current reference preview"><p id="reference-stage-empty" class="empty-note">Enter a prompt or add a reference.</p><div id="reference-stage-thumbs"></div>';
   $('stage').append(preview);
@@ -123,15 +123,15 @@ function chooseCharacter(scene, item) {
   const apply = el('button', '', 'primary'); apply.type = 'submit';
   const updateFields = value => {
     descriptionField.hidden = speciesField.hidden = value !== 'new';
-    apply.textContent = value === 'new' ? 'Add New Character' : 'Assign Character';
+    apply.textContent = value === 'new' ? 'Create and Assign' : 'Assign Appearance Reference';
   };
-  const picker = select([...targets.map(({ item }, index) => [String(index), item.label]), ['new', 'Add New Character']],
+  const picker = select([...targets.map(({ item }, index) => [String(index), item.label]), ['new', 'Create an Unposed Character']],
     targets.length ? '0' : 'new', updateFields);
   updateFields(picker.value);
   const buttons = el('div');
   const cancel = button('Cancel', () => dialog.close());
   buttons.append(cancel, apply);
-  form.append(el('h2', 'Use as Character'), field('Target', picker), speciesField, descriptionField, buttons);
+  form.append(el('h2', 'Assign Appearance Reference'), field('Character or Model', picker), speciesField, descriptionField, buttons);
   form.onsubmit = event => {
     event.preventDefault();
     const selected = targets[Number(picker.value)], text = description.value.trim();
@@ -156,25 +156,40 @@ function chooseCharacter(scene, item) {
 
 function useControls(scene, item, use, reference) {
   const panel = el('div', '', 'reference-use');
-  const usage = select(Object.entries(USES), use.kind, value => edit(() => { use.kind = value; })); panel.append(field('Role', usage));
+  panel.dataset.roleId = use.id;
+  const usage = select(Object.entries(USES), use.kind, value => edit(() => { use.kind = value; }));
+  usage.dataset.focusKey = 'role'; panel.append(field('Role', usage));
   const options = [['scene', 'Entire Scene'], ['text', 'Describe Target in Text'], ...scene.actors.map(actor => [`actor:${actor.id}`, `Character · ${actor.label}`]), ...(scene.props || []).map(prop => [`prop:${prop.id}`, `Model · ${prop.label}`])];
   const selected = use.target.kind === 'scene' || use.target.kind === 'text' ? use.target.kind : `${use.target.kind === 'actors' ? 'actor' : 'prop'}:${use.target.ids[0] || ''}`;
-  if (!options.some(([id]) => id === selected)) options.push([selected, 'Target Needs Reassignment']);
+  if (!options.some(([id]) => id === selected)) options.unshift([selected, use.target.ids.length ? 'Missing Target' : 'Choose a Target']);
   const target = select(options, selected, value => edit(() => {
     const delimiter = value.indexOf(':'), kind = delimiter < 0 ? value : value.slice(0, delimiter), id = delimiter < 0 ? '' : value.slice(delimiter + 1);
     use.target = { kind: kind === 'actor' ? 'actors' : kind === 'prop' ? 'props' : kind, ids: id ? [id] : [], text: use.target.text || '' };
-  })); panel.append(field('Target', target));
+  })); target.dataset.focusKey = 'target'; panel.append(field('Target', target));
   const activeUse = reference?.usages.find(entry => entry.id === use.id);
+  const targets = use.target.kind === 'actors' ? scene.actors
+    : use.target.kind === 'props' ? scene.props || [] : null;
+  const assigned = targets?.filter(object => use.target.ids.includes(object.id));
+  const excluded = item.enabled === false ? 'Turn on Include Reference to send this image.'
+    : !item.asset || item.missing ? 'Image unavailable. Read Connections or use the saved version if available.'
+    : use.enabled === false ? 'Role disabled. Open More Options to enable it.'
+    : scene.referenceLibrary.mode === 'text' ? 'Text Only mode excludes this reference.'
+    : targets && !assigned.length ? 'Choose another target.'
+    : assigned?.length && assigned.every(object => object.visible === false) ? 'Show the target in Scene Objects or choose another target.'
+    : use.target.kind === 'text' && !use.target.text.trim() ? 'Enter a target description.'
+    : 'This target is unavailable in the current scene.';
   const manifest = libraryManifest(scene);
   const image = manifest.imageCount === 1 ? 'the reference image' : `<image${reference?.index}>`;
   const line = activeUse && (scene.promptTemplate === 2
     ? compositionReferenceLine(scene, activeUse, image, manifest.guide) : referencePromptLine(reference.index, activeUse));
   const prompt = line || (activeUse && manifest.guide
     ? 'Studio could not verify this target in the current guide. Its role is omitted from the generated prompt.'
-    : 'This role is excluded. Check that the reference, role, and target are enabled.');
+    : excluded);
   const preview = el('p', '', 'hint reference-role-preview');
   const title = scene.conditioning.promptMode === 'custom' ? 'Automatic prompt suggestion' : 'Generated prompt';
-  preview.append(el('strong', title), document.createTextNode(' — ' + prompt));
+  preview.id = `reference-role-${item.id}-${use.id}-status`;
+  target.setAttribute('aria-describedby', preview.id);
+  preview.append(el('strong', line ? title : 'Role status'), document.createTextNode(' — ' + prompt));
   panel.append(preview);
   const optionsPanel = el('details', '', 'reference-role-options');
   optionsPanel.open = openRoleOptions.has(use.id);
@@ -196,29 +211,30 @@ function useControls(scene, item, use, reference) {
     ...(use.target.kind === 'text' ? [['Target Description', use.target, 'text', 'For example, the bag in her hand or the product in the foreground']] : []),
     ['Part of the Reference to Use', use, 'sourceText', 'For example, woman on the left or handbag only'], ['Extra Prompt Instructions', use, 'instruction', 'For example, keep the material and change the color to silver']]) {
     const input = el('textarea'); input.rows = 2; input.maxLength = 16000; input.value = owner[name] || ''; input.placeholder = placeholder;
+    input.dataset.focusKey = name;
     input.onchange = () => edit(() => { owner[name] = input.value; });
     (name === 'text' ? panel : optionsPanel).append(field(title, input));
   }
-  const enabled = el('input'); enabled.type = 'checkbox'; enabled.checked = use.enabled !== false; enabled.onchange = () => edit(() => { use.enabled = enabled.checked; });
+  const enabled = el('input'); enabled.type = 'checkbox'; enabled.dataset.focusKey = 'enable-role'; enabled.checked = use.enabled !== false; enabled.onchange = () => edit(() => { use.enabled = enabled.checked; });
   const controls = el('div', '', 'reference-use-actions'); controls.append(field('Enable Role', enabled), button('Remove Role', () => edit(() => { item.usages = item.usages.filter(value => value.id !== use.id); }))); optionsPanel.append(controls); panel.append(optionsPanel); return panel;
 }
 function card(scene, item, manifest) {
-  const entry = el('div', '', 'reference-entry');
+  const entry = el('div', '', 'reference-entry'); entry.dataset.referenceId = item.id;
   const details = el('details', '', 'reference-card'); details.open = openId === item.id;
   details.ontoggle = () => { if (!details.isConnected) return; if (details.open) openId = item.id; else if (openId === item.id) openId = null; };
-  const summary = el('summary'), image = el('img'); image.alt = item.label; if (item.asset) image.src = imageURL(item.asset);
+  const summary = el('summary'), image = el('img'); summary.dataset.focusKey = 'summary'; image.alt = ''; if (item.asset) image.src = imageURL(item.asset);
   summary.onclick = () => { openId = details.open ? null : item.id; };
   const caption = el('span'), ref = manifest.references.find(ref => ref.referenceIds.includes(item.id));
   const state = manifest.excluded.find(value => value.id === item.id);
-  caption.append(el('strong', item.label), el('small', ref ? `image_${ref.index} · ${ref.usages.filter(use => item.usages.some(role => role.id === use.id)).map(use => USES[use.kind]).join(' / ')}` : state?.reason || 'Excluded'));
+  caption.append(el('strong', item.label), el('small', ref ? `image_${ref.index} · ${ref.usages.filter(use => item.usages.some(role => role.id === use.id)).map(use => `${USES[use.kind]} · ${use.targetText}`).join(' / ')}` : state?.reason || 'Excluded'));
   summary.append(image, caption); details.append(summary);
-  const label = el('input'); label.value = item.label; label.onchange = () => edit(() => { item.label = label.value.trim() || 'References'; }); details.append(field('Reference Name', label));
-  const enabled = el('input'); enabled.type = 'checkbox'; enabled.checked = item.enabled !== false; enabled.onchange = () => edit(() => { item.enabled = enabled.checked; }); details.append(field('Include Reference', enabled));
+  const label = el('input'); label.dataset.focusKey = 'name'; label.value = item.label; label.onchange = () => edit(() => { item.label = label.value.trim() || 'References'; }); details.append(field('Reference Name', label));
+  const enabled = el('input'); enabled.type = 'checkbox'; enabled.dataset.focusKey = 'include'; enabled.checked = item.enabled !== false; enabled.onchange = () => edit(() => { item.enabled = enabled.checked; }); details.append(field('Include Reference', enabled));
   details.append(el('p', item.inputKey ? `Connected ${item.inputKey} · Image ${(item.batchIndex || 0) + 1} of ${item.batchCount || 1}` : `Saved reference · ${item.asset?.width || '?'} × ${item.asset?.height || '?'}`, 'hint'));
   if (item.reviewSource) details.append(el('p', 'The connected image changed. Check the source region and role description.', 'reference-review'));
   for (const use of item.usages) details.append(useControls(scene, item, use, ref));
   const actions = el('div', '', 'reference-card-actions');
-  const source = button('Use as Scene Source', () => context.setSource(copy(item.asset)));
+  const source = button('Set Source for Extraction or Rebuild', () => context.setSource(copy(item.asset)));
   source.disabled = !item.asset || context.sourceConnected();
   source.title = context.sourceConnected() ? 'Replace the upstream image or disconnect the source input.' : !item.asset ? 'Read or import this reference first.' : 'Use this reference for pose extraction or 3D reconstruction.';
   const crop = button('Crop Reference', () => cropReference(item)); crop.disabled = !item.asset;
@@ -229,6 +245,8 @@ function card(scene, item, manifest) {
   if (item.reviewSource) actions.append(button('Confirm Updated Source', () => edit(() => { item.reviewSource = false; })));
   details.append(actions);
   const tools = el('div', '', 'reference-card-tools');
+  const sceneActions = el('fieldset', '', 'reference-action-group');
+  const imageActions = el('fieldset', '', 'reference-action-group');
   const replace = button('Replace Image', () => replaceReference(scene, item));
   replace.disabled = !!item.inputKey;
   replace.title = item.inputKey ? 'Replace the upstream image, or choose Use Saved Version before replacing it here.' : 'Replace the image while keeping its name, roles, target, and position.';
@@ -239,9 +257,9 @@ function card(scene, item, manifest) {
     if (scene.backgroundReferenceId === item.id) { scene.backgroundReferenceId = null; scene.sceneBackground = null; }
   }, scene.backgroundReferenceId === item.id));
   remove.title = 'Remove from the library. You can undo this. The scene source and characters are kept.';
-  const character = button('Use as Character', () => chooseCharacter(scene, item));
+  const character = button('Assign Appearance Reference', () => chooseCharacter(scene, item));
   const isBackground = scene.backgroundReferenceId === item.id;
-  const background = button(isBackground ? 'Clear Scene Background' : 'Use as Scene Background', () => edit(() => {
+  const background = button(isBackground ? 'Clear Visible Background' : 'Set Scene and Generation Background', () => edit(() => {
     scene.sceneBackground = null;
     if (isBackground) scene.backgroundReferenceId = null;
     else {
@@ -251,20 +269,31 @@ function card(scene, item, manifest) {
   }, true));
   character.disabled = !item.asset || item.missing === true;
   background.disabled = !isBackground && character.disabled;
-  const sceneImage = button('Add Image to Scene', async () => {
+  const sceneImage = button('Place Flat Image in Scene', async () => {
     if (await context.addSceneImage(item)) chooseTab('objects');
   });
   sceneImage.disabled = character.disabled;
   character.title = 'Assign this photo to a character as a visual reference for the generated image.';
-  background.title = 'Use the photo as a frame-filling background in the coarse render.';
+  background.dataset.focusKey = 'background';
+  background.title = isBackground ? 'Clear the viewport and guide background. The generation role stays active.'
+    : 'Show the image behind the scene and add a background reference role for generation.';
   sceneImage.title = 'Place the photo on a flat surface you can move, rotate, and resize.';
-  const rebuild = button('Add Posed Character', async () => {
+  const rebuild = button('Create Posed Mannequin', async () => {
     if (await context.addPosedCharacter(item)) chooseTab('objects');
   });
   rebuild.disabled = character.disabled;
   rebuild.title = 'Copy the pose from this photo to a new, editable human mannequin.';
-  tools.append(rebuild, character, sceneImage, background, source, replace, remove);
+  for (const [key, control] of Object.entries({ pose: rebuild, appearance: character, place: sceneImage, source, replace })) {
+    control.dataset.focusKey = key;
+  }
+  character.classList.add('accent-button');
+  remove.classList.add('reference-remove');
+  sceneActions.append(el('legend', 'Create or Place in Scene'), rebuild, sceneImage, background);
+  imageActions.append(el('legend', 'Manage Image'), source, replace, remove);
+  tools.append(character, sceneActions, imageActions);
   details.append(tools);
+  if (isBackground) details.append(el('p', 'Visible scene background. Manage generation separately in the background role above.', 'hint'));
+  if (scene.reference?.name === item.asset?.name && item.asset) details.append(el('p', 'Current source for pose extraction and reconstruction.', 'hint'));
   entry.append(details);
   return entry;
 }
@@ -329,7 +358,7 @@ export function refreshReferencesUI(force = false) {
   $('reference-first-settings').hidden = !modern || library.mode !== 'references-only';
   $('reference-send-plan').hidden = !modern; document.querySelector('.reference-templates').hidden = !modern;
   if (!modern) { key = null; renderedScene = null; renderedItems = []; $('reference-cards').replaceChildren(); $('reference-empty-note').hidden = true; return; }
-  const manifest = libraryManifest(scene), signature = JSON.stringify([library, scene.actors, scene.props, scene.conditioning, scene.backgroundReferenceId, scene.guideSubjects, manifest, context.sourceConnected()]);
+  const manifest = libraryManifest(scene), signature = JSON.stringify([library, scene.actors, scene.props, scene.conditioning, scene.reference?.name, scene.source?.kind, scene.backgroundReferenceId, scene.guideSubjects, manifest, context.sourceConnected()]);
   const firstImage = manifest.references[0];
   if (firstImage && library.mode === 'references-only') {
     let width = firstImage.asset.width, height = firstImage.asset.height;
@@ -343,7 +372,20 @@ export function refreshReferencesUI(force = false) {
   const selectedId = library.firstReferenceId || '';
   if (force || signature !== key || scene !== renderedScene || library.items.some((item, index) => item !== renderedItems[index])) {
     key = signature; renderedScene = scene; renderedItems = library.items.slice();
-    $('reference-cards').replaceChildren(...library.items.map(item => card(scene, item, manifest)));
+    const cards = $('reference-cards'), focused = document.activeElement;
+    const focusedCard = cards.contains(focused) ? focused.closest('[data-reference-id]') : null;
+    const focusedRole = focusedCard && focused.closest('[data-role-id]')?.dataset.roleId;
+    const focusKey = focusedCard && focused.dataset.focusKey;
+    cards.replaceChildren(...library.items.map(item => card(scene, item, manifest)));
+    if (focusedCard) {
+      const replacement = [...cards.children].find(node => node.dataset.referenceId === focusedCard.dataset.referenceId);
+      const role = focusedRole && [...(replacement?.querySelectorAll('[data-role-id]') || [])].find(node => node.dataset.roleId === focusedRole);
+      const scope = focusedRole ? role : replacement;
+      const control = focusKey && [...(scope?.querySelectorAll('[data-focus-key]') || [])]
+        .find(node => node.dataset.focusKey === focusKey && !node.disabled &&
+          (node.tagName === 'SUMMARY' || !node.closest('details:not([open])')));
+      (control || replacement?.querySelector('summary') || $('add-reference'))?.focus({ preventScroll: true });
+    }
     $('reference-count').textContent = `${library.items.length} references`; $('reference-empty-note').hidden = !!library.items.length;
     $('first-reference').replaceChildren(new Option('First Enabled Reference', ''), ...library.items.map(item => new Option(item.label, item.id))); $('first-reference').value = selectedId;
     const budget = $('first-reference-resolution'), resolution = String(library.firstResolution || 0);
@@ -355,8 +397,13 @@ export function refreshReferencesUI(force = false) {
     $('reference-template').replaceChildren(...(library.templates || []).map(template => new Option(template.name, template.id)));
     $('apply-reference-template').disabled = !library.templates?.length;
     $('reference-send-summary').textContent = `${manifest.imageCount} images · ${manifest.guide ? '1 guide + ' : ''}${manifest.references.length} references`;
-    const rows = []; if (manifest.guide) rows.push(el('p', `image_${manifest.guide.index} · Current Composition Guide`));
-    for (const reference of manifest.references) rows.push(el('p', `image_${reference.index} · ${reference.labels.join(' / ')} · ${reference.usages.map(use => `${USES[use.kind]} → ${use.targetText}`).join('；')}`));
+    const images = manifest.references.map(reference => ({
+      index: reference.index,
+      label: [reference.labels.join(' / '), ...reference.usages.map(use => `${USES[use.kind]} → ${use.targetText}`)].join(' · '),
+    }));
+    if (manifest.guide) images.push({ index: manifest.guide.index, label: 'Current Composition Guide' });
+    const rows = images.sort((first, second) => first.index - second.index)
+      .map(image => el('p', `image_${image.index} · ${image.label}`));
     for (const entry of manifest.excluded) rows.push(el('p', `${entry.label} · ${entry.reason}`, 'hint'));
     $('reference-send-images').replaceChildren(...rows); $('reference-send-warning').textContent = [mappingWarning, ...manifest.warnings].filter(Boolean).join(' ') || 'Qwen recommends up to 10 images. Each reference is encoded once even when assigned several roles.';
     $('prompt-preview').textContent = libraryPrompt(scene, manifest);

@@ -382,7 +382,7 @@ export async function chooseDetectedPeople(people, asset, options = {}) {
     if (box && w && h) { const marker = document.createElement('button'); marker.type = 'button'; marker.textContent = String(index + 1); marker.disabled = checkbox.disabled; marker.classList.toggle('excluded', !checkbox.checked); marker.style.cssText = `left:${box[0]/w*100}%;top:${box[1]/h*100}%;width:${(box[2]-box[0])/w*100}%;height:${(box[3]-box[1])/h*100}%`; marker.onclick = () => { if (checkbox.disabled) return; checkbox.checked = !checkbox.checked; marker.classList.toggle('excluded', !checkbox.checked); }; overlay.append(marker); }
   }
   const fromReference = !!options.referenceItem;
-  dialog.querySelector('h2').textContent = fromReference ? 'Add Posed Character' : 'Copy Multiple Poses from a Photo';
+  dialog.querySelector('h2').textContent = fromReference ? 'Create Posed Mannequin' : 'Copy Multiple Poses from a Photo';
   const copyCurrent = dialog.querySelector('button[value="current"]');
   copyCurrent.hidden = fromReference; copyCurrent.disabled = fromReference;
   $('people-count').textContent = fromReference ? 'Select the people to add as editable mannequins.'
@@ -412,6 +412,10 @@ export async function chooseDetectedPeople(people, asset, options = {}) {
     }
   } else { roles = [activeActor(doc)]; if (roles[0].locked) throw new Error('Unlock the current character first.'); }
   doc.activeActorId = roles[0].id; doc.selectedActorIds = roles.map(role => role.id); bindActor(doc);
+  if (fromReference) {
+    const studio = context.studio();
+    studio.selectedPlacementAsset = null; studio.selectedModelId = null; studio.modelJoint = null;
+  }
   await context.studio().restore(doc, { preserveView: fromReference && previous.source.kind === 'human' }); await context.ensureHumanTools();
   const previousActive = roles[0].id;
   for (const [i, role] of roles.entries()) {

@@ -17,7 +17,7 @@
 
 ## Workflow restructuring
 
-Status: source review complete for the reference card. The changes below are proposed. Live behavior and accessibility still need verification.
+Status: the reference-card labels, status and keyboard focus restoration are implemented. Output displays inputs by image number after Prompt. Live behavior and accessibility still need verification.
 
 The user arranges an editable scene and sends its composition guide, prompt, and selected images to the generator. Keep the route from each reference to its visible effect and output easy to follow.
 
@@ -30,9 +30,10 @@ The user arranges an editable scene and sends its composition guide, prompt, and
 ### Start with References → Scene
 
 - [x] Trace reference actions through the card, scene mutations, coarse guide, and generator input manifest. Start in [references-ui.mjs](web/editor/references-ui.mjs), [actors-ui.mjs](web/editor/actors-ui.mjs), and [reference-library.mjs](web/editor/reference-library.mjs).
-- [ ] Give each action an outcome-first label. Distinguish assigning appearance, creating a posed mannequin, placing a flat image, setting the visible background, and setting the source for extraction or reconstruction.
-- [ ] Show the result on the reference card, such as *Appearance reference for Pip*. In the pose picker, make the optional appearance assignment visible before confirmation. A future baked mannequin texture is a separate scene state.
-- [ ] Explain excluded roles at the field that needs attention. For example, show *Character deleted* and let the user choose a replacement. Distinguish a missing target from a hidden target, a disabled role, and a missing image.
-- [ ] Clarify background behavior. The current action sets the visible background and adds a generation role, while clearing the background leaves the role behind. Make both effects visible and define what clearing each one does before changing behavior.
-- [ ] Keep keyboard focus on the corresponding control when the reference card refreshes. Use visible labels and inline recovery instructions. Tooltips can hold supplemental detail. Check the flow with keyboard navigation.
+- [x] Give each action an outcome-first label. Distinguish assigning appearance, creating a posed mannequin, placing a flat image, setting the visible background, and setting the source for extraction or reconstruction.
+- [x] Show the result on the reference card, such as *Appearance reference for Pip*. In the pose picker, make the optional appearance assignment visible before confirmation. A future baked mannequin texture is a separate scene state.
+- [x] Explain excluded roles at the field that needs attention. For example, show *Character deleted* and let the user choose a replacement. Distinguish a missing target from a hidden target, a disabled role, and a missing image.
+- [x] Clarify background behavior. Setting the background enables the visible background and the generation role. Clear Visible Background clears the visible background. The generation role can be disabled separately.
+- [x] Restore focus on a matching control when the reference card refreshes, with a fallback to the card heading or Add Reference.
+- [ ] Verify focus, status feedback, and narrow sidebar layout in ComfyUI.
 - [ ] Review Output next. Use the same names across all three areas and show the guide first, followed by the prompt and ordered generator inputs. Keep the existing visual theme during this workflow pass.
