@@ -11,19 +11,19 @@ let context, key, previewId, connected = [], openId, lastMapping = '', mappingWa
 let renderedScene, renderedItems = [];
 const openRoleOptions = new Set();
 function edit(action, updatePreview = false) { context.begin(); action(); context.changed(updatePreview); }
-function revealSection(id) {
+function openSourceTools() {
   $('reference-library-dialog').close();
-  const section = $(id);
-  const tools = section.closest('#scene-tools');
-  if (tools) tools.open = true;
-  section.open = true;
-  section.querySelector('summary').focus({ preventScroll: true });
-  section.scrollIntoView({ block: 'nearest' });
+  $('source-tools-panel').showModal();
+}
+
+function revealScene() {
+  $('reference-library-dialog').close();
+  $('open-add-assets').focus();
 }
 
 export function installReferencesUI(value) {
   context = value;
-  const dialog = el('dialog', '', 'reference-library-dialog');
+  const dialog = el('dialog', '', 'studio-task-dialog');
   dialog.id = 'reference-library-dialog';
   dialog.setAttribute('aria-labelledby', 'reference-library-title');
   const materials = el('section', '', 'reference-materials');
@@ -38,12 +38,13 @@ export function installReferencesUI(value) {
   dialog.append(materials);
   document.body.append(dialog);
   $('open-references').onclick = () => dialog.showModal();
+  $('open-source-tools').onclick = openSourceTools;
   $('close-references').onclick = () => dialog.close();
   const stale = el('div', '', 'reference-review'); stale.id = 'reference-source-warning';
   const message = el('p'); message.id = 'reference-source-warning-text';
   const keep = button('Keep Saved Structure Guide', () => edit(() => { const scene = context.doc(); scene.derivedGuideStale = false; scene.retainedGuideSource = scene.derivedGuideSource;
     scene.conditioning.acceptStoredSource = true; if (scene.openpose) scene.openpose.acceptStoredSource = true; })); keep.id = 'keep-derived-guide';
-  stale.append(message, button('Extract / Rebuild Again', () => revealSection('source-tools-panel')), keep); materials.insertBefore(stale, $('reference-cards'));
+  stale.append(message, button('Extract / Rebuild Again', () => openSourceTools()), keep); materials.insertBefore(stale, $('reference-cards'));
   const file = el('input'); file.type = 'file'; file.multiple = true; file.accept = 'image/*'; file.hidden = true; document.body.append(file);
   $('add-reference').onclick = () => file.click();
   file.onchange = () => { const files = [...file.files]; file.value = ''; if (!files.length) return;
@@ -54,7 +55,7 @@ export function installReferencesUI(value) {
   };
   $('read-references').onclick = () => context.send('anyangle-read-actors');
   $('upgrade-references').onclick = () => edit(() => upgradeReferences(context.doc()));
-  $('source-tools').onclick = () => revealSection('source-tools-panel');
+  $('source-tools').onclick = () => openSourceTools();
   $('library-clear-source').onclick = () => context.clearSource();
   $('source-to-library').onclick = () => edit(() => { const scene = context.doc(); if (scene.version !== 3) upgradeReferences(scene); if (scene.reference) addReference(scene, scene.reference); });
   $('save-reference-template').onclick = async () => { const name = await context.askName('Save Reference Set', 'My Reference Set'); if (!name) return;
@@ -270,7 +271,7 @@ function card(scene, item, manifest) {
   character.disabled = !item.asset || item.missing === true;
   background.disabled = !isBackground && character.disabled;
   const sceneImage = button('Place Flat Image in Scene', async () => {
-    if (await context.addSceneImage(item)) revealSection('actors-panel');
+    if (await context.addSceneImage(item)) revealScene();
   });
   sceneImage.disabled = character.disabled;
   character.title = 'Assign this photo to a character as a visual reference for the generated image.';
@@ -279,7 +280,7 @@ function card(scene, item, manifest) {
     : 'Show the image behind the scene and add a background reference role for generation.';
   sceneImage.title = 'Place the photo on a flat surface you can move, rotate, and resize.';
   const rebuild = button('Create Posed Mannequin', async () => {
-    if (await context.addPosedCharacter(item)) revealSection('actors-panel');
+    if (await context.addPosedCharacter(item)) revealScene();
   });
   rebuild.disabled = character.disabled;
   rebuild.title = 'Copy the pose from this photo to a new, editable human mannequin.';

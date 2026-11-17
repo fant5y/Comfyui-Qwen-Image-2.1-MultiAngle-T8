@@ -2,17 +2,17 @@ import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117sceneassets';
 import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117animalrefs';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261117animalrefs';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117inspector';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117flat';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261117inspector';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261117flat';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117inspector';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117flat';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261117animalrefs';
 
@@ -353,7 +353,7 @@ function refresh() {
   $('#reference-overlay-toggle').classList.toggle('active', overlayShown && !!doc.reference);
   $('#reference-overlay').hidden = !overlayShown || !doc.reference;
   if (doc.reference) $('#reference-overlay').src = assetURL(doc.reference.name);
-  $('#reference-button').disabled = $('#reference-drop').disabled = linkedReference.connected;
+  $('#reference-drop').disabled = linkedReference.connected;
   $('#read-reference').hidden = !linkedReference.connected;
   $('#read-reference').disabled = !!linkedReference.pending;
   $('#clear-reference').hidden = !doc.reference;
@@ -1131,7 +1131,7 @@ document.querySelectorAll('[data-flip]').forEach(button => {
     studio.applyOpenPose(source.points, source.flips, 'estimated'); changed();
   };
 });
-$('#reference-button').onclick = $('#reference-drop').onclick = () => $('#reference-file').click();
+$('#reference-drop').onclick = () => $('#reference-file').click();
 $('#read-reference').onclick = () => {
   linkedReference = { ...linkedReference, connected: true, pending: true, message: 'Reading connected image…' };
   refresh(); send('anyangle-read-reference');
@@ -1171,7 +1171,6 @@ $('#return-to-cast').onclick = () => run(async () => {
   if (glbScene) {
     doc.conditioning.guide = 'coarse';
     previewGuide = 'coarse';
-    $('#actors-panel').open = true;
   }
   setMode('position');
   changed();
@@ -1310,14 +1309,17 @@ async function reconstructPhoto() {
     $('#status').textContent = 'Reconstruction incomplete · Retry available'; throw e;
   } finally { $('#loading').hidden = true; refresh(); schedulePreview(); }
 }
-$('#reconstruct').onclick = () => run(reconstructPhoto);
+$('#reconstruct').onclick = () => {
+  $('#source-tools-panel').close();
+  run(reconstructPhoto);
+};
 $('#keep-background').onchange = () => {
   begin(); doc.reconstruction.keepBackground = $('#keep-background').checked; changed();
   if ($('#reconstruction-model-panel').open) run(loadReconstructionModels);
 };
 $('#extract-coarse').onclick = () => run(reconstructPhoto);
 $('#preview-coarse').onclick = () => { previewVisible = true; refresh(); renderPreview(); };
-$('#import-glb').onclick = () => { $('#actors-panel').open = true; importModel(); };
+$('#import-glb').onclick = () => importModel();
 $('#animal-shapes').onclick = event => addAnimal(event.target.closest('button[data-shape]')?.dataset.shape);
 function addAnimal(shape, { label, onAdded } = {}) {
   return run(async () => {

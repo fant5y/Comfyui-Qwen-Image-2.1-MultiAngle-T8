@@ -35,15 +35,14 @@ export function addCharacter({ label, onAdded } = {}) {
     await studio.restore(doc, { preserveView: !!onAdded && !wasEmpty }); await context.ensureHumanTools();
     if (onAdded) context.editScene();
     else context.showScene();
-    $('actors-panel').open = true;
     context.toast(onAdded ? 'Character added with its reference.' : 'Character added.');
   });
 }
 
 export function installActorsUI(options) {
   context = options;
-  $('actors-panel').innerHTML = `<summary class="section-heading collapsible-heading"><h2>Scene <small id="actor-count">0</small></h2></summary>
-    <div class="actor-toolbar"><button id="add-actor" class="accent-button">＋ Character</button><button id="open-references" aria-haspopup="dialog">References</button></div><div class="actor-toolbar actor-selection-actions"><button id="clone-actor">Duplicate</button><button id="delete-actor">Delete</button></div>
+  $('actors-panel').innerHTML = `<div class="section-heading"><h2 id="scene-heading">Scene <small id="actor-count" title="Visible items / total items">0</small></h2></div>
+    <div class="scene-action-row"><button id="open-add-assets" class="accent-button" aria-haspopup="dialog"><img src="../icons/plus.svg" alt="">Add</button><button id="open-references" aria-haspopup="dialog">References</button><button id="open-source-tools" aria-haspopup="dialog">Source Image</button></div><div class="actor-toolbar actor-selection-actions"><button id="clone-actor">Duplicate</button><button id="delete-actor">Delete</button></div>
     <div id="actor-list" class="actor-list"></div>
     <div id="active-actor-controls"><label>Scale<input id="actor-scale" type="number" min="0.01" step="0.01" title="Resize the whole selection uniformly"></label>
     <div class="compact-actions"><button id="ground-actors" title="Move the selection down or up until it touches the floor">Ground</button><button id="fit-actors" title="Frame the selection with the camera">Fit</button><button id="rotate-model" title="Show rotation rings in Edit Scene">Rotate</button></div>
@@ -56,12 +55,19 @@ export function installActorsUI(options) {
     <div class="actor-identity"><h3>Identity Reference <small>Separate from pose source</small></h3><label>Source<select id="actor-reference"><option value="text">Text Description</option><option value="upload">Upload Character Photo…</option><option value="reference">Use Scene Source Image</option></select></label><img id="actor-reference-preview" alt="Character identity photo" hidden><label>Describe Character in Group Photo<input id="actor-source-person" placeholder="For example, the person with glasses on the left"></label><label>Appearance / Clothing<textarea id="actor-description" rows="3" maxlength="16000" placeholder="Character appearance, clothing, and style"></textarea></label><p id="actor-binding-state" class="hint"></p></div></details></div>
     <label class="option-toggle"><input id="actor-identities" type="checkbox"><span>Assign Each Character an Identity<small>Use the Qwen Base Model with Multi-Image Encode.</small></span></label>
     <label class="option-toggle"><input id="color-actors" type="checkbox"><span>Use Guide Colors in Coarse Render<small>Distinguishes characters and models. Pose guides keep standard joint colors.</small></span></label>`;
-  $('actors-panel').insertBefore($('add-to-scene'), $('actor-list'));
+  const assets = $('add-to-scene');
+  const addHuman = button('Human Mannequin', () => addCharacter());
+  addHuman.id = 'add-actor';
+  $('asset-actions').prepend(addHuman);
+  $('open-add-assets').onclick = () => assets.showModal();
+  assets.addEventListener('click', event => {
+    if (event.target.closest('#add-actor, #import-glb, #animal-shapes button, #open-pose-library')) assets.close();
+  }, true);
+  $('output-guide-options').append($('actor-identities').closest('label'), $('color-actors').closest('label'));
   $('selection-fields').append($('clone-actor').parentElement, $('active-actor-controls'));
   const identityFile = document.createElement('input'); identityFile.type = 'file'; identityFile.accept = 'image/*'; identityFile.hidden = true; identityFile.id = 'actor-identity-file'; document.body.append(identityFile);
   const readReferences = button('Read Connected Character Photos', () => context.send('anyangle-read-actors')); readReferences.id = 'read-actor-references'; readReferences.className = 'wide-button'; $('actors-panel').append(readReferences);
   const readKeypoints = button('Read Connected Pose Keypoints', () => context.send('anyangle-read-keypoints')); readKeypoints.id = 'read-pose-keypoints'; readKeypoints.className = 'wide-button'; readKeypoints.hidden = true; $('openpose-panel').prepend(readKeypoints);
-  $('add-actor').onclick = () => addCharacter();
   $('clone-actor').onclick = () => context.studio().selectedModel() ? context.duplicateModel() : atomic(async () => {
     const doc = context.doc(); context.studio().syncPose(); const actor = cloneActor(doc);
     doc.activeActorId = actor.id; doc.selectedActorIds = [actor.id]; bindActor(doc); await context.studio().restore(doc);
@@ -188,7 +194,6 @@ export function selectModel(id) {
     studio.selectedModelId = id;
     if (studio.mode === "edit") studio.setMode("edit");
   }
-  $('actors-panel').open = true;
   if (studio.mode === 'camera') context.placeScene();
   context.refresh();
 }
@@ -443,7 +448,6 @@ export async function chooseDetectedPeople(people, asset, options = {}) {
     if (previous.source.kind === 'empty') context.studio().fit();
     doc.referenceLibrary.mode = 'guided';
     doc.conditioning.guide = 'coarse';
-    $('actors-panel').open = true;
     context.placeScene(); context.changed(); context.toast(`Added ${roles.length} posed ${roles.length === 1 ? 'character' : 'characters'}.`);
     return true;
   }

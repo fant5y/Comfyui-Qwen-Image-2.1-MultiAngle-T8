@@ -132,13 +132,18 @@ details:not([open])>.collapsible-heading{margin-bottom:0}
 .shot-variations{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
 .shot-variations .compact-actions{flex-wrap:wrap}
 .shot-variations select{max-width:100%}
-#add-to-scene .source-buttons{margin-top:0}
 
 #selection-fields{margin-top:0}
 #selection-heading{overflow-wrap:anywhere}
 #output-inspector[hidden],#selection-inspector[hidden],#selection-fields[hidden],#human[hidden]{display:none}
-#add-to-scene .source-buttons{display:flex}
-#add-to-scene .actor-selection-actions,.actor-selection-actions{margin-top:8px;flex-wrap:wrap}
+.actor-selection-actions{margin-top:8px;flex-wrap:wrap}
 .actor-selection-actions button:first-child{flex:0 1 auto}
-.reference-library-dialog{width:min(680px,calc(100vw - 32px));max-height:85vh;overflow:auto;padding:20px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px}
-.reference-library-dialog::backdrop{background:#0009}
+.studio-task-dialog{width:min(680px,calc(100vw - 32px));max-height:85vh;overflow:auto;padding:20px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px}
+.studio-task-dialog::backdrop{background:#0009}
+.scene-action-row{display:flex;flex-wrap:wrap;gap:8px}
+.scene-action-row button{white-space:normal}
+.scene-file-actions{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
+#actors-panel>.section-heading h2,.studio-task-dialog>.section-heading h2,.studio-task-dialog .reference-materials>.section-heading h2{font-size:15px;font-weight:650}
+#actors-panel .actor-list{margin-top:12px}
+#add-to-scene #open-pose-library{margin-top:12px}
+#output-guide-options{margin:10px 0}
