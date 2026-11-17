@@ -2,7 +2,7 @@ import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117sceneassets';
 import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117canvas';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261117animalrefs';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117columns';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117workflow';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
@@ -12,7 +12,7 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261117direct';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, deleteSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117canvas';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, deleteSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117workflow';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261117animalrefs';
 
@@ -72,7 +72,7 @@ shotResize.onkeydown = event => {
   setShelfHeight(event.key === 'Home' ? defaultShelfHeight : shotShelf.offsetHeight + (event.key === 'ArrowUp' ? 12 : -12));
 };
 setShelfHeight(defaultShelfHeight);
-window.addEventListener('resize', () => { if (!shotShelf.hidden) setShelfHeight(shotShelf.offsetHeight); });
+window.addEventListener('resize', () => { if (!shotResize.hidden) setShelfHeight(shotShelf.offsetHeight); });
 
 const orientationAxes = [...document.querySelectorAll('#view-orientation g')];
 function updateOrientation() {
@@ -303,6 +303,31 @@ async function renderPreview() {
   } catch (e) { previewRevision = -1; refresh(); $('#stage-guide-message').textContent = e.message || 'Preview generation failed. Try again.'; error(e); }
   finally { previewRunning = false; }
 }
+let inspectedItem;
+const inspectorTabs = [...$('#character-sections').querySelectorAll('[role=tab]')];
+function openInspectorTab(requested) {
+  const selected = requested && !requested.hidden ? requested : inspectorTabs.find(tab => !tab.hidden);
+  for (const tab of inspectorTabs) {
+    const active = tab === selected;
+    tab.setAttribute('aria-selected', String(active));
+    tab.tabIndex = active ? 0 : -1;
+    document.getElementById(tab.getAttribute('aria-controls')).hidden = !active;
+  }
+}
+for (const tab of inspectorTabs) {
+  tab.onclick = () => openInspectorTab(tab);
+  tab.onkeydown = event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const visible = inspectorTabs.filter(candidate => !candidate.hidden);
+    const offset = event.key === 'ArrowLeft' ? -1 : 1;
+    const index = event.key === 'Home' ? 0 : event.key === 'End' ? visible.length - 1
+      : (visible.indexOf(tab) + offset + visible.length) % visible.length;
+    event.preventDefault();
+    openInspectorTab(visible[index]);
+    visible[index].focus();
+  };
+}
+
 function refresh() {
   if (doc.version === 3) {
     doc.promptTemplate = 2;
@@ -352,7 +377,12 @@ function refresh() {
     ? poseAnimal.source.shape === 'owl' || poseAnimal.locked || poseAnimal.visible === false
     : !doc.reference?.name || !!linkedReference.pending;
   $('#pose-category').value = (doc.randomMaster || doc.poseRandom)?.category || 'mixed';
-  for (const id of ['shot-shelf', 'resize-shots', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
+  const emptyShelf = !doc.shots.length && !doc.compositionTemplates?.length;
+  shotShelf.style.height = emptyShelf ? 'auto' : '';
+  shotResize.hidden = staticGuide || emptyShelf;
+  $('#shots').hidden = !doc.shots.length;
+  $('#variation-hint').hidden = !doc.compositionTemplates?.length;
+  $('#scene-panel').hidden = shotShelf.hidden = staticGuide;
   $('#stage-help').textContent = previewVisible ? staticGuide ? 'Source composition and structure · Apply to output this guide' : 'Guide from the current camera · Switch to 3D Workspace to adjust the view'
     : studio?.mode === 'position' ? 'Select an object · Drag an axis to move it · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' && studio.selectedModel() ? 'Drag arrows to move · Drag the square to resize · Drag the rings to turn'
@@ -382,8 +412,8 @@ function refresh() {
     ? 'The reconstructed subject is aligned with the estimated source camera. Use the camera to adjust the angle, zoom, and composition.'
     : empty ? 'Connect a source image and rebuild the subject, or import a GLB to adjust the scene.'
       : selectedModel ? 'Use Scene to adjust the selected model.'
-      : human ? 'Use Pose & Rotate to edit joints. Open Body Shape & Hands under Settings for proportions and hand poses.'
-        : animal ? 'Use Pose & Rotate to rotate or drag joints.'
+      : human ? 'Select a joint in the viewport to pose the character. Use Body for proportions and Pose for hand poses.'
+        : animal ? 'Select a joint or drag a gold limb handle in the viewport.'
         : 'GLB uses Y-up by default. Rotate the asset to align its front. Asset scale and camera zoom adjust independently.';
   $('#asset-label').textContent = empty ? 'Waiting for source reconstruction' : selectedModel ? selectedModel.label : human ? 'MakeHuman · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Posable Mannequin' : doc.source.label || 'GLB Scene';
   $('#source-badge').textContent = empty ? 'PHOTO → 3D' : splat ? doc.source.keep_background ? 'TRIPOSPLAT · Background Included' : 'TRIPOSPLAT · Source Subject' : selectedModel ? selectedModel.label : human ? 'HUMAN · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Mannequin' : 'GLB · Scene';
@@ -395,7 +425,15 @@ function refresh() {
     panel.hidden = !available || staticGuide;
   }
   $('#cast-interactions').hidden = !human || !actorSelected || !!selectedModel || staticGuide;
-  $('#selection-pose-tools').hidden = ['pose-panel', 'hands-panel', 'body-panel', 'joint-panel', 'cast-interactions'].every(id => document.getElementById(id).hidden);
+  $('#pose-tab').hidden = ['pose-panel', 'hands-panel', 'joint-panel', 'cast-interactions'].every(id => document.getElementById(id).hidden);
+  $('#body-tab').hidden = $('#body-panel').hidden;
+  const selectedItem = selectedModel?.id ?? (actorSelected ? activeActor(doc)?.id : null);
+  if (selectedItem !== inspectedItem) {
+    inspectedItem = selectedItem;
+    openInspectorTab($('#pose-tab'));
+  } else {
+    openInspectorTab($('#character-sections [aria-selected=true]'));
+  }
   $('#body-sliders').hidden = animal;
   $('#male-anatomy').hidden = !human || Number(doc.mesh.gender) < 0.99;
   const anatomyVisible = doc.mesh.show_genitals === true;
@@ -573,7 +611,18 @@ function refresh() {
   const bones = animal ? [...(studio?.animal?.joints.keys() || [])] : human ? studio?.viewer.boneList?.map(bone => bone.name) || [] : [];
   const boneList = JSON.stringify(bones);
   if (boneSelect.dataset.bones !== boneList) {
-    boneSelect.replaceChildren(new Option('Choose Joint', ''), ...bones.map(name => new Option(animal ? animalJointLabel(name) : name, name)));
+    const groups = new Map();
+    for (const name of bones) {
+      const label = animal ? animalJointLabel(name) : humanJointLabel(name);
+      const category = jointCategory(label);
+      if (!groups.has(category)) {
+        const group = document.createElement('optgroup');
+        group.label = category;
+        groups.set(category, group);
+      }
+      groups.get(category).append(new Option(label, name));
+    }
+    boneSelect.replaceChildren(new Option('Choose Joint', ''), ...groups.values());
     boneSelect.dataset.bones = boneList;
   }
   const boneActorId = actorSelected && !selectedModel ? activeActor(doc)?.id : null;
@@ -586,7 +635,7 @@ function refresh() {
     : animal
     ? 'Select a joint to show its rotation rings, or choose it below. Drag a gold handle to move the whole limb.'
     : 'Select a joint in the viewport or choose it by name.';
-  $('#bone-name').textContent = selectedBone ? animal ? animalJointLabel(selectedBone) : selectedBone : '';
+  $('#bone-name').textContent = selectedBone ? animal ? animalJointLabel(selectedBone) : humanJointLabel(selectedBone) : '';
   $('#selected-joint-controls').hidden = !selectedBone;
   $('#bone-select').value = selectedBone;
   for (const axis of ['x', 'y', 'z']) controls.get(`bone-${axis}`)?.refresh();
@@ -595,6 +644,22 @@ function refresh() {
   refreshReferencesUI();
   studio?.loadSceneBackground();
   studio?.updatePlacementGizmo();
+}
+
+function humanJointLabel(name) {
+  return name.replace(/_([lr])$/, (_, side) => side === 'l' ? ' (Left)' : ' (Right)')
+    .replace(/upperarm/g, 'upper arm').replace(/lowerarm/g, 'forearm')
+    .replace(/calf/g, 'lower leg').replace(/^ball\b/, 'toes')
+    .replaceAll('_', ' ').replace(/^./, first => first.toUpperCase());
+}
+
+function jointCategory(label) {
+  if (/wing/i.test(label)) return 'Wings';
+  if (/tail/i.test(label)) return 'Tail';
+  if (/thigh|leg|knee|hock|foot|paw|toes/i.test(label)) return 'Legs';
+  if (/clavicle|arm|hand|wrist|shoulder|elbow|thumb|index|middle|ring|pinky/i.test(label))
+    return /left/i.test(label) ? 'Left Arm' : /right/i.test(label) ? 'Right Arm' : 'Arms';
+  return 'Head & Spine';
 }
 
 function animalJointLabel(name) {
@@ -647,9 +712,9 @@ for (const [key, label, min, max, step, unit] of [
   ['azimuth', 'Azimuth', -180, 180, 0.1, '°'], ['elevation', 'Pitch', -89, 89, 0.1, '°'],
   ['zoom', 'Composition Zoom', 0.1, 8, 0.01, '×'],
 ]) makeControl('#camera-sliders', { id: key, label, min, max, step, unit,
-  read: () => doc.camera[key], write: value => { doc.camera[key] = value; studio.updateShot(); } });
+  read: () => doc.camera[key], write: value => { doc.camera[key] = value; studio.updateShot(true); } });
 makeControl('#focal-sliders', { id: 'focal-length', label: 'Focal Length', min: 12, max: 200, step: 1, unit: 'mm',
-  read: () => doc.camera.focalLength || 50, write: value => { doc.camera.focalLength = value; studio.updateShot(); } });
+  read: () => doc.camera.focalLength || 50, write: value => { doc.camera.focalLength = value; studio.updateShot(true); } });
 $('#lens-mode').onchange = event => {
   begin(); doc.camera.focalLength = event.target.value === 'custom' ? 50 : 0; studio.updateShot(true); changed();
 };
@@ -730,7 +795,7 @@ for (const [key, label, min, max, step, unit] of [['front', 'Front Alignment', -
 }
 for (const [key, label] of [['offsetX', 'Horizontal Framing Offset'], ['offsetY', 'Vertical Framing Offset']]) {
   makeControl('#scene-sliders', { id: key, label, min: -20, max: 20, step: 0.01,
-    read: () => doc.camera[key], write: value => { doc.camera[key] = value; studio.updateShot(); } });
+    read: () => doc.camera[key], write: value => { doc.camera[key] = value; studio.updateShot(true); } });
 }
 
 for (const [side, label] of [['l', 'Left Hand'], ['r', 'Right Hand']]) {
@@ -758,7 +823,14 @@ function showRightPanel(output, camera = false) {
   $('#review-output').textContent = output ? 'Back to Scene' : 'Review Output';
 }
 $('#review-output').onclick = () => showRightPanel($('#output-inspector').hidden);
-$('#open-camera-settings').onclick = () => showRightPanel(false, !$('#workspace').classList.contains('show-camera'));
+$('#open-camera-settings').onclick = () => {
+  const opening = !workspace.classList.contains('show-camera');
+  showRightPanel(false, opening);
+  if (opening && previewVisible) {
+    previewVisible = false;
+    refresh();
+  }
+};
 
 function setMode(mode) {
   studio.setMode(mode);
@@ -779,7 +851,7 @@ $('#view-output').onclick = () => { previewVisible = true; refresh(); renderPrev
 $('#view-scene').onclick = () => { previewVisible = false; setMode(studio.mode); refresh(); };
 $('#use-view').onclick = () => { begin(); studio.currentViewAsShot(); setMode('camera'); changed(); };
 $('#fit-frame').onclick = () => { begin(); studio.fit(); changed(); };
-document.querySelectorAll('[data-angle]').forEach(button => { button.onclick = () => { begin(); doc.camera.azimuth = Number(button.dataset.angle); doc.camera.elevation = 0; studio.updateShot(); changed(); }; });
+document.querySelectorAll('[data-angle]').forEach(button => { button.onclick = () => { begin(); doc.camera.azimuth = Number(button.dataset.angle); doc.camera.elevation = 0; studio.updateShot(true); changed(); }; });
 $('#reset-camera').onclick = () => { begin(); doc.camera = doc.source.kind === 'splat' ? referenceCamera() : defaultScene().camera; studio.updateShot(true); changed(); };
 $('#bone-select').onchange = event => {
   const name = event.target.value;

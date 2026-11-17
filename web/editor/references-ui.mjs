@@ -182,14 +182,7 @@ function chooseAppearanceImage() {
   dialog.showModal();
 }
 
-function chooseCharacter(scene, item) {
-  const targets = [];
-  if (['human', 'splat'].includes(scene.source?.kind)) {
-    for (const actor of scene.actors || []) if (actor.visible !== false) targets.push({ kind: 'actors', item: actor });
-  }
-  if (scene.source?.kind === 'human') {
-    for (const model of scene.props || []) if (model.visible !== false) targets.push({ kind: 'props', item: model });
-  }
+function createUnposedCharacter(scene, item) {
   const dialog = el('dialog', '', 'reference-character-dialog');
   dialog.setAttribute("closedby", "any");
   const form = el('form'); form.method = 'dialog';
@@ -198,33 +191,22 @@ function chooseCharacter(scene, item) {
   description.maxLength = 48;
   const descriptionField = field('Character Name', description);
   const speciesField = field('Mannequin', select([['human', 'Human'], ...Object.entries(context.animalShapes)], 'human', () => {}));
-  const apply = el('button', '', 'primary'); apply.type = 'submit';
-  const updateFields = value => {
-    descriptionField.hidden = speciesField.hidden = value !== 'new';
-    apply.textContent = value === 'new' ? 'Create and Assign' : 'Assign Appearance Reference';
-  };
-  const picker = select([...targets.map(({ item }, index) => [String(index), item.label]), ['new', 'Create an Unposed Character']],
-    targets.length ? '0' : 'new', updateFields);
-  updateFields(picker.value);
+  const apply = el('button', 'Create and Assign', 'primary'); apply.type = 'submit';
   const buttons = el('div');
   const cancel = button('Cancel', () => dialog.close());
   buttons.append(cancel, apply);
-  form.append(el('h2', 'Assign Appearance Reference'), field('Character or Model', picker), speciesField, descriptionField, buttons);
+  form.append(el('h2', 'Create an unposed character'), speciesField, descriptionField, buttons);
   form.onsubmit = event => {
     event.preventDefault();
-    const selected = targets[Number(picker.value)], text = description.value.trim();
+    const text = description.value.trim();
     dialog.close();
     if (context.doc() !== scene || !scene.referenceLibrary.items.includes(item)) return;
-    if (selected) {
-      edit(() => assignRole(item, 'character', { kind: selected.kind, ids: [selected.item.id], text: '' }));
-    } else {
-      const options = { label: text, onAdded: actor => {
-        assignRole(item, 'character', { kind: 'actors', ids: [actor.id], text: '' });
-      } };
-      const shape = speciesField.querySelector('select').value;
-      if (shape === 'human') context.addCharacter(options);
-      else context.addAnimal(shape, options);
-    }
+    const options = { label: text, onAdded: actor => {
+      assignRole(item, 'character', { kind: 'actors', ids: [actor.id], text: '' });
+    } };
+    const shape = speciesField.querySelector('select').value;
+    if (shape === 'human') context.addCharacter(options);
+    else context.addAnimal(shape, options);
   };
   dialog.addEventListener('close', () => dialog.remove(), { once: true });
   dialog.append(form);
@@ -268,7 +250,12 @@ function useControls(scene, item, use, reference) {
   preview.id = `reference-role-${item.id}-${use.id}-status`;
   target.setAttribute('aria-describedby', preview.id);
   preview.append(el('strong', line ? title : 'Role status'), document.createTextNode(' — ' + prompt));
-  panel.append(preview);
+  const removeRole = button('Remove Role', () => edit(() => { item.usages = item.usages.filter(value => value.id !== use.id); }));
+  removeRole.className = 'icon-button reference-role-remove';
+  removeRole.title = 'Remove role';
+  removeRole.setAttribute('aria-label', 'Remove ' + USES[use.kind] + ' role');
+  removeRole.textContent = '×';
+  panel.append(removeRole, preview);
   const optionsPanel = el('details', '', 'reference-role-options');
   optionsPanel.open = openRoleOptions.has(use.id);
   optionsPanel.ontoggle = () => {
@@ -294,7 +281,7 @@ function useControls(scene, item, use, reference) {
     (name === 'text' ? panel : optionsPanel).append(field(title, input));
   }
   const enabled = el('input'); enabled.type = 'checkbox'; enabled.dataset.focusKey = 'enable-role'; enabled.checked = use.enabled !== false; enabled.onchange = () => edit(() => { use.enabled = enabled.checked; });
-  const controls = el('div', '', 'reference-use-actions'); controls.append(field('Enable Role', enabled), button('Remove Role', () => edit(() => { item.usages = item.usages.filter(value => value.id !== use.id); }))); optionsPanel.append(controls); panel.append(optionsPanel); return panel;
+  const controls = el('div', '', 'reference-use-actions'); controls.append(field('Enable Role', enabled)); optionsPanel.append(controls); panel.append(optionsPanel); return panel;
 }
 function card(scene, item, manifest) {
   const entry = el('div', '', 'reference-entry'); entry.dataset.referenceId = item.id;
@@ -310,7 +297,6 @@ function card(scene, item, manifest) {
   const enabled = el('input'); enabled.type = 'checkbox'; enabled.dataset.focusKey = 'include'; enabled.checked = item.enabled !== false; enabled.onchange = () => edit(() => { item.enabled = enabled.checked; }); details.append(field('Include Reference', enabled));
   details.append(el('p', item.inputKey ? `Connected ${item.inputKey} · Image ${(item.batchIndex || 0) + 1} of ${item.batchCount || 1}` : `Saved reference · ${item.asset?.width || '?'} × ${item.asset?.height || '?'}`, 'hint'));
   if (item.reviewSource) details.append(el('p', 'The connected image changed. Check the source region and role description.', 'reference-review'));
-  for (const use of item.usages) details.append(useControls(scene, item, use, ref));
   const actions = el('div', '', 'reference-card-actions');
   const source = button('Set Source for Extraction or Rebuild', () => context.setSource(copy(item.asset)));
   source.disabled = !item.asset || context.sourceConnected();
@@ -321,7 +307,6 @@ function card(scene, item, manifest) {
   if (item.inputKey) actions.append(button('Use Saved Version', () => edit(() => { item.inputKey = null; item.missing = false; })));
   if (item.inputKey && item.batchCount > 1) actions.append(button('Split Batch into References', () => splitBatch(scene, item)));
   if (item.reviewSource) actions.append(button('Confirm Updated Source', () => edit(() => { item.reviewSource = false; })));
-  details.append(actions);
   const tools = el('div', '', 'reference-card-tools');
   const sceneActions = el('fieldset', '', 'reference-action-group');
   const imageActions = el('fieldset', '', 'reference-action-group');
@@ -335,7 +320,15 @@ function card(scene, item, manifest) {
     if (scene.backgroundReferenceId === item.id) { scene.backgroundReferenceId = null; scene.sceneBackground = null; }
   }, scene.backgroundReferenceId === item.id));
   remove.title = 'Remove from the library. You can undo this. The scene source and characters are kept.';
-  const character = button('Match a character’s appearance', () => chooseCharacter(scene, item));
+  const character = button('Assign appearance to a character', () => {
+    let role = item.usages.find(use => use.kind === 'character' && use.enabled !== false && use.target.kind === 'actors' && !use.target.ids.length);
+    if (!role) {
+      role = newUse('character', { kind: 'actors', ids: [], text: '' });
+      edit(() => { item.usages.push(role); });
+    }
+    document.querySelector('[data-role-id="' + CSS.escape(role.id) + '"] [data-focus-key="target"]')?.focus();
+  });
+  const unposed = button('Create an unposed character', () => createUnposedCharacter(scene, item));
   const isBackground = scene.backgroundReferenceId === item.id;
   const background = button(isBackground ? 'Clear Visible Background' : 'Use as backdrop', () => edit(() => {
     scene.sceneBackground = null;
@@ -350,7 +343,7 @@ function card(scene, item, manifest) {
   const sceneImage = button('Place as a flat image', async () => {
     if (await context.addSceneImage(item)) revealScene();
   });
-  sceneImage.disabled = character.disabled;
+  sceneImage.disabled = unposed.disabled = character.disabled;
   character.title = 'Assign this photo to a character as a visual reference for the generated image.';
   background.dataset.focusKey = 'background';
   background.title = isBackground ? 'Clear the viewport and guide background. The generation role stays active.'
@@ -366,11 +359,12 @@ function card(scene, item, manifest) {
   }
   character.classList.add('accent-button');
   remove.classList.add('reference-remove');
-  sceneActions.append(el('legend', 'Create or Place in Scene'), rebuild, sceneImage, background);
+  sceneActions.append(el('legend', 'Create or Place in Scene'), rebuild, unposed, sceneImage, background);
   imageActions.append(el('legend', 'Manage Image'), source, replace, remove);
   tools.append(character, sceneActions, imageActions);
-  details.append(tools);
-  if (isBackground) details.append(el('p', 'Visible scene background. Manage generation separately in the background role above.', 'hint'));
+  details.append(tools, actions);
+  for (const use of item.usages) details.append(useControls(scene, item, use, ref));
+  if (isBackground) details.append(el('p', 'Visible scene background. Manage generation separately in the background role.', 'hint'));
   if (scene.reference?.name === item.asset?.name && item.asset) details.append(el('p', 'Current source for pose extraction and reconstruction.', 'hint'));
   entry.append(details);
   return entry;

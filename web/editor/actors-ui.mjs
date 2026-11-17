@@ -47,7 +47,7 @@ export function addCharacter({ label, onAdded } = {}) {
 
 export function installActorsUI(options) {
   context = options;
-  $('actors-panel').innerHTML = `<div class="scene-index-heading"><h2 id="scene-heading">Scene</h2><small id="actor-count" title="Visible items / total items">0</small><button id="open-add-assets" class="quiet" aria-label="Add to scene" title="Add to scene" aria-haspopup="dialog"><img src="../icons/plus.svg" alt=""></button></div><div class="scene-assets"><button id="open-references" aria-haspopup="dialog"><img src="../icons/photo.svg" alt="">Images</button></div>
+  $('actors-panel').innerHTML = `<div class="scene-index-heading"><h2 id="scene-heading">Scene</h2><small id="actor-count" title="Visible items / total items">0</small><button id="open-add-assets" class="quiet" aria-label="Add to scene" title="Add to scene" aria-haspopup="dialog"><img src="../icons/plus.svg" alt=""></button></div><div class="scene-assets"><button id="open-references" aria-haspopup="dialog"><img src="../icons/photo.svg" alt="">References</button></div>
     <div id="actor-list" class="actor-list"></div>
     <div id="active-actor-controls">
     <div class="compact-actions"><button id="ground-actors" title="Move the selection down or up until it touches the floor">Ground</button><button id="fit-actors" title="Frame the selection with the camera">Frame</button></div>
@@ -66,12 +66,13 @@ export function installActorsUI(options) {
   }, true);
   $('output-guide-options').append($('actor-identities').closest('label'), $('color-actors').closest('label'));
   const actions = $('canvas-actions');
-  actions.innerHTML = '<button type="button" id="canvas-appearance" aria-haspopup="dialog"><img src="../icons/photo.svg" alt="">Choose appearance image</button>';
-  $('selection-inspector').querySelector('.section-heading').after(actions);
+  actions.innerHTML = '<button type="button" id="canvas-appearance" aria-haspopup="dialog"><img src="../icons/photo.svg" alt="">Assign Appearance Reference</button>';
   $('start-scene').onclick = () => assets.showModal();
   $('start-source').onclick = () => $('open-source-tools').click();
   $('selection-fields').append($('active-actor-controls'));
-  $('selection-pose-tools').prepend($('joint-panel'));
+  $('selection-pose-tools').prepend($('pose-panel'), $('joint-panel'));
+  $('selection-body').append($('body-panel'));
+  $('selection-appearance').append(actions, $('appearance-fields'));
   const identityFile = document.createElement('input'); identityFile.type = 'file'; identityFile.accept = 'image/*'; identityFile.hidden = true; identityFile.id = 'actor-identity-file'; document.body.append(identityFile);
   const readReferences = button('Read Connected Character Photos', () => context.send('anyangle-read-actors')); readReferences.id = 'read-actor-references'; readReferences.className = 'wide-button'; $('actors-panel').append(readReferences);
   const readKeypoints = button('Read Connected Pose Keypoints', () => context.send('anyangle-read-keypoints')); readKeypoints.id = 'read-pose-keypoints'; readKeypoints.className = 'wide-button'; readKeypoints.hidden = true; $('openpose-panel').prepend(readKeypoints);

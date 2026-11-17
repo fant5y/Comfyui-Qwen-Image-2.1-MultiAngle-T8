@@ -300,3 +300,14 @@
 #secondary-viewport { position: absolute; inset: 0 0 0 auto; width: 50%; border-left: 1px solid var(--line); }
 .stage.previewing-guide > #placement-handles { display: none; }
 #split-view[aria-pressed=true] { border-color: var(--studio-accent); color: var(--studio-accent); }
+
+#character-sections { flex-wrap: wrap; }
+#character-sections [role="tab"] { font-size: 13px; min-height: 34px; }
+#character-sections [aria-selected="true"] { border-color: var(--studio-accent); color: var(--studio-accent); font-weight: 650; }
+#joint-hint, .reference-use > .reference-role-preview { color: var(--text); font-size: 12px; }
+.reference-use { grid-template-columns: repeat(2, minmax(0, 1fr)) auto; }
+.reference-use > .reference-role-remove { align-self: end; font-size: 17px; }
+@media (max-width: 560px) {
+  .reference-use { grid-template-columns: minmax(0, 1fr) auto; }
+  .reference-use > .reference-role-remove { grid-column: 2; grid-row: 1; }
+}
