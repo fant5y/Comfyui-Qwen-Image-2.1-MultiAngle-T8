@@ -42,9 +42,9 @@ export function addCharacter({ label, onAdded } = {}) {
 
 export function installActorsUI(options) {
   context = options;
-  $('actors-panel').innerHTML = `<summary class="section-heading collapsible-heading"><h2>Scene Characters <small id="actor-count">0</small></h2><span class="tag">CAST</span></summary>
-    <div class="actor-toolbar"><button id="add-actor" class="accent-button">＋ Add Character</button><button id="clone-actor">Duplicate</button><button id="delete-actor">Delete</button></div>
-    <p class="hint">Select an item to edit. Ctrl-click to select multiple characters. Visibility controls output. Locking protects poses and positions.</p><div id="actor-list" class="actor-list"></div>
+  $('actors-panel').innerHTML = `<summary class="section-heading collapsible-heading"><h2>Scene <small id="actor-count">0</small></h2></summary>
+    <div class="actor-toolbar"><button id="add-actor" class="accent-button">＋ Character</button><button id="open-references" aria-haspopup="dialog">References</button></div><div class="actor-toolbar actor-selection-actions"><button id="clone-actor">Duplicate</button><button id="delete-actor">Delete</button></div>
+    <div id="actor-list" class="actor-list"></div>
     <div id="active-actor-controls"><label>Scale<input id="actor-scale" type="number" min="0.01" step="0.01" title="Resize the whole selection uniformly"></label>
     <div class="compact-actions"><button id="ground-actors" title="Move the selection down or up until it touches the floor">Ground</button><button id="fit-actors" title="Frame the selection with the camera">Fit</button><button id="rotate-model" title="Show rotation rings in Edit Scene">Rotate</button></div>
     <details class="actor-precision"><summary>Details</summary><label>Drag Plane<select id="actor-plane"><option value="screen">View Plane · Up / Down / Left / Right</option><option value="ground">Ground Plane · Forward / Back / Left / Right</option></select></label><label>Name<input id="actor-label" maxlength="255"></label><label>Guide Color<input id="actor-color" type="color"></label>
@@ -56,6 +56,8 @@ export function installActorsUI(options) {
     <div class="actor-identity"><h3>Identity Reference <small>Separate from pose source</small></h3><label>Source<select id="actor-reference"><option value="text">Text Description</option><option value="upload">Upload Character Photo…</option><option value="reference">Use Scene Source Image</option></select></label><img id="actor-reference-preview" alt="Character identity photo" hidden><label>Describe Character in Group Photo<input id="actor-source-person" placeholder="For example, the person with glasses on the left"></label><label>Appearance / Clothing<textarea id="actor-description" rows="3" maxlength="16000" placeholder="Character appearance, clothing, and style"></textarea></label><p id="actor-binding-state" class="hint"></p></div></details></div>
     <label class="option-toggle"><input id="actor-identities" type="checkbox"><span>Assign Each Character an Identity<small>Use the Qwen Base Model with Multi-Image Encode.</small></span></label>
     <label class="option-toggle"><input id="color-actors" type="checkbox"><span>Use Guide Colors in Coarse Render<small>Distinguishes characters and models. Pose guides keep standard joint colors.</small></span></label>`;
+  $('actors-panel').insertBefore($('add-to-scene'), $('actor-list'));
+  $('selection-fields').append($('clone-actor').parentElement, $('active-actor-controls'));
   const identityFile = document.createElement('input'); identityFile.type = 'file'; identityFile.accept = 'image/*'; identityFile.hidden = true; identityFile.id = 'actor-identity-file'; document.body.append(identityFile);
   const readReferences = button('Read Connected Character Photos', () => context.send('anyangle-read-actors')); readReferences.id = 'read-actor-references'; readReferences.className = 'wide-button'; $('actors-panel').append(readReferences);
   const readKeypoints = button('Read Connected Pose Keypoints', () => context.send('anyangle-read-keypoints')); readKeypoints.id = 'read-pose-keypoints'; readKeypoints.className = 'wide-button'; readKeypoints.hidden = true; $('openpose-panel').prepend(readKeypoints);
@@ -306,7 +308,10 @@ export function refreshActorsUI() {
   }
   $('actor-count').textContent = `${entries.filter(({ item }) => item.visible !== false).length + Number(standalone)} / ${entries.length + Number(standalone)}`;
   const selected = model || (doc.selectedActorIds?.includes(actor?.id) ? actor : null);
-  $('active-actor-controls').hidden = !selected || (!human && !model);
+  const hasSelection = !!selected && (human || !!model);
+  $('selection-fields').hidden = !hasSelection;
+  $('selection-empty').hidden = hasSelection;
+  $('selection-heading').textContent = hasSelection ? selected.label : 'Selection';
   $('clone-actor').disabled = $('delete-actor').disabled = !selected || (!human && !model);
   $('actor-color').closest('label').hidden = photo;
   $('model-scaleZ').closest('label').hidden = photo;

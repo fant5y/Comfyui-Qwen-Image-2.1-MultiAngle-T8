@@ -37,3 +37,12 @@ The user arranges an editable scene and sends its composition guide, prompt, and
 - [x] Restore focus on a matching control when the reference card refreshes, with a fallback to the card heading or Add Reference.
 - [ ] Verify focus, status feedback, and narrow sidebar layout in ComfyUI.
 - [ ] Review Output next. Use the same names across all three areas and show the guide first, followed by the prompt and ordered generator inputs. Keep the existing visual theme during this workflow pass.
+
+### Full-editor workflow preview
+
+- [x] Keep creation and the ordered object list together in Scene.
+- [x] Show the selected item's existing controls beside the viewport.
+- [x] Open References and Output on demand from their own entry points.
+- [x] Keep saved camera views and scene variations together under the viewport.
+- [ ] Review the single-pose and multi-character picnic workflows in ComfyUI.
+- [ ] Unify direct viewport placement and posing using the existing 3D interaction paths.

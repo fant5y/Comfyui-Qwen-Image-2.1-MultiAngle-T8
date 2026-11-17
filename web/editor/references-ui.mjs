@@ -12,7 +12,10 @@ let renderedScene, renderedItems = [];
 const openRoleOptions = new Set();
 function edit(action, updatePreview = false) { context.begin(); action(); context.changed(updatePreview); }
 function revealSection(id) {
+  $('reference-library-dialog').close();
   const section = $(id);
+  const tools = section.closest('#scene-tools');
+  if (tools) tools.open = true;
   section.open = true;
   section.querySelector('summary').focus({ preventScroll: true });
   section.scrollIntoView({ block: 'nearest' });
@@ -20,16 +23,22 @@ function revealSection(id) {
 
 export function installReferencesUI(value) {
   context = value;
-  const materials = el('details', '', 'panel-block reference-materials');
+  const dialog = el('dialog', '', 'reference-library-dialog');
+  dialog.id = 'reference-library-dialog';
+  dialog.setAttribute('aria-labelledby', 'reference-library-title');
+  const materials = el('section', '', 'reference-materials');
   materials.id = 'reference-materials';
-  materials.innerHTML = `<summary class="section-heading collapsible-heading"><h2>References</h2><span id="reference-count"></span></summary>
+  materials.innerHTML = `<div class="section-heading"><h2 id="reference-library-title">References</h2><span id="reference-count"></span><button id="close-references" autofocus>Close</button></div>
     <p class="hint">References tell the generator what to borrow. Expand a card to see its prompt instructions.</p>
     <div class="reference-source"><img id="library-source-image" alt="Scene Source Image" hidden><div><strong>Scene Source Image</strong><p id="library-source-state" class="hint"></p><button id="source-tools">Rebuild / Extract / Replace</button><button id="source-to-library">Add to References</button><button id="library-clear-source" hidden>Remove Source Image</button></div></div>
     <div class="compact-actions"><button id="add-reference" class="primary">＋ Add Reference</button><button id="read-references">Read Connections</button></div>
     <div id="legacy-references"><p class="hint">This scene uses legacy image rules. Upgrade to assign multiple roles to each image. You can undo the upgrade.</p><button id="upgrade-references">Upgrade References</button></div>
     <div id="reference-cards"></div><p id="reference-empty-note" class="empty-note">Add a reference and choose its role. Characters are optional.</p>
     <details class="reference-templates"><summary>Reference Set Templates</summary><select id="reference-template"></select><div class="compact-actions"><button id="save-reference-template">Save Set</button><button id="apply-reference-template">Apply Set</button></div><p class="hint">Templates store references and their roles. Applying one adds separate references. Check their targets afterward.</p></details>`;
-  $('add-to-scene').after(materials);
+  dialog.append(materials);
+  document.body.append(dialog);
+  $('open-references').onclick = () => dialog.showModal();
+  $('close-references').onclick = () => dialog.close();
   const stale = el('div', '', 'reference-review'); stale.id = 'reference-source-warning';
   const message = el('p'); message.id = 'reference-source-warning-text';
   const keep = button('Keep Saved Structure Guide', () => edit(() => { const scene = context.doc(); scene.derivedGuideStale = false; scene.retainedGuideSource = scene.derivedGuideSource;

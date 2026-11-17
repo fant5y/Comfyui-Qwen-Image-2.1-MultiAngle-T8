@@ -114,13 +114,13 @@ details:not([open])>.collapsible-heading{margin-bottom:0}
 :root .prop-card{border:1px solid #344c5a;border-radius:8px;padding:10px;margin-top:10px;background:#14212b}.prop-card strong{display:block;font-size:12px;overflow-wrap:anywhere;margin-bottom:7px}.prop-card label{display:flex;align-items:center;gap:6px;margin:5px 0;font-size:12px}.prop-card input{width:100%;min-width:0;padding:6px;background:#101a22;color:#dfeef3;border:1px solid #365462;border-radius:5px}
 [data-body-shape][aria-pressed="true"]{border-color:var(--cyan);background:#1d4a58;color:#e7faff}
 
-.right-panel > details.sidebar-section{grid-column:1/-1;padding:14px;margin:0 0 14px;border:1px solid #3b5462;border-radius:12px;background:linear-gradient(145deg,#16313d 0%,#101d27 66%);box-shadow:inset 0 1px #ffffff12,0 12px 30px #0002}
+#output-inspector > details.sidebar-section{grid-column:1/-1;padding:14px;margin:0 0 14px;border:1px solid #3b5462;border-radius:12px;background:linear-gradient(145deg,#16313d 0%,#101d27 66%);box-shadow:inset 0 1px #ffffff12,0 12px 30px #0002}
 .sidebar-section > .collapsible-heading{margin:0;color:var(--text)}
 .sidebar-section[open] > .collapsible-heading{margin-bottom:12px}
 .sidebar-section > .collapsible-heading h2{min-width:0;margin:0;font-size:13px;letter-spacing:.04em}
 .sidebar-section > .collapsible-heading > span{white-space:nowrap}
 #camera-section.no-guide{display:none}
-@media(max-height:800px) and (min-width:881px){.right-panel > details.sidebar-section{padding:10px}}
+@media(max-height:800px) and (min-width:881px){#output-inspector > details.sidebar-section{padding:10px}}
 
 .scene-background-position{margin-top:10px}
 .scene-background-position label{min-width:0;flex:1}
@@ -133,3 +133,12 @@ details:not([open])>.collapsible-heading{margin-bottom:0}
 .shot-variations .compact-actions{flex-wrap:wrap}
 .shot-variations select{max-width:100%}
 #add-to-scene .source-buttons{margin-top:0}
+
+#selection-fields{margin-top:0}
+#selection-heading{overflow-wrap:anywhere}
+#output-inspector[hidden],#selection-inspector[hidden],#selection-fields[hidden],#human[hidden]{display:none}
+#add-to-scene .source-buttons{display:flex}
+#add-to-scene .actor-selection-actions,.actor-selection-actions{margin-top:8px;flex-wrap:wrap}
+.actor-selection-actions button:first-child{flex:0 1 auto}
+.reference-library-dialog{width:min(680px,calc(100vw - 32px));max-height:85vh;overflow:auto;padding:20px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px}
+.reference-library-dialog::backdrop{background:#0009}
