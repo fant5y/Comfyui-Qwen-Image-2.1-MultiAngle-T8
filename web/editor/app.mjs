@@ -2,7 +2,7 @@ import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117animalrefs';
 import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117animalrefs';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261117animalrefs';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117animalrefs';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117compactcast';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
@@ -12,7 +12,7 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116canvasprompt';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117animalrefs';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117compactcast';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261117animalrefs';
 
@@ -1299,6 +1299,7 @@ function addAnimal(shape, { label, onAdded } = {}) {
     const rollbackHistory = begin();
     const previous = clone(doc);
     studio.syncPose();
+    const floorY = doc.source.kind === 'human' ? studio.grid.position.y + 0.03 : 0;
     const actor = createActor(doc.actors.length, { label: label || ANIMAL_SHAPES[shape], source: { kind: 'animal', shape }, animalPose: {} });
     doc.actors.push(actor);
     doc.source = { kind: 'human' };
@@ -1306,6 +1307,8 @@ function addAnimal(shape, { label, onAdded } = {}) {
     if (doc.conditioning.guide === 'pose') doc.conditioning.guide = 'coarse';
     try {
       await studio.restore(doc, { preserveView: !!onAdded && previous.source.kind === 'human' });
+      studio.grid.position.y = floorY - 0.03;
+      studio.groundActors([actor.id]);
       if (!onAdded || previous.source.kind !== 'human') studio.fit();
       onAdded?.(actor);
     } catch (error) {

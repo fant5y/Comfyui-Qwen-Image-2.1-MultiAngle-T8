@@ -255,7 +255,15 @@ function card(scene, item, manifest) {
     if (await context.addSceneImage(item)) chooseTab('objects');
   });
   sceneImage.disabled = character.disabled;
-  tools.append(source, character, background, sceneImage, replace, remove); entry.append(details, tools); return entry;
+  character.title = 'Use the photo as appearance guidance for a character.';
+  background.title = 'Use the photo as a frame-filling background in the coarse render.';
+  sceneImage.title = 'Place the photo on a flat surface you can move, rotate, and resize.';
+  const uses = el('details', '', 'reference-actions');
+  uses.append(el('summary', 'Image Actions'), tools);
+  tools.append(character, sceneImage, background, source, replace, remove);
+  details.append(uses);
+  entry.append(details);
+  return entry;
 }
 function replaceReference(scene, item) {
   const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.hidden = true; document.body.append(file);
