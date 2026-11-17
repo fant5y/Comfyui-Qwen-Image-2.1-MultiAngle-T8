@@ -120,6 +120,7 @@ export function libraryManifest(scene) {
 export function libraryPrompt(scene, manifest) {
   const settings = scene.conditioning || {};
   if (settings.promptMode === 'custom') return settings.customPrompt ?? '';
+  if (scene.promptTemplate === 2) return compositionPrompt(scene, manifest);
   const lines = [], guide = manifest.guide;
   const anyangle = (settings.model || 'anyangle') === 'anyangle';
   const kind = anyangle ? 'coarse' : settings.guide || 'coarse';
@@ -148,6 +149,81 @@ export function libraryPrompt(scene, manifest) {
     lines.push(referencePromptLine(reference.index, use));
   if (settings.promptExtra?.trim()) lines.push(settings.promptExtra.trim());
   return lines.join('\n');
+}
+
+const visualName = item => (item.label || item.id).replace(/\.glb$/i, '').replace(/_/g, ' ');
+const guideOperation = {
+  coarse: 'Render the scene using the framing, viewpoint, poses and placement in',
+  pose: 'Render the subjects in the poses and framing shown by the skeleton in',
+  depth: 'Render the scene using the layout and depth relationships in',
+  canny: 'Render the scene using the spatial layout and outlines in',
+};
+
+function compositionPrompt(scene, { guide, references, imageCount, mode }) {
+  const settings = scene.conditioning || {};
+  const original = references.find(reference => reference.referenceIds.includes('scene-source'));
+  const anyangle = (settings.model || 'anyangle') === 'anyangle';
+  const kind = anyangle ? 'coarse' : settings.guide || 'coarse';
+  const imageTag = index => '<image' + index + '>';
+  const guideImage = guide && (imageCount === 1 ? 'the guide image' : imageTag(guide.index));
+  const lines = [];
+  const seen = new Set(Array.isArray(scene.guideSubjects) ? scene.guideSubjects : []);
+  if (guide) {
+    if (anyangle && original) lines.push('Change the camera angle from ' + guideImage + ' to ' + imageTag(original.index) + '.');
+    else {
+      lines.push(guideOperation[kind] + ' ' + guideImage + '.');
+      if (kind === 'coarse') lines.push('Render the subjects and setting with their intended materials and colors. Replace mannequin surfaces with the subjects’ intended appearance.');
+    }
+    for (const actor of scene.actors || []) {
+      if (actor.visible === false || !seen.has(actor.id)) continue;
+      const species = { owl: 'an owl', bunny: 'a rabbit', canine: 'a dog', feline: 'a cat' }[actor.source?.shape] || 'a person';
+      const figure = kind === 'coarse' && settings.colorActors && actor.editorColor
+        ? ' Match the pose and placement of the ' + actor.editorColor + ' guide figure.' : '';
+      const description = actor.identity?.description?.trim();
+      lines.push('Render ' + visualName(actor) + ' as ' + species + '.' + figure + (description ? ' ' + description : ''));
+    }
+    for (const model of scene.props || []) {
+      if (model.visible === false || !seen.has(model.id)) continue;
+      const description = model.description?.trim();
+      lines.push('Preserve the size, position and orientation of ' + visualName(model) + ' in ' + guideImage + '.' + (description ? ' ' + description : ''));
+    }
+  } else if (mode === 'references-only') lines.push('Compose a new scene using the specified details from the reference images.');
+  for (const reference of references) {
+    const image = imageCount === 1 ? 'the reference image' : imageTag(reference.index);
+    for (const use of reference.usages || []) {
+      const line = compositionReferenceLine(scene, use, image, guide, seen);
+      if (line) lines.push(line);
+    }
+  }
+  if (settings.promptExtra?.trim()) lines.push(settings.promptExtra.trim());
+  return lines.join('\n');
+}
+
+export function compositionReferenceLine(scene, use, image, guide, seen = new Set(Array.isArray(scene.guideSubjects) ? scene.guideSubjects : [])) {
+  const { kind, ids = [] } = use.target;
+  let target = use.targetText;
+  if (kind === 'actors' || kind === 'props') {
+    const objects = (scene[kind] || []).filter(item => item.visible !== false && ids.includes(item.id) && (!guide || seen.has(item.id)));
+    if (!objects.length) return '';
+    target = objects.map(visualName).join(', ');
+  }
+  const source = use.sourceText?.trim();
+  const from = source ? image + ' (use ' + source + ')' : image;
+  const instructions = {
+    free: 'Use ' + from + ' as an appearance reference for ' + target + '.',
+    character: 'Match the character appearance, hairstyle and clothing in ' + from + ' for ' + target + '.',
+    identity: 'Match the face and hairstyle in ' + from + ' for ' + target + '.',
+    clothing: 'Dress ' + target + ' in the clothing shown in ' + from + '.',
+    accessory: 'Use the accessory or product design in ' + from + ' for ' + target + '.',
+    scene: 'Use the environment in ' + from + ' as the background' + (kind === 'scene' ? '' : ' for ' + target) + '. Retain the scene subjects.',
+    style: 'Apply the visual style, lighting and palette of ' + from + ' to ' + target + '.',
+    layout: guide ? 'Use the arrangement in ' + from + ' for details of ' + target + " where it fits the guide's framing and placement."
+      : 'Match the arrangement in ' + from + ' for ' + target + '.',
+    pose: guide ? 'Use the gesture in ' + from + ' for ' + target + " while preserving the guide's placement and framing."
+      : 'Match the pose and gesture in ' + from + ' for ' + target + '.',
+  };
+  const extra = use.instruction?.trim();
+  return instructions[use.kind] + (extra ? ' ' + extra : '');
 }
 
 export function referencePromptLine(index, use) {

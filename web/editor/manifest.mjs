@@ -1,6 +1,6 @@
 import { visibleActors } from './actors.mjs?v=20261116en';
 import { guideSource, guidePrompt } from './guides.mjs?v=20261116en';
-import { libraryManifest, libraryPrompt } from './reference-library.mjs?v=20261116canvasprompt';
+import { libraryManifest, libraryPrompt } from './reference-library.mjs?v=20261117guideprompt';
 
 export function actorMode(scene) {
   return scene.source?.kind === 'human' && scene.conditioning?.identityMode === 'actors' && scene.conditioning?.model === 'base'

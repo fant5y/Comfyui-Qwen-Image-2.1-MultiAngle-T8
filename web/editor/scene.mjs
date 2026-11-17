@@ -8,7 +8,7 @@ import { loadHumanPack, HumanAssetError } from './human.mjs?v=20261116en';
 import { applyLens } from './lens.mjs?v=20261116en';
 import { HAND_PRESETS } from '../vendor/vnccs_hand_presets.mjs';
 import { SplatScene } from './splat.mjs?v=20261116en';
-import { capturePNG } from './capture.mjs?v=20261116en';
+import { capturePNG, captureSubjectIds } from './capture.mjs?v=20261117guideprompt';
 import { liftOpenPose, copyVisiblePose, WORLD_KEYPOINT_NAMES, ORDER, LIMBS, COLORS } from './openpose.mjs?v=20261116en';
 import { createActor, ensureActors, activeActor, bindActor, saveActor, visibleActors } from './actors.mjs?v=20261116en';
 import { loadProp, disposeProp, placeProp } from './props.mjs?v=20261116canvasprompt';
@@ -840,6 +840,12 @@ export class StudioScene {
       if (this.splat && v.scene.background.isColor) v.scene.background.convertLinearToSRGB();
       v.scene.updateMatrixWorld(true);
       v.skeleton?.update();
+      if (options.subjects && this.doc.source.kind === 'human') {
+        const ids = [...visibleActors(this.doc), ...(this.doc.props || [])].map(item => item.id);
+        const subjects = ids.map(id => ({ id, root: this.actorRoots.get(id) || this.propRoots.get(id) }))
+          .filter(({ root }) => contents.includes(root));
+        options.subjects(captureSubjectIds(v.renderer, v.scene, camera, width, height, subjects, backgroundPlane));
+      }
       return capturePNG(v.renderer, v.scene, camera, width, height,
         this.splat || options.depth ? THREE.NoColorSpace : THREE.SRGBColorSpace);
     } finally {
@@ -942,14 +948,29 @@ export class StudioScene {
     return facingAway;
   }
 
-  captureOpenPose(width = this.doc.width, height = this.doc.height) {
+  captureOpenPose(width = this.doc.width, height = this.doc.height, onSubjects) {
     if (this.doc.source.kind !== 'human') throw new Error('An OpenPose guide requires a mannequin scene.');
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
     const context = canvas.getContext('2d');
     context.fillStyle = '#000'; context.fillRect(0, 0, width, height);
     this.viewer.captureCamera.updateMatrixWorld(true);
     context.lineCap = 'round'; context.lineJoin = 'round'; context.lineWidth = Math.max(3, Math.min(width, height) / 120);
-    for (const { positions, hands, features } of this.projectPeople(width, height)) {
+    const subjects = [];
+    for (const { id, positions, hands, features } of this.projectPeople(width, height)) {
+    if (onSubjects) {
+      const margin = Math.max(3, Math.min(width, height) / 85);
+      const inside = point => point && point[0] >= -margin && point[0] <= width + margin && point[1] >= -margin && point[1] <= height + margin;
+      const crosses = (from, to) => from && to && [0, 1].some(axis => {
+        const other = 1 - axis, limits = [width, height];
+        return [-margin, limits[axis] + margin].some(edge => {
+          const progress = (edge - from[axis]) / (to[axis] - from[axis]);
+          const point = from[other] + (to[other] - from[other]) * progress;
+          return progress >= 0 && progress <= 1 && point >= -margin && point <= limits[other] + margin;
+        });
+      });
+      if (id && (Object.values(positions).some(inside) || Object.values(hands).flat().some(inside)
+          || LIMBS.some(([from, to]) => crosses(positions[ORDER[from]], positions[ORDER[to]])))) subjects.push(id);
+    }
     context.lineWidth = Math.max(3, Math.min(width, height) / 120);
     LIMBS.forEach(([from, to], index) => {
       if (!positions[ORDER[from]] || !positions[ORDER[to]]) return;
@@ -975,6 +996,7 @@ export class StudioScene {
       }
     }
     }
+    onSubjects?.(subjects);
     return canvas.toDataURL('image/png');
   }
 

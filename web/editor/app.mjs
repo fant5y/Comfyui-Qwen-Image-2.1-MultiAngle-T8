@@ -1,8 +1,8 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117owlwings';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117owlwings';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117guideprompt';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261116canvasprompt';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116scenebackdrop';
+import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261117guideprompt';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117guideprompt';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
@@ -14,7 +14,7 @@ import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvaspro
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
 import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116movegizmo';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
-import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261116canvasprompt';
+import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261117guideprompt';
 
 const $ = selector => document.querySelector(selector);
 const clone = value => structuredClone(value);
@@ -194,14 +194,28 @@ async function imageCanvas(source, width, height) {
   context.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
   return canvas;
 }
+let guideSubjectDocument, guideSubjectRevision;
 async function captureGuide(width = doc.width, height = doc.height) {
+  const scene = doc, captureRevision = revision;
+  let subjects = [];
+  const png = await captureGuideImage(width, height, scene.version === 3 ? ids => { subjects = ids; } : undefined);
+  if (scene.version === 3 && scene === doc && captureRevision === revision) {
+    scene.promptTemplate = 2;
+    scene.guideSubjects = subjects;
+    guideSubjectDocument = scene;
+    guideSubjectRevision = revision;
+  }
+  return png;
+}
+
+async function captureGuideImage(width, height, subjects) {
   if (!requiresGuide()) return null;
   const input = guideSource(doc), captureRevision = revision;
-  if (input.kind === 'pose') return studio.captureOpenPose(width, height);
+  if (input.kind === 'pose') return studio.captureOpenPose(width, height, subjects);
   if (input.kind === 'image') return (await imageCanvas(assetURL(input.asset.name), width, height)).toDataURL('image/png');
   if (input.kind === 'missing') throw new Error('Generate, import, or connect the current guide first.');
-  if (input.kind === 'scene') return studio.capture(width, height);
-  if (input.kind === 'depth-scene') return studio.capture(width, height, { depth: true });
+  if (input.kind === 'scene') return studio.capture(width, height, { subjects });
+  if (input.kind === 'depth-scene') return studio.capture(width, height, { depth: true, subjects });
   const source = input.kind === 'canny-image' ? assetURL(input.asset.name) : await studio.capture(width, height, { canny: true });
   const decoded = new Image(); decoded.src = source; await decoded.decode();
   const scale = Math.min(1, 1536 / Math.max(decoded.naturalWidth, decoded.naturalHeight));
@@ -233,6 +247,10 @@ async function renderPreview() {
   finally { previewRunning = false; }
 }
 function refresh() {
+  if (doc.version === 3) {
+    doc.promptTemplate = 2;
+    if (doc !== guideSubjectDocument || guideSubjectRevision !== revision) delete doc.guideSubjects;
+  }
   if (studio && (doc.source.kind === 'splat' || doc.source.kind === 'empty') &&
       (studio.mode === 'edit' || $('#edit-mode').classList.contains('active') || studio.mode === 'position' && !studio.canPlaceScene())) setMode('camera');
   if (linkedReference.asset) doc.reference = linkedReference.asset;
@@ -443,7 +461,8 @@ function refresh() {
     $('#prompt-mode-hint').textContent += ` ${manifest.warnings.join(' ') || `${manifest.imageCount} references · Qwen recommends up to 10. Character assignments follow the actual image order.`}`;
     if (promptMode === 'custom') $('#prompt-mode-hint').textContent += ' Assign the source to a character to use it for identity. Custom prompts keep the image numbers you enter.';
   }
-  $('#lora-hint').textContent = base ? 'LoRA strength 0 → Base model' : 'LoRA strength 1 → AnyAngle';
+  $('#footer-lora').textContent = base ? 'ANYANGLE OFF' : 'ANYANGLE ENABLED';
+  $('#lora-hint').textContent = 'Choose the LoRA file in the workflow’s AnyAngle Optional LoRA node. Guidance Strategy sends strength 0 for Qwen Base Model or 1 for AnyAngle.';
   $('#protocol-hint').textContent = base && unwiredAnyAngle ? 'The workflow still uses a fixed AnyAngle LoRA strength. Connect Studio’s strength output or remove the LoRA loader.'
     : base ? `The base model uses image_${imageIndex} as a guide. Structure matching can vary.`
     : human ? 'Use Qwen Base Model with Pose guidance to change poses. Use AnyAngle to change the camera angle.'
@@ -1480,8 +1499,9 @@ async function startCameraBatch(queueFinal) {
   $('#batch-state').textContent = queueFinal ? 'Preparing the workflow…' : 'Preparing the guide batch…';
   try {
     if (queueFinal) {
+      const png = await captureGuide();
       const response = await fetch('/anyangle-studio/snapshots', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scene: freezeReferenceInputs(clone(doc)), png: await captureGuide() }) });
+        body: JSON.stringify({ scene: freezeReferenceInputs(clone(doc)), png }) });
       const snapshot = await response.json(); if (!response.ok) throw new Error(snapshot.error || 'Could not capture a fixed scene for the batch');
       await batchRequest('prepare', { snapshot });
       $('#batch-state').textContent = 'References and prompts are fixed for the batch. Full Input reuses the supplied text. Studio Plus Input combines it with each view’s Studio prompt.';
@@ -1549,6 +1569,11 @@ $('#apply').onclick = () => run(async () => {
   clearTimeout(previewTimer); studio.syncPose();
   const frozen = clone(doc), appliedRevision = revision;
   const png = await captureGuide();
+  if (revision !== appliedRevision) throw new Error('The scene changed while capturing. Apply it again.');
+  if (frozen.version === 3) {
+    frozen.promptTemplate = doc.promptTemplate;
+    frozen.guideSubjects = doc.guideSubjects;
+  }
   const response = await fetch('/anyangle-studio/snapshots', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scene: frozen, png }) });
   const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Save failed');
   if (revision !== appliedRevision) throw new Error('The scene changed while saving. Apply it again.');

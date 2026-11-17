@@ -164,6 +164,8 @@ def library_prompt(scene, manifest):
     settings = scene.get("conditioning", {})
     if settings.get("promptMode") == "custom":
         return settings.get("customPrompt", "")
+    if scene.get("promptTemplate") == 2:
+        return composition_prompt(scene, manifest)
     guide = manifest["guide"]
     lines = []
     original = next((reference for reference in manifest["references"] if "scene-source" in reference.get("referenceIds", [])), None)
@@ -209,6 +211,97 @@ def library_prompt(scene, manifest):
     if settings.get("promptExtra", "").strip():
         lines.append(settings["promptExtra"].strip())
     return "\n".join(lines)
+
+
+def visual_name(item):
+    label = item.get("label") or item["id"]
+    return (label[:-4] if label.lower().endswith(".glb") else label).replace("_", " ")
+
+
+def composition_prompt(scene, manifest):
+    settings = scene.get("conditioning", {})
+    guide, references, image_count = manifest["guide"], manifest["references"], manifest["imageCount"]
+    original = next((ref for ref in references if "scene-source" in ref["referenceIds"]), None)
+    anyangle = settings.get("model", "anyangle") == "anyangle"
+    kind = "coarse" if anyangle else settings.get("guide", "coarse")
+    subjects = scene.get("guideSubjects")
+    seen = {subject for subject in subjects if isinstance(subject, str)} if isinstance(subjects, list) else set()
+    lines = []
+    if guide:
+        guide_image = "the guide image" if image_count == 1 else f"<image{guide['index']}>"
+        if anyangle and original:
+            lines.append(f"Change the camera angle from {guide_image} to <image{original['index']}>.")
+        else:
+            operations = {
+                "coarse": "Render the scene using the framing, viewpoint, poses and placement in",
+                "pose": "Render the subjects in the poses and framing shown by the skeleton in",
+                "depth": "Render the scene using the layout and depth relationships in",
+                "canny": "Render the scene using the spatial layout and outlines in",
+            }
+            lines.append(f"{operations[kind]} {guide_image}.")
+            if kind == "coarse":
+                lines.append("Render the subjects and setting with their intended materials and colors. Replace mannequin surfaces with the subjects’ intended appearance.")
+        species = {"owl": "an owl", "bunny": "a rabbit", "canine": "a dog", "feline": "a cat"}
+        for actor in scene.get("actors", []):
+            if not actor.get("visible", True) or actor["id"] not in seen:
+                continue
+            subject = species.get(actor.get("source", {}).get("shape"), "a person")
+            figure = (
+                f" Match the pose and placement of the {actor['editorColor']} guide figure."
+                if kind == "coarse" and settings.get("colorActors") and actor.get("editorColor") else ""
+            )
+            description = actor.get("identity", {}).get("description", "").strip()
+            lines.append(f"Render {visual_name(actor)} as {subject}.{figure}" + (f" {description}" if description else ""))
+        for model in scene.get("props", []):
+            if not model.get("visible", True) or model["id"] not in seen:
+                continue
+            description = model.get("description", "").strip()
+            lines.append(f"Preserve the size, position and orientation of {visual_name(model)} in {guide_image}."
+                         + (f" {description}" if description else ""))
+    elif manifest["mode"] == "references-only":
+        lines.append("Compose a new scene using the specified details from the reference images.")
+    for reference in references:
+        image = "the reference image" if image_count == 1 else f"<image{reference['index']}>"
+        for use in reference["usages"]:
+            line = composition_reference_line(scene, use, image, guide, seen)
+            if line:
+                lines.append(line)
+    if extra := settings.get("promptExtra", "").strip():
+        lines.append(extra)
+    return "\n".join(lines)
+
+
+def composition_reference_line(scene, use, image, guide, seen):
+    role = use["target"]
+    kind, target = role["kind"], use["targetText"]
+    if kind in ("actors", "props"):
+        objects = [item for item in scene.get(kind, []) if item.get("visible", True)
+                   and item["id"] in role.get("ids", []) and (not guide or item["id"] in seen)]
+        if not objects:
+            return ""
+        target = ", ".join(map(visual_name, objects))
+    source = use.get("sourceText", "").strip()
+    source_image = f"{image} (use {source})" if source else image
+    instructions = {
+        "free": f"Use {source_image} as an appearance reference for {target}.",
+        "character": f"Match the character appearance, hairstyle and clothing in {source_image} for {target}.",
+        "identity": f"Match the face and hairstyle in {source_image} for {target}.",
+        "clothing": f"Dress {target} in the clothing shown in {source_image}.",
+        "accessory": f"Use the accessory or product design in {source_image} for {target}.",
+        "scene": (f"Use the environment in {source_image} as the background"
+                  + ("" if kind == "scene" else f" for {target}") + ". Retain the scene subjects."),
+        "style": f"Apply the visual style, lighting and palette of {source_image} to {target}.",
+        "layout": (
+            f"Use the arrangement in {source_image} for details of {target} where it fits the guide's framing and placement."
+            if guide else f"Match the arrangement in {source_image} for {target}."
+        ),
+        "pose": (
+            f"Use the gesture in {source_image} for {target} while preserving the guide's placement and framing."
+            if guide else f"Match the pose and gesture in {source_image} for {target}."
+        ),
+    }
+    extra = use.get("instruction", "").strip()
+    return instructions[use["kind"]] + (f" {extra}" if extra else "")
 
 
 def encoder_prompt(studio_prompt, prompt="", prompt_mode="studio-plus-input"):

@@ -1,4 +1,4 @@
-import { USES, newUse, addReference, upgradeReferences, libraryManifest, libraryPrompt, referencePromptLine, staleGuide } from './reference-library.mjs?v=20261116canvasprompt';
+import { USES, newUse, addReference, upgradeReferences, libraryManifest, libraryPrompt, referencePromptLine, compositionReferenceLine, staleGuide } from './reference-library.mjs?v=20261117guideprompt';
 import { uuid } from '../uuid.mjs?v=20261116en';
 const $ = id => document.getElementById(id);
 const copy = value => JSON.parse(JSON.stringify(value));
@@ -161,7 +161,13 @@ function useControls(scene, item, use, reference) {
     use.target = { kind: kind === 'actor' ? 'actors' : kind === 'prop' ? 'props' : kind, ids: id ? [id] : [], text: use.target.text || '' };
   })); panel.append(field('Target', target));
   const activeUse = reference?.usages.find(entry => entry.id === use.id);
-  const prompt = activeUse ? referencePromptLine(reference.index, activeUse) : 'This role is excluded. Check that the reference, role, and target are enabled.';
+  const manifest = libraryManifest(scene);
+  const image = manifest.imageCount === 1 ? 'the reference image' : `<image${reference?.index}>`;
+  const line = activeUse && (scene.promptTemplate === 2
+    ? compositionReferenceLine(scene, activeUse, image, manifest.guide) : referencePromptLine(reference.index, activeUse));
+  const prompt = line || (activeUse && manifest.guide
+    ? 'Studio could not verify this target in the current guide. Its role is omitted from the generated prompt.'
+    : 'This role is excluded. Check that the reference, role, and target are enabled.');
   const preview = el('p', '', 'hint reference-role-preview');
   const title = scene.conditioning.promptMode === 'custom' ? 'Automatic prompt suggestion' : 'Generated prompt';
   preview.append(el('strong', title), document.createTextNode(' — ' + prompt));
@@ -304,7 +310,7 @@ export function refreshReferencesUI(force = false) {
   $('reference-first-settings').hidden = !modern || library.mode !== 'references-only';
   $('reference-send-plan').hidden = !modern; document.querySelector('.reference-templates').hidden = !modern;
   if (!modern) { key = null; renderedScene = null; renderedItems = []; $('reference-cards').replaceChildren(); $('reference-empty-note').hidden = true; return; }
-  const manifest = libraryManifest(scene), signature = JSON.stringify([library, scene.actors, scene.props, scene.conditioning, scene.backgroundReferenceId, manifest, context.sourceConnected()]);
+  const manifest = libraryManifest(scene), signature = JSON.stringify([library, scene.actors, scene.props, scene.conditioning, scene.backgroundReferenceId, scene.guideSubjects, manifest, context.sourceConnected()]);
   const firstImage = manifest.references[0];
   if (firstImage && library.mode === 'references-only') {
     let width = firstImage.asset.width, height = firstImage.asset.height;
