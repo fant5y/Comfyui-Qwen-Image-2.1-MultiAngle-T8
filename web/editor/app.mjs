@@ -12,7 +12,7 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261117direct';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117direct';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117shelf';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261117animalrefs';
 
@@ -22,7 +22,7 @@ const params = new URLSearchParams(location.search);
 const embedded = params.has('session') && parent !== window;
 const session = params.get('session');
 let doc = defaultScene(), studio, revision = 0, busy = true, ready = false;
-let undo = [], redo = [], previewTimer, previewRunning = false, selectedBone = '';
+let undo = [], redo = [], previewTimer, previewRunning = false, selectedBone = '', selectedBoneActorId = null;
 let selectedShot = null, snapshot = null;
 let humanToolsReady = false;
 let linkedReference = { connected: false };
@@ -285,7 +285,8 @@ function refresh() {
   }
   $('#view-scene').hidden = staticGuide || guide === 'depth' && input.kind !== 'depth-scene';
   $('#view-scene').disabled = doc.source.kind === 'empty' && !hasSceneObjects();
-  $('#camera-section').hidden = staticGuide;
+  $('#open-camera-settings').disabled = staticGuide;
+  if (staticGuide && $('#workspace').classList.contains('show-camera')) showRightPanel(false);
   $('#lens-mode').value = doc.camera.focalLength ? 'custom' : 'original';
   $('#lens-controls').hidden = !doc.camera.focalLength;
   const poseAnimal = studio?.animal ? activeActor(doc) : doc.source.kind === 'splat' ? animalPoseTarget() : null;
@@ -325,21 +326,30 @@ function refresh() {
   $('#calibration-hint').textContent = splat
     ? 'The reconstructed subject is aligned with the estimated source camera. Use the camera to adjust the angle, zoom, and composition.'
     : empty ? 'Connect a source image and rebuild the subject, or import a GLB to adjust the scene.'
-      : selectedModel ? 'Use Scene Characters to adjust the selected model.'
-      : human ? 'Adjust mannequin scale here. Use Edit Scene to change poses, hand poses, and joints.'
-        : animal ? 'Use Edit Scene to rotate or drag joints.'
+      : selectedModel ? 'Use Scene to adjust the selected model.'
+      : human ? 'Use Pose & Rotate to edit joints. Open Body Shape & Hands under Settings for proportions and hand poses.'
+        : animal ? 'Use Pose & Rotate to rotate or drag joints.'
         : 'GLB uses Y-up by default. Rotate the asset to align its front. Asset scale and camera zoom adjust independently.';
   $('#asset-label').textContent = empty ? 'Waiting for source reconstruction' : selectedModel ? selectedModel.label : human ? 'MakeHuman · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Posable Mannequin' : doc.source.label || 'GLB Scene';
   $('#source-badge').textContent = empty ? 'PHOTO → 3D' : splat ? doc.source.keep_background ? 'TRIPOSPLAT · Background Included' : 'TRIPOSPLAT · Source Subject' : selectedModel ? selectedModel.label : human ? 'HUMAN · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Mannequin' : 'GLB · Scene';
+  const selectionTask = $('#selection-task');
+  const canPose = actorSelected && !selectedModel && !staticGuide && (human || animal);
+  for (const option of selectionTask.options) {
+    option.disabled = ['pose', 'body', 'presets'].includes(option.value) && (!canPose || option.value === 'presets' && !human);
+  }
+  if (selectionTask.selectedOptions[0]?.disabled) selectionTask.value = '';
   for (const id of ['pose-panel', 'hands-panel', 'body-panel', 'joint-panel']) {
     const available = actorSelected && !selectedModel && (human || animal && ['joint-panel', 'body-panel'].includes(id));
     const panel = document.getElementById(id);
     panel.classList.toggle('disabled-panel', !available);
     panel.inert = !available || mannequinScene && id !== 'pose-panel' && !!activeActor(doc)?.locked;
-    panel.hidden = !available || staticGuide;
+    const task = { 'pose-panel': 'presets', 'hands-panel': 'body', 'body-panel': 'body', 'joint-panel': 'pose' }[id];
+    panel.hidden = !available || staticGuide || selectionTask.value !== task;
   }
-  $('#selection-pose-tools').hidden = $('#joint-panel').hidden;
-  $('#cast-interactions').hidden = !human || staticGuide;
+  $('#placement-fields').hidden = selectionTask.value !== 'placement';
+  $('#appearance-fields').hidden = selectionTask.value !== 'appearance';
+  $('#cast-interactions').hidden = !canPose || !human || selectionTask.value !== 'presets';
+  $('#selection-pose-tools').hidden = ['pose-panel', 'hands-panel', 'body-panel', 'joint-panel', 'cast-interactions'].every(id => document.getElementById(id).hidden);
   $('#body-sliders').hidden = animal;
   $('#male-anatomy').hidden = !human || Number(doc.mesh.gender) < 0.99;
   $('#show-genitals').checked = doc.mesh.show_genitals === true;
@@ -522,15 +532,18 @@ function refresh() {
     boneSelect.replaceChildren(new Option('Choose Joint', ''), ...bones.map(name => new Option(animal ? animalJointLabel(name) : name, name)));
     boneSelect.dataset.bones = boneList;
   }
-  if (!bones.includes(selectedBone)) selectedBone = '';
+  const boneActorId = actorSelected && !selectedModel ? activeActor(doc)?.id : null;
+  if (selectedBoneActorId !== boneActorId || !bones.includes(selectedBone)) selectedBone = '';
+  selectedBoneActorId = boneActorId;
   const owl = animal && activeActor(doc)?.source.shape === 'owl';
   $('#owl-wing-poses').hidden = !owl;
   $('#joint-hint').textContent = owl
     ? 'Drag a gold wing handle to aim the wing. Adjust the shoulder, elbow, and wrist separately, or start with a wing pose.'
     : animal
     ? 'Select a joint to show its rotation rings, or choose it below. Drag a gold handle to move the whole limb.'
-    : 'Switch to Edit Scene, then select a joint or drag an IK hand or foot control.';
-  $('#bone-name').textContent = selectedBone ? animal ? animalJointLabel(selectedBone) : selectedBone : 'None Selected';
+    : 'Use Pose & Rotate to select a joint or drag a hand or foot handle.';
+  $('#bone-name').textContent = selectedBone ? animal ? animalJointLabel(selectedBone) : selectedBone : '';
+  $('#selected-joint-controls').hidden = !selectedBone;
   $('#bone-select').value = selectedBone;
   for (const axis of ['x', 'y', 'z']) controls.get(`bone-${axis}`)?.refresh();
   refreshActorsUI();
@@ -700,15 +713,23 @@ for (const [side, label] of [['l', 'Left Hand'], ['r', 'Right Hand']]) {
   row.append(title, buttons); $('#hands').append(row);
 }
 
-function showOutputInspector(visible) {
-  $('#output-inspector').hidden = !visible;
-  $('#workspace').classList.toggle('show-output', visible);
-  $('.right-panel').hidden = !visible;
-  $('[data-sidebar="right"]').hidden = !visible;
-  $('#review-output').setAttribute('aria-expanded', String(visible));
-  $('#review-output').textContent = visible ? 'Back to Scene' : 'Review Output';
+const cameraSection = $('#camera-section');
+$('.right-panel').append(cameraSection);
+function showRightPanel(output, camera = false) {
+  cameraSection.hidden = !camera;
+  $('#open-camera-settings').setAttribute('aria-expanded', String(camera));
+  $('.left-panel').hidden = output || camera;
+  $('[data-sidebar="left"]').hidden = output || camera;
+  $('#output-inspector').hidden = !output;
+  $('#workspace').classList.toggle('show-output', output);
+  $('#workspace').classList.toggle('show-camera', camera);
+  $('.right-panel').hidden = !output && !camera;
+  $('[data-sidebar="right"]').hidden = !output && !camera;
+  $('#review-output').setAttribute('aria-expanded', String(output));
+  $('#review-output').textContent = output ? 'Back to Scene' : 'Review Output';
 }
-$('#review-output').onclick = () => showOutputInspector($('#output-inspector').hidden);
+$('#review-output').onclick = () => showRightPanel($('#output-inspector').hidden);
+$('#open-camera-settings').onclick = () => showRightPanel(false, !$('#workspace').classList.contains('show-camera'));
 
 function setMode(mode) {
   studio.setMode(mode);
@@ -733,7 +754,9 @@ $('#fit-frame').onclick = () => { begin(); studio.fit(); changed(); };
 document.querySelectorAll('[data-angle]').forEach(button => { button.onclick = () => { begin(); doc.camera.azimuth = Number(button.dataset.angle); doc.camera.elevation = 0; studio.updateShot(); changed(); }; });
 $('#reset-camera').onclick = () => { begin(); doc.camera = doc.source.kind === 'splat' ? referenceCamera() : defaultScene().camera; studio.updateShot(true); changed(); };
 $('#bone-select').onchange = event => {
-  studio.finishDrag(false); selectedBone = event.target.value;
+  const name = event.target.value;
+  if (studio.mode !== 'edit' && name) setMode('edit');
+  studio.finishDrag(false); selectedBone = name;
   if (studio.animal) {
     studio.selectAnimalJoint(selectedBone);
   } else studio.viewer.selectBoneByName(selectedBone);
@@ -1090,7 +1113,6 @@ async function applyAnimalKeypoints(frame, actorId = null) {
   previewVisible = false;
   setMode('edit');
   studio.fit(true);
-  $('#selection-pose-tools').open = true;
   changed();
   toast('AP-10K pose applied. Drag the joints to refine it.');
 }
@@ -1349,7 +1371,6 @@ function addAnimal(shape, { label, onAdded } = {}) {
     selectedBone = '';
     previewVisible = false;
     setMode('edit');
-    $('#selection-pose-tools').open = true;
     changed();
   });
 }
@@ -1695,7 +1716,8 @@ async function start(token, reference = { connected: false }, structure = { conn
     if (doc.version !== 3 && doc.source.kind === 'splat' && doc.source.reference?.name !== doc.reference?.name) doc.source = { kind: 'empty' };
     studio = new StudioScene($('#viewport'), { begin, change: changed, camera: () => { revision++; refresh(); schedulePreview(); $('#status').textContent = 'Camera draft · Apply to save'; $('#status').dataset.state = 'dirty'; }, pick: selectRole, pickModel: selectModel, clearSelection, select: (name, updateControls = true) => {
       selectedBone = name || '';
-      if (selectedBone) $('#selection-pose-tools').open = true;
+      if (selectedBone) selectedBoneActorId = activeActor(doc)?.id;
+      if (selectedBone && !$('#selection-fields').contains(document.activeElement)) $('#selection-task').value = 'pose';
       if (studio.animal) {
         studio.selectAnimalJoint(selectedBone);
       }
@@ -1777,6 +1799,7 @@ installActorsUI({ doc: () => doc, replace: value => { doc = value; }, studio: ()
   showScene: () => { previewVisible = false; setMode('camera'); },
   placeScene: () => { previewVisible = false; setMode('position'); },
   editScene: () => { previewVisible = false; setMode('edit'); refresh(); } });
+$('#selection-task').onchange = () => refresh();
 installReferencesUI({ doc: () => doc, sourceConnected: () => linkedReference.connected, run, begin, changed, askName, upload, send, toast,
   addCharacter, addAnimal, animalShapes: ANIMAL_SHAPES,
   addSceneImage: item => run(() => addPlacedReference(item, clone(item.asset))),

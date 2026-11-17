@@ -164,3 +164,29 @@ details:not([open])>.collapsible-heading{margin-bottom:0}
 #actors-panel .actor-card.active{background:#294450}
 #actors-panel .actor-name{color:#edf5f9}
 .actor-selection-mark{color:#edf5f9;font-weight:700}
+
+.workspace.show-camera .right-panel,.workspace.show-output .right-panel{grid-column:auto;display:block}
+@media(min-width:881px){.workspace:is(.show-camera,.show-output){grid-template-columns:minmax(0,1fr) 7px clamp(270px,var(--right-sidebar-width,var(--default-right-sidebar-width)),38vw)}}
+@media(max-width:880px){.workspace:is(.show-camera,.show-output){grid-template-columns:minmax(0,1fr)}.workspace:is(.show-camera,.show-output) .center-panel{min-height:540px}}
+.canvas-viewbar{flex-wrap:wrap}
+#open-camera-settings{font-size:12px;min-height:34px}
+#open-camera-settings[aria-expanded=true]{border-color:var(--cyan)}
+.left-panel{background:#1b1b1b}
+#actors-panel .actor-card{background:#242424;border-top-color:#464646;border-right-color:#464646;border-bottom-color:#464646}
+#actors-panel .actor-card.active{background:#363636}
+#actors-panel .actor-name{font-size:14px;min-height:36px}
+#actors-panel .actor-card-actions button{min-width:30px;min-height:34px;background:#2b2b2b}
+#selection-inspector{border-color:#464646}
+#selection-heading{font-size:16px}
+.selection-scale{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px;margin:14px 0}
+.selection-scale label{margin:0}
+.selection-scale input[type=range]{grid-column:1/-1;width:100%;margin:8px 0}
+.selection-scale output{font-variant-numeric:tabular-nums}
+.selection-scale button{min-height:32px}
+#active-actor-controls>.selection-task-label{display:grid;gap:6px;margin:16px 0 0}
+#selection-task{width:100%;font-size:14px;min-height:36px}
+#placement-fields,#appearance-fields{margin-top:12px}
+#placement-fields .actor-position{grid-template-columns:repeat(3,minmax(0,1fr))}
+#selection-inspector :is(input:not([type=range],[type=color]),select,textarea,button){background-color:#262626;border-color:#5a5a5a}
+#selection-inspector :focus-visible,#actors-panel :focus-visible{outline:2px solid #87e3ff;outline-offset:2px}
+#selection-pose-tools .pose-subsection:first-child{border-top:0;margin-top:0;padding-top:0}

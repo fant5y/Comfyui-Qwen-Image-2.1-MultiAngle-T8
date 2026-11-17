@@ -18,3 +18,10 @@
 @media(max-width:880px){.reference-stage-preview{padding:18px 16px}.reference-materials .compact-actions{flex-wrap:wrap}.reference-preview-title{flex-direction:column;align-items:start}.reference-use{grid-template-columns:1fr}.reference-use>label{grid-column:1}}
 
 .reference-role-preview,.reference-role-options{grid-column:1/-1}.reference-role-preview{margin:0;overflow-wrap:anywhere}.reference-role-options>summary{cursor:pointer;color:var(--muted);padding:4px 0}.reference-role-options>label,.reference-role-options>.reference-use-actions{margin-top:8px}
+
+.reference-card>label:has(input[type=checkbox]){display:flex;justify-content:flex-start;column-gap:8px}
+.reference-card input[type=checkbox]{width:16px;height:16px;flex:0 0 16px;margin:0}
+.reference-card-tools button{white-space:normal;overflow-wrap:anywhere;min-width:0;line-height:1.35}
+.reference-card label,.reference-card>summary small,.reference-use>.hint{font-size:12px}
+.reference-use{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:560px){.reference-use{grid-template-columns:minmax(0,1fr)}}

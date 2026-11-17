@@ -41,8 +41,8 @@ The user arranges an editable scene and sends its composition guide, prompt, and
 ### Full-editor workflow preview
 
 - [x] Keep creation and the ordered object list together in Scene.
-- [x] Show the selected item's existing controls beside the viewport.
-- [x] Open References and Output on demand from their own entry points.
+- [x] Keep Ground, Frame, and Object Scale with reset under the scene list. Use the viewport for placement and show one optional settings group at a time beside it. Show joint sliders only for a chosen joint.
+- [x] Keep References in a dialog. Open Camera Settings or Review Output beside the viewport with the scene sidebar out of the way. Keep the camera and selection when switching panels.
 - [x] Keep saved camera views and scene variations together under the viewport.
-- [ ] Review the single-pose and multi-character picnic workflows in ComfyUI.
+- [ ] Review the solo-pose and four-character picnic workflows in ComfyUI. Check keyboard selection and focus, narrow sidebars, camera framing across panels, and saving a view versus saving a variation.
 - [ ] Unify direct viewport placement and posing using the existing 3D interaction paths.

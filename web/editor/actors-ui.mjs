@@ -44,15 +44,17 @@ export function installActorsUI(options) {
   $('actors-panel').innerHTML = `<div class="section-heading"><h2 id="scene-heading">Scene <small id="actor-count" title="Visible items / total items">0</small></h2></div>
     <div class="scene-action-row"><button id="open-add-assets" class="accent-button" aria-haspopup="dialog"><img src="../icons/plus.svg" alt="">Add</button><button id="open-references" aria-haspopup="dialog">References</button><button id="open-source-tools" aria-haspopup="dialog">Source Image</button></div><div class="actor-toolbar actor-selection-actions"><button id="clone-actor">Duplicate</button><button id="delete-actor">Delete</button></div>
     <div id="actor-list" class="actor-list"></div>
-    <div id="active-actor-controls"><h3>Placement</h3><label>Name<input id="actor-label" maxlength="255"></label><label>Scale<input id="actor-scale" type="number" min="0.01" step="0.01" title="Resize the whole selection uniformly"></label>
-    <div class="compact-actions"><button id="ground-actors" title="Move the selection down or up until it touches the floor">Ground</button><button id="fit-actors" title="Frame the selection with the camera">Fit</button><button id="rotate-model" title="Show rotation rings in Edit Scene">Rotate</button></div>
-    <label>Drag Plane<select id="actor-plane"><option value="screen">View Plane · Up / Down / Left / Right</option><option value="ground">Ground Plane · Forward / Back / Left / Right</option></select></label>
+    <div id="active-actor-controls">
+    <div class="compact-actions"><button id="ground-actors" title="Move the selection down or up until it touches the floor">Ground</button><button id="fit-actors" title="Frame the selection with the camera">Frame</button></div>
+    <div class="selection-scale"><label for="actor-scale-slider">Object Scale</label><output id="actor-scale-readout" for="actor-scale-slider">1×</output><button id="reset-actor-scale" type="button" title="Reset object scale to 1×">Reset</button><input id="actor-scale-slider" type="range" min="0.01" max="4" step="0.01"></div>
+    <label class="selection-task-label">Settings<select id="selection-task"><option value="">Choose Settings</option><option value="placement">Precise Placement</option><option value="appearance">Appearance &amp; Name</option><option value="pose">Pose Joints</option><option value="body">Body Shape &amp; Hands</option><option value="presets">Pose Presets &amp; Files</option></select></label>
+    <div id="placement-fields" hidden><label>Object Scale<input id="actor-scale" type="number" min="0.01" step="0.01" title="Resize the whole selection uniformly"></label><label>Drag Plane<select id="actor-plane"><option value="screen">View Plane · Up / Down / Left / Right</option><option value="ground">Ground Plane · Forward / Back / Left / Right</option></select></label>
     <div class="actor-position"><label>X<input id="actor-x" type="number" step="0.1"></label><label>Y<input id="actor-y" type="number" step="0.1"></label><label>Z<input id="actor-z" type="number" step="0.1"></label></div>
     <div class="dimensions"><label>Facing °<input id="actor-yaw" type="number" step="1"></label></div>
     <div id="model-size" class="actor-position" hidden><label>Size X<input id="model-scaleX" type="number" min="0.01" step="0.01"></label><label>Size Y<input id="model-scaleY" type="number" min="0.01" step="0.01"></label><label>Size Z<input id="model-scaleZ" type="number" min="0.01" step="0.01"></label></div>
     <div id="model-rotation" class="dimensions" hidden><label>Pitch °<input id="model-pitch" type="number" step="1"></label><label>Roll °<input id="model-roll" type="number" step="1"></label></div>
     <label id="model-joint-row" hidden>Rotation Target<select id="model-joint"></select></label>
-    <div class="actor-identity inspector-group"><h3>Appearance</h3><label>Guide Color<input id="actor-color" type="color"></label><label>Source<select id="actor-reference"><option value="text">Text Description</option><option value="upload">Upload Character Photo…</option><option value="reference">Use Scene Source Image</option></select></label><img id="actor-reference-preview" alt="Character identity photo" hidden><label>Describe Character in Group Photo<input id="actor-source-person" placeholder="For example, the person with glasses on the left"></label><label>Appearance / Clothing<textarea id="actor-description" rows="3" maxlength="16000" placeholder="Character appearance, clothing, and style"></textarea></label><p id="actor-binding-state" class="hint"></p></div>
+    </div><div id="appearance-fields" hidden><label>Name<input id="actor-label" maxlength="255"></label><div class="actor-identity inspector-group"><label>Guide Color<input id="actor-color" type="color"></label><label>Source<select id="actor-reference"><option value="text">Text Description</option><option value="upload">Upload Character Photo…</option><option value="reference">Use Scene Source Image</option></select></label><img id="actor-reference-preview" alt="Character identity photo" hidden><label>Describe Character in Group Photo<input id="actor-source-person" placeholder="For example, the person with glasses on the left"></label><label>Appearance / Clothing<textarea id="actor-description" rows="3" maxlength="16000" placeholder="Character appearance, clothing, and style"></textarea></label><p id="actor-binding-state" class="hint"></p></div></div>
     </div>
     <label class="option-toggle"><input id="actor-identities" type="checkbox"><span>Assign Each Character an Identity<small>Use the Qwen Base Model with Multi-Image Encode.</small></span></label>
     <label class="option-toggle"><input id="color-actors" type="checkbox"><span>Use Guide Colors in Coarse Render<small>Distinguishes characters and models. Pose guides keep standard joint colors.</small></span></label>`;
@@ -65,7 +67,7 @@ export function installActorsUI(options) {
     if (event.target.closest('#add-actor, #import-glb, #animal-shapes button, #open-pose-library')) assets.close();
   }, true);
   $('output-guide-options').append($('actor-identities').closest('label'), $('color-actors').closest('label'));
-  $('selection-fields').append($('clone-actor').parentElement, $('active-actor-controls'));
+  $('selection-fields').append($('active-actor-controls'), $('clone-actor').parentElement);
   const identityFile = document.createElement('input'); identityFile.type = 'file'; identityFile.accept = 'image/*'; identityFile.hidden = true; identityFile.id = 'actor-identity-file'; document.body.append(identityFile);
   const readReferences = button('Read Connected Character Photos', () => context.send('anyangle-read-actors')); readReferences.id = 'read-actor-references'; readReferences.className = 'wide-button'; $('actors-panel').append(readReferences);
   const readKeypoints = button('Read Connected Pose Keypoints', () => context.send('anyangle-read-keypoints')); readKeypoints.id = 'read-pose-keypoints'; readKeypoints.className = 'wide-button'; readKeypoints.hidden = true; $('openpose-panel').prepend(readKeypoints);
@@ -88,6 +90,11 @@ export function installActorsUI(options) {
     else { bindActor(context.doc()); studio.updateActorTransform(item); }
     context.changed();
   };
+  const scaleSlider = $('actor-scale-slider');
+  scaleSlider.oninput = () => { $('actor-scale-readout').textContent = scaleSlider.value + '×'; };
+  const setScale = value => { $('actor-scale').value = value; $('actor-scale').onchange(); };
+  scaleSlider.onchange = () => setScale(scaleSlider.value);
+  $('reset-actor-scale').onclick = () => setScale(1);
   $('actor-label').onchange = () => {
     const item = selected();
     if (!item) return;
@@ -112,7 +119,6 @@ export function installActorsUI(options) {
     context.changed();
   };
   $('fit-actors').onclick = () => { context.begin(); context.studio().fit(true); context.changed(); };
-  $('rotate-model').onclick = () => context.editScene();
   $('model-joint').onchange = event => {
     const studio = context.studio();
     studio.finishDrag();
@@ -254,6 +260,7 @@ export function refreshActorsUI() {
   if (key !== renderKey || doc !== renderedDoc || entries.some(({ item }, index) => item !== renderedRoles[index])) {
     renderKey = key; renderedDoc = doc; renderedRoles = entries.map(({ item }) => item);
     const focusedItem = $('actor-list').contains(document.activeElement) ? document.activeElement.dataset.sceneItem : null;
+    const focusedAction = document.activeElement?.dataset.sceneAction;
     $('actor-list').replaceChildren();
     if (sourceLabel) {
       const card = document.createElement('div');
@@ -287,16 +294,23 @@ export function refreshActorsUI() {
       }
       const controls = document.createElement('div');
       controls.className = 'actor-card-actions';
-      controls.append(button(item.visible === false ? '○' : '◉', () => {
+      const visibility = button(item.visible === false ? '○' : '◉', () => {
         context.begin();
         item.visible = item.visible === false;
         if (entry.model) studio.updateProp(item);
         else studio.updateActorTransform(item);
         studio.setMode(studio.mode);
         context.changed();
-      }, item.visible === false ? 'Show' : 'Hide'), button(item.locked ? 'Locked' : 'Lock', () => {
+      }, item.visible === false ? 'Show' : 'Hide');
+      const lock = button(item.locked ? 'Locked' : 'Lock', () => {
         context.begin(); item.locked = !item.locked; studio.setMode(studio.mode); context.changed(false);
-      }, item.locked ? 'Unlock' : 'Lock'));
+      }, item.locked ? 'Unlock' : 'Lock');
+      for (const [control, action] of [[visibility, 'visibility'], [lock, 'lock']]) {
+        control.dataset.sceneItem = item.id;
+        control.dataset.sceneAction = action;
+        control.setAttribute('aria-label', control.title + ' ' + item.label);
+      }
+      controls.append(visibility, lock);
       for (const [offset, label, title] of [[-1, '↑', 'Move Up'], [1, '↓', 'Move Down']]) {
         const destination = index + offset;
         const move = button(label, () => {
@@ -309,13 +323,19 @@ export function refreshActorsUI() {
           doc.props = ordered.filter(entry => entry.model).map(({ item }) => item);
           context.changed(false);
         }, title);
+        move.dataset.sceneItem = item.id;
+        move.dataset.sceneAction = title;
+        move.setAttribute('aria-label', title + ' ' + item.label);
         move.disabled = destination < 0 || destination >= entries.length;
         controls.append(move);
       }
       card.inert = !human && !entry.model;
       card.append(choose, controls);
       $('actor-list').append(card);
-      if (focusedItem === item.id) choose.focus({ preventScroll: true });
+      if (focusedItem === item.id) {
+        const action = [...controls.children].find(control => control.dataset.sceneAction === focusedAction && !control.disabled);
+        (action || choose).focus({ preventScroll: true });
+      }
     }
     const selector = $('actor-reference'); selector.innerHTML = '<option value="text">Text Description</option><option value="upload">Upload / Replace Photo…</option><option value="reference">Use Scene Source Image</option>';
     if (actor?.identity.asset && !actor.identity.inputKey && actor.identity.asset.name !== doc.reference?.name) selector.append(new Option('Uploaded Character Photo', 'asset'));
@@ -328,12 +348,11 @@ export function refreshActorsUI() {
   const hasSelection = !!selected && (human || !!model);
   $('selection-fields').hidden = !hasSelection;
   $('selection-inspector').hidden = !hasSelection;
-  $('selection-heading').textContent = hasSelection ? 'Editing ' + selected.label : 'Selection';
+  $('selection-heading').textContent = hasSelection ? selected.label : 'Selection';
   $('clone-actor').disabled = $('delete-actor').disabled = !selected || (!human && !model);
   $('actor-color').closest('label').hidden = photo;
   $('model-scaleZ').closest('label').hidden = photo;
-  $('model-size').hidden = $('model-rotation').hidden = $('rotate-model').hidden = !model;
-  $('rotate-model').disabled = !model || model.locked || model.visible === false;
+  $('model-size').hidden = $('model-rotation').hidden = !model;
   $('ground-actors').disabled = !!model && (model.locked || model.visible === false);
   $('fit-actors').disabled = model?.visible === false;
   const joints = model ? studio.modelJoints() : [];
@@ -347,9 +366,18 @@ export function refreshActorsUI() {
       jointSelect.replaceChildren(new Option('Whole Model', ''), ...names.map((name, index) => new Option(name, index)));
     }
     jointSelect.value = String(studio.modelJoint ?? '');
-    jointSelect.disabled = $('rotate-model').disabled;
+    jointSelect.disabled = model.locked || model.visible === false;
   }
   if (selected) {
+    const scale = selected.transform.scale ?? 1;
+    const scaleSlider = $('actor-scale-slider');
+    scaleSlider.disabled = $('reset-actor-scale').disabled = selected.locked;
+    if (document.activeElement !== scaleSlider || scaleSlider.dataset.item !== selected.id) {
+      scaleSlider.max = Math.max(4, Math.ceil(scale));
+      scaleSlider.value = scale;
+      $('actor-scale-readout').textContent = Number(scale.toFixed(3)) + '×';
+    }
+    scaleSlider.dataset.item = selected.id;
     $('actor-label').maxLength = model ? 255 : 48;
     const fields = [['actor-label', selected.label], ['actor-color', selected.editorColor || '#8da8b6'],
       ['actor-description', model ? model.description || '' : selected.identity.description]];
@@ -373,6 +401,8 @@ export function refreshActorsUI() {
   for (const id of ['random-pose', 'repeat-pose']) $(id).disabled = !human || !editableActors(doc, doc.randomScope || 'current').filter(role => role.source.kind !== 'animal').length;
   const templateKey = JSON.stringify(doc.compositionTemplates?.map(item => [item.id, item.name]));
   if ($('composition-list').dataset.key !== templateKey) { $('composition-list').dataset.key = templateKey; $('composition-list').replaceChildren(new Option('Choose Scene Variation', '')); for (const template of doc.compositionTemplates || []) $('composition-list').append(new Option(template.name, template.id)); }
+  const hasVariations = !!doc.compositionTemplates?.length;
+  $('composition-list').hidden = $('apply-composition').hidden = !hasVariations;
   const staticOutput = ['image', 'canny-image'].includes(guideSource(doc).kind);
   $('export-keypoints').disabled = !human || staticOutput || !doc.actors.some(role => role.visible !== false && role.source.kind !== 'animal');
   $('export-keypoints').title = staticOutput ? 'Studio is outputting the source skeleton. Switch to a 3D mannequin pose to export its JSON.' : 'Export the 3D skeleton from the current camera.';
