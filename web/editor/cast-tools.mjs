@@ -5,8 +5,8 @@ import { detachTargets } from './reference-library.mjs?v=20261116canvasprompt';
 
 const $ = id => document.getElementById(id);
 export function installCastTools(context) {
-  const panel = document.createElement('details'); panel.className = 'panel-block';
-  panel.innerHTML = `<summary>Character Interactions <span class="tag">SCENE</span></summary><label>Layout<select id="cast-layout"><option value="group">Group Photo · Face Camera</option><option value="dialogue">Conversation · Face Each Other</option><option value="handshake">Handshake · Align Hands</option></select></label><button id="apply-layout" class="wide-button">Apply to Selected Characters</button><p class="hint">Locked characters keep their poses. Handshake aligns hands once with IK. You can edit the pose afterward.</p><button id="align-contact" class="wide-button">Realign Hands</button><button id="release-contact" class="wide-button">Clear Contact Anchors</button>`;
+  const panel = document.createElement('section'); panel.className = 'inspector-group pose-subsection'; panel.id = 'cast-interactions';
+  panel.innerHTML = `<h3>Character Interactions</h3><label>Layout<select id="cast-layout"><option value="group">Group Photo · Face Camera</option><option value="dialogue">Conversation · Face Each Other</option><option value="handshake">Handshake · Align Hands</option></select></label><button id="apply-layout" class="wide-button">Apply to Selected Characters</button><p class="hint">Locked characters keep their poses. Handshake aligns hands once with IK. You can edit the pose afterward.</p><button id="align-contact" class="wide-button">Realign Hands</button><button id="release-contact" class="wide-button">Clear Contact Anchors</button>`;
   $('hands-panel').before(panel);
   const file = document.createElement('input'); file.type = 'file'; file.accept = '.glb'; file.hidden = true; document.body.append(file);
   const mutate = action => context.run(async () => {

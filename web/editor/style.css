@@ -152,6 +152,15 @@ details:not([open])>.collapsible-heading{margin-bottom:0}
 @media(min-width:881px){.workspace:not(.show-output){grid-template-columns:clamp(200px,var(--left-sidebar-width,var(--default-left-sidebar-width)),34vw) 7px minmax(0,1fr)}}
 #selection-inspector{padding-top:14px;margin-top:16px;border-top:1px solid var(--line)}
 #selection-fields{padding:0;border:0;background:none}
-#actor-placement-dialog label{display:flex;align-items:center;gap:8px;margin:8px 0}
-#actor-placement-dialog input:not([type=color]),#actor-placement-dialog select{width:100%;min-width:0}
-#actor-placement-dialog [hidden]{display:none}
+
+#selection-heading{font-size:15px;font-weight:650;color:#edf5f9}
+#selection-fields h3,#selection-pose-tools h3{margin:0;font-size:13px;font-weight:650;color:#edf5f9}
+#selection-fields .inspector-group,.pose-subsection{border-top:1px solid #48616e;padding-top:12px;margin-top:14px}
+#selection-fields input:not([type=color]),#selection-fields select,#selection-fields textarea{border-color:#627b88}
+#selection-pose-tools{border-top:1px solid #48616e;margin-top:14px;padding-top:12px}
+#selection-pose-tools>.collapsible-heading{min-height:32px}
+#selection-pose-tools [hidden]{display:none}
+#actors-panel .actor-card.selected{box-shadow:inset 0 0 0 1px #b5cbd6}
+#actors-panel .actor-card.active{background:#294450}
+#actors-panel .actor-name{color:#edf5f9}
+.actor-selection-mark{color:#edf5f9;font-weight:700}

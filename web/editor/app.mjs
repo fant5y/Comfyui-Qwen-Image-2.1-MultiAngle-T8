@@ -2,17 +2,17 @@ import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117sceneassets';
 import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117animalrefs';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261117animalrefs';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117inline';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117direct';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
 import { supportsCameraBatch, cameraBatchPlan, runCameraBatch } from './batch.mjs?v=20261116animals';
 import { installBatchPresets } from './batch-presets.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
-import { installPoseLibrary } from './pose-library-ui.mjs?v=20261117inline';
+import { installPoseLibrary } from './pose-library-ui.mjs?v=20261117direct';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117inline';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117direct';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261117animalrefs';
 
@@ -338,6 +338,8 @@ function refresh() {
     panel.inert = !available || mannequinScene && id !== 'pose-panel' && !!activeActor(doc)?.locked;
     panel.hidden = !available || staticGuide;
   }
+  $('#selection-pose-tools').hidden = $('#joint-panel').hidden;
+  $('#cast-interactions').hidden = !human || staticGuide;
   $('#body-sliders').hidden = animal;
   $('#male-anatomy').hidden = !human || Number(doc.mesh.gender) < 0.99;
   $('#show-genitals').checked = doc.mesh.show_genitals === true;
@@ -1088,7 +1090,7 @@ async function applyAnimalKeypoints(frame, actorId = null) {
   previewVisible = false;
   setMode('edit');
   studio.fit(true);
-  $('#joint-panel').open = true;
+  $('#selection-pose-tools').open = true;
   changed();
   toast('AP-10K pose applied. Drag the joints to refine it.');
 }
@@ -1347,8 +1349,7 @@ function addAnimal(shape, { label, onAdded } = {}) {
     selectedBone = '';
     previewVisible = false;
     setMode('edit');
-    $('#joint-panel').open = true;
-    $('#body-panel').open = true;
+    $('#selection-pose-tools').open = true;
     changed();
   });
 }
@@ -1694,6 +1695,7 @@ async function start(token, reference = { connected: false }, structure = { conn
     if (doc.version !== 3 && doc.source.kind === 'splat' && doc.source.reference?.name !== doc.reference?.name) doc.source = { kind: 'empty' };
     studio = new StudioScene($('#viewport'), { begin, change: changed, camera: () => { revision++; refresh(); schedulePreview(); $('#status').textContent = 'Camera draft · Apply to save'; $('#status').dataset.state = 'dirty'; }, pick: selectRole, pickModel: selectModel, clearSelection, select: (name, updateControls = true) => {
       selectedBone = name || '';
+      if (selectedBone) $('#selection-pose-tools').open = true;
       if (studio.animal) {
         studio.selectAnimalJoint(selectedBone);
       }

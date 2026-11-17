@@ -1,7 +1,7 @@
 import { createActor, activeActor, ensureActors, bindActor, cloneActor, removeActor, editableActors, actorSeed, applySceneTemplate } from './actors.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { installCastTools } from './cast-tools.mjs?v=20261117sceneassets';
+import { installCastTools } from './cast-tools.mjs?v=20261117direct';
 import { poseCopyIssue, ORDER } from './openpose.mjs?v=20261116en';
 import { guideSource } from './guides.mjs?v=20261116en';
 import { addReference, newUse } from './reference-library.mjs?v=20261116canvasprompt';
@@ -44,19 +44,16 @@ export function installActorsUI(options) {
   $('actors-panel').innerHTML = `<div class="section-heading"><h2 id="scene-heading">Scene <small id="actor-count" title="Visible items / total items">0</small></h2></div>
     <div class="scene-action-row"><button id="open-add-assets" class="accent-button" aria-haspopup="dialog"><img src="../icons/plus.svg" alt="">Add</button><button id="open-references" aria-haspopup="dialog">References</button><button id="open-source-tools" aria-haspopup="dialog">Source Image</button></div><div class="actor-toolbar actor-selection-actions"><button id="clone-actor">Duplicate</button><button id="delete-actor">Delete</button></div>
     <div id="actor-list" class="actor-list"></div>
-    <div id="active-actor-controls"><label>Name<input id="actor-label" maxlength="255"></label><label>Scale<input id="actor-scale" type="number" min="0.01" step="0.01" title="Resize the whole selection uniformly"></label>
+    <div id="active-actor-controls"><h3>Placement</h3><label>Name<input id="actor-label" maxlength="255"></label><label>Scale<input id="actor-scale" type="number" min="0.01" step="0.01" title="Resize the whole selection uniformly"></label>
     <div class="compact-actions"><button id="ground-actors" title="Move the selection down or up until it touches the floor">Ground</button><button id="fit-actors" title="Frame the selection with the camera">Fit</button><button id="rotate-model" title="Show rotation rings in Edit Scene">Rotate</button></div>
-    <div class="actor-identity"><label>Guide Color<input id="actor-color" type="color"></label><h3>Identity Reference <small>Separate from pose source</small></h3><label>Source<select id="actor-reference"><option value="text">Text Description</option><option value="upload">Upload Character Photo…</option><option value="reference">Use Scene Source Image</option></select></label><img id="actor-reference-preview" alt="Character identity photo" hidden><label>Describe Character in Group Photo<input id="actor-source-person" placeholder="For example, the person with glasses on the left"></label><label>Appearance / Clothing<textarea id="actor-description" rows="3" maxlength="16000" placeholder="Character appearance, clothing, and style"></textarea></label><p id="actor-binding-state" class="hint"></p></div>
-    <button id="open-actor-placement" aria-haspopup="dialog">Precise Placement</button></div>
-    <dialog id="actor-placement-dialog" class="studio-task-dialog" aria-labelledby="actor-placement-heading">
-    <div class="section-heading"><h2 id="actor-placement-heading">Precise Placement</h2><form method="dialog"><button>Close</button></form></div>
-    <div><label>Drag Plane<select id="actor-plane"><option value="screen">View Plane · Up / Down / Left / Right</option><option value="ground">Ground Plane · Forward / Back / Left / Right</option></select></label>
+    <label>Drag Plane<select id="actor-plane"><option value="screen">View Plane · Up / Down / Left / Right</option><option value="ground">Ground Plane · Forward / Back / Left / Right</option></select></label>
     <div class="actor-position"><label>X<input id="actor-x" type="number" step="0.1"></label><label>Y<input id="actor-y" type="number" step="0.1"></label><label>Z<input id="actor-z" type="number" step="0.1"></label></div>
     <div class="dimensions"><label>Facing °<input id="actor-yaw" type="number" step="1"></label></div>
     <div id="model-size" class="actor-position" hidden><label>Size X<input id="model-scaleX" type="number" min="0.01" step="0.01"></label><label>Size Y<input id="model-scaleY" type="number" min="0.01" step="0.01"></label><label>Size Z<input id="model-scaleZ" type="number" min="0.01" step="0.01"></label></div>
     <div id="model-rotation" class="dimensions" hidden><label>Pitch °<input id="model-pitch" type="number" step="1"></label><label>Roll °<input id="model-roll" type="number" step="1"></label></div>
     <label id="model-joint-row" hidden>Rotation Target<select id="model-joint"></select></label>
-    </div></dialog>
+    <div class="actor-identity inspector-group"><h3>Appearance</h3><label>Guide Color<input id="actor-color" type="color"></label><label>Source<select id="actor-reference"><option value="text">Text Description</option><option value="upload">Upload Character Photo…</option><option value="reference">Use Scene Source Image</option></select></label><img id="actor-reference-preview" alt="Character identity photo" hidden><label>Describe Character in Group Photo<input id="actor-source-person" placeholder="For example, the person with glasses on the left"></label><label>Appearance / Clothing<textarea id="actor-description" rows="3" maxlength="16000" placeholder="Character appearance, clothing, and style"></textarea></label><p id="actor-binding-state" class="hint"></p></div>
+    </div>
     <label class="option-toggle"><input id="actor-identities" type="checkbox"><span>Assign Each Character an Identity<small>Use the Qwen Base Model with Multi-Image Encode.</small></span></label>
     <label class="option-toggle"><input id="color-actors" type="checkbox"><span>Use Guide Colors in Coarse Render<small>Distinguishes characters and models. Pose guides keep standard joint colors.</small></span></label>`;
   const assets = $('add-to-scene');
@@ -69,9 +66,6 @@ export function installActorsUI(options) {
   }, true);
   $('output-guide-options').append($('actor-identities').closest('label'), $('color-actors').closest('label'));
   $('selection-fields').append($('clone-actor').parentElement, $('active-actor-controls'));
-  const placement = $('actor-placement-dialog');
-  document.body.append(placement);
-  $('open-actor-placement').onclick = () => placement.showModal();
   const identityFile = document.createElement('input'); identityFile.type = 'file'; identityFile.accept = 'image/*'; identityFile.hidden = true; identityFile.id = 'actor-identity-file'; document.body.append(identityFile);
   const readReferences = button('Read Connected Character Photos', () => context.send('anyangle-read-actors')); readReferences.id = 'read-actor-references'; readReferences.className = 'wide-button'; $('actors-panel').append(readReferences);
   const readKeypoints = button('Read Connected Pose Keypoints', () => context.send('anyangle-read-keypoints')); readKeypoints.id = 'read-pose-keypoints'; readKeypoints.className = 'wide-button'; readKeypoints.hidden = true; $('openpose-panel').prepend(readKeypoints);
@@ -248,7 +242,8 @@ export function refreshActorsUI() {
   const identity = $('actor-reference').closest('.actor-identity');
   const photo = !!model?.asset.name.endsWith('.png');
   identity.hidden = photo;
-  for (const element of identity.children) element.hidden = (doc.version === 3 || !!model) && element !== $('actor-description').closest('label');
+  const legacyIdentity = [$('actor-reference').closest('label'), $('actor-source-person').closest('label'), $('actor-binding-state')];
+  for (const element of legacyIdentity) element.hidden = doc.version === 3 || !!model;
   $('actor-identities').closest('label').hidden = doc.version === 3;
   const staticGuide = doc.conditioning.promptMode !== 'custom' && ['image', 'canny-image'].includes(guideSource(doc).kind);
   $('actors-panel').classList.toggle('cast-inactive', !human && !entries.some(entry => entry.model));
@@ -258,6 +253,7 @@ export function refreshActorsUI() {
   const key = JSON.stringify([sourceLabel, human, entries.map(({ item: { id, label, editorColor, visible, locked, identity } }) => ({ id, label, editorColor, visible, locked, identity })), doc.activeActorId, doc.selectedActorIds, model?.id, references]);
   if (key !== renderKey || doc !== renderedDoc || entries.some(({ item }, index) => item !== renderedRoles[index])) {
     renderKey = key; renderedDoc = doc; renderedRoles = entries.map(({ item }) => item);
+    const focusedItem = $('actor-list').contains(document.activeElement) ? document.activeElement.dataset.sceneItem : null;
     $('actor-list').replaceChildren();
     if (sourceLabel) {
       const card = document.createElement('div');
@@ -280,7 +276,15 @@ export function refreshActorsUI() {
         else selectRole(item.id, event.ctrlKey || event.metaKey);
       });
       choose.className = 'actor-name';
+      choose.dataset.sceneItem = item.id;
       choose.setAttribute('aria-pressed', String(!!selected));
+      if (selected) {
+        const marker = document.createElement('span');
+        marker.className = 'actor-selection-mark';
+        marker.setAttribute('aria-hidden', 'true');
+        marker.textContent = '✓ ';
+        choose.prepend(marker);
+      }
       const controls = document.createElement('div');
       controls.className = 'actor-card-actions';
       controls.append(button(item.visible === false ? '○' : '◉', () => {
@@ -311,6 +315,7 @@ export function refreshActorsUI() {
       card.inert = !human && !entry.model;
       card.append(choose, controls);
       $('actor-list').append(card);
+      if (focusedItem === item.id) choose.focus({ preventScroll: true });
     }
     const selector = $('actor-reference'); selector.innerHTML = '<option value="text">Text Description</option><option value="upload">Upload / Replace Photo…</option><option value="reference">Use Scene Source Image</option>';
     if (actor?.identity.asset && !actor.identity.inputKey && actor.identity.asset.name !== doc.reference?.name) selector.append(new Option('Uploaded Character Photo', 'asset'));
@@ -323,8 +328,7 @@ export function refreshActorsUI() {
   const hasSelection = !!selected && (human || !!model);
   $('selection-fields').hidden = !hasSelection;
   $('selection-inspector').hidden = !hasSelection;
-  if (!hasSelection) $('actor-placement-dialog').close();
-  $('selection-heading').textContent = hasSelection ? selected.label : 'Selection';
+  $('selection-heading').textContent = hasSelection ? 'Editing ' + selected.label : 'Selection';
   $('clone-actor').disabled = $('delete-actor').disabled = !selected || (!human && !model);
   $('actor-color').closest('label').hidden = photo;
   $('model-scaleZ').closest('label').hidden = photo;
