@@ -138,8 +138,8 @@ def canonical_scene(raw):
             if not isinstance(prop[key], bool):
                 raise ValueError(f"Invalid prop {key}")
         asset = prop.get("asset")
-        if not isinstance(asset, dict) or not isinstance(asset.get("name"), str) or not re.fullmatch(r"[a-f0-9]{64}\.(?:glb|png)", asset["name"]):
-            raise ValueError("Scene props require an embedded GLB or PNG asset")
+        if not isinstance(asset, dict) or not isinstance(asset.get("name"), str) or not re.fullmatch(r"[a-f0-9]{64}\.(?:glb|png|ply)", asset["name"]):
+            raise ValueError("Scene props require an embedded GLB, PNG or PLY asset")
         normalize_transform(prop)
         for axis in ("scaleX", "scaleY", "scaleZ"):
             if axis in prop["transform"] and (not finite(prop["transform"][axis]) or prop["transform"][axis] <= 0):

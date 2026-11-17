@@ -1,8 +1,8 @@
-import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117animalrefs';
+import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117sceneassets';
 import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117animalrefs';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261117animalrefs';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117compactcast';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117sceneassets';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
@@ -12,7 +12,7 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116canvasprompt';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117compactcast';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117sceneassets';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261117animalrefs';
 
@@ -117,8 +117,8 @@ function usesLocalGuide(guide = currentGuide()) {
     || guide === 'canny' && ['auto', 'reference'].includes(doc.conditioning.mapOrigin);
 }
 function requiresGuide() { return doc.version !== 3 || doc.referenceLibrary?.mode === 'guided'; }
-function hasSceneImage() {
-  return doc.props?.some(prop => prop.visible !== false && prop.asset.name.endsWith('.png'))
+function hasSceneObjects() {
+  return doc.props?.some(prop => prop.visible !== false)
     || doc.sceneBackground?.visible !== false && !!canvasBackgroundAsset(doc);
 }
 function hasGuide() {
@@ -131,7 +131,7 @@ function hasGuide() {
   const source = guideSource(doc);
   return source.kind === 'image' || source.kind === 'canny-image' || source.kind === 'canny-scene'
     || source.kind === 'depth-scene'
-    || source.kind === 'pose' && doc.source.kind === 'human' && doc.actors.some(actor => actor.visible !== false && actor.source.kind !== 'animal') || source.kind === 'scene' && (doc.source.kind !== 'empty' || hasSceneImage());
+    || source.kind === 'pose' && doc.source.kind === 'human' && doc.actors.some(actor => actor.visible !== false && actor.source.kind !== 'animal') || source.kind === 'scene' && (doc.source.kind !== 'empty' || hasSceneObjects());
 }
 function applyDisabled() {
   return busy || !ready || !hasGuide() || !!linkedReference.pending;
@@ -259,7 +259,7 @@ function refresh() {
     if (doc !== guideSubjectDocument || guideSubjectRevision !== revision) delete doc.guideSubjects;
   }
   if (studio && (doc.source.kind === 'splat' || doc.source.kind === 'empty') &&
-      (studio.mode === 'edit' || $('#edit-mode').classList.contains('active') || studio.mode === 'position' && !studio.canPlaceScene())) setMode('camera');
+      ((studio.mode === 'edit' || $('#edit-mode').classList.contains('active')) && !studio.selectedModel() || studio.mode === 'position' && !studio.canPlaceScene())) setMode('camera');
   if (linkedReference.asset) doc.reference = linkedReference.asset;
   const guide = currentGuide(), base = doc.conditioning.model === 'base', input = guideSource(doc);
   const manifest = buildManifest(doc), multi = actorMode(doc);
@@ -284,7 +284,7 @@ function refresh() {
     $(`#${id}`).classList.toggle('active', active); $(`#${id}`).setAttribute('aria-pressed', String(active));
   }
   $('#view-scene').hidden = staticGuide || guide === 'depth' && input.kind !== 'depth-scene';
-  $('#view-scene').disabled = doc.source.kind === 'empty' && !hasSceneImage();
+  $('#view-scene').disabled = doc.source.kind === 'empty' && !hasSceneObjects();
   $('#camera-section').hidden = staticGuide;
   $('#lens-mode').value = doc.camera.focalLength ? 'custom' : 'original';
   $('#lens-controls').hidden = !doc.camera.focalLength;
@@ -374,13 +374,13 @@ function refresh() {
   if (reconstructionChanged) $('#reconstruction-state').textContent = 'Background setting changed · Rebuild to apply it. The preview shows the last result.';
   if (doc.reference && doc.actors.length) {
     $('#reconstruction-state').textContent += splat ? ' Your characters are saved. Choose Return to Mannequins to edit them.'
-      : ' Rebuilding switches the canvas to the reconstruction. Your characters are saved.';
+      : ' Rebuilding adds a 3D character to the current scene.';
   }
   $('#reconstruct').textContent = reconstructionChanged ? 'Rebuild 3D with New Settings' : keepBackground ? 'Rebuild 3D with Background' : splat ? 'Reload Source Reconstruction' : 'Rebuild 3D from Source';
-  $('#empty-scene').hidden = !empty || hasSceneImage();
+  $('#empty-scene').hidden = !empty || hasSceneObjects();
   $('#coarse-inputs').hidden = guide !== 'coarse';
   $('#extract-coarse').disabled = !doc.reference || !!linkedReference.pending;
-  $('#preview-coarse').disabled = empty && !hasSceneImage();
+  $('#preview-coarse').disabled = empty && !hasSceneObjects();
   $('#coarse-status').textContent = splat ? doc.source.keep_background ? 'Reconstruction with background is ready. Preview it or adjust the camera. Large scenes are experimental.' : 'The reconstructed subject is ready. Preview it or adjust the camera.'
     : animal ? 'Render a guide from the animal’s current pose and camera angle.'
     : human ? 'The scene uses a posable mannequin. Rebuild the source to render its subject.'
@@ -499,16 +499,16 @@ function refresh() {
       : guide === 'canny' ? 'Connect a source, load a 3D subject, or import a Canny image.'
         : 'Load a 3D subject first.'
     : guide === 'coarse' ? 'The render excludes the workspace grid and controls.' : `Preview of the guide sent to image_${imageIndex}.`;
-  $('#save-shot').disabled = $('#fit-frame').disabled = empty && !hasSceneImage();
+  $('#save-shot').disabled = $('#fit-frame').disabled = empty && !hasSceneObjects();
   $('#open-batch').disabled = !supportsCameraBatch(doc);
   $('#open-batch').title = supportsCameraBatch(doc) ? 'Render or generate a batch from a range or saved views.'
     : 'Use a 3D coarse render, mannequin skeleton, or 3D Canny guide for this feature. Extracted guides keep the source view.';
   $('#download-guide').disabled = !requiresGuide() || !hasGuide();
   $('#apply').disabled = applyDisabled();
   $('#clear-canvas').disabled = busy || !ready || !canvasHasObjects();
-  $('#edit-mode').disabled = splat || empty;
+  $('#edit-mode').disabled = (splat || empty) && !studio?.selectedModel();
   $('#position-mode').disabled = !studio?.canPlaceScene();
-  $('#edit-mode').title = splat ? 'Use Camera mode to change the view of a reconstructed subject.' : empty ? 'Load a 3D subject first.' : '';
+  $('#edit-mode').title = studio?.selectedModel() ? '' : splat ? 'Use Camera mode to change the view of a reconstructed subject.' : empty ? 'Load a 3D subject first.' : '';
   $('#mode-hint').hidden = !splat;
   $('#fit-frame').textContent = splat ? 'Return to Source Camera' : 'Fit to Frame';
   $('.eyebrow').textContent = `${splat ? 'Estimated Source Camera' : 'Scene Front'} · Y-Up · Perspective`;
@@ -1148,19 +1148,7 @@ $('#return-to-cast').onclick = () => run(async () => {
   if (!(glbScene || doc.source.kind === 'splat') || !doc.actors.length) return;
   const previous = clone(doc), rollback = begin();
   const actor = activeActor(doc) || doc.actors[0];
-  if (glbScene) {
-    const { kind, ...asset } = doc.source;
-    (doc.props ||= []).push({
-      id: `prop-${uuid()}`,
-      label: asset.label || 'Imported GLB',
-      asset,
-      // Standalone GLBs normalize to 20 units and props to 10.
-      transform: { x: 0, y: 0, z: 0, scale: doc.scale * 2, yaw: doc.front },
-      visible: true,
-      locked: false,
-    });
-  }
-  doc.source = { kind: 'human' };
+  enterCast(doc);
   doc.sourceStale = false;
   doc.camera = defaultScene().camera;
   bindActor(doc, actor.id);
@@ -1180,7 +1168,7 @@ $('#reference-file').onchange = event => run(async () => {
   begin(); const previous = doc.reference; doc.reference = asset; sourceChanged(doc, previous);
   if (doc.version !== 3 && doc.source.kind === 'splat') doc.source = { kind: 'empty' };
   await studio.restore(doc); changed();
-  if (requiresGuide() && doc.source.kind === 'empty' && !hasSceneImage() && currentGuide() === 'coarse') await reconstructPhoto();
+  if (requiresGuide() && doc.source.kind === 'empty' && !hasSceneObjects() && currentGuide() === 'coarse') await reconstructPhoto();
 });
 const referenceCamera = () => ({ azimuth: 0, elevation: 0, zoom: 1, offsetX: 0, offsetY: 0, offsetZ: 0 });
 const reconstructionModelLabels = {
@@ -1234,6 +1222,44 @@ $('#reconstruction-model-save').onclick = () => run(async () => {
   const config = await saveReconstructionModels(selections, doc.reconstruction.keepBackground);
   showModelStatus(config); toast('Model selection saved. Choose Rebuild 3D from Source to use it.');
 });
+function enterCast(scene) {
+  const source = scene.source;
+  if (source.kind === 'glb' || source.kind === 'splat') {
+    const [x, y, z] = source.position || [0, 0, 0];
+    (scene.props ||= []).push({
+      id: `prop-${uuid()}`,
+      label: source.label || source.reference?.label || (source.kind === 'glb' ? 'Imported GLB' : '3D Character'),
+      asset: clone(source),
+      transform: { x, y, z, scale: scene.scale * (source.kind === 'glb' ? 2 : 1), yaw: scene.front },
+      visible: true, locked: false,
+    });
+    scene.sourceStale = false;
+    if (source.kind === 'splat') scene.camera = defaultScene().camera;
+  }
+  scene.source = { kind: 'human' };
+}
+
+async function addPlacedReference(item, asset) {
+  const rollback = begin();
+  const previous = clone(doc);
+  const id = `prop-${uuid()}`, props = doc.props ||= [];
+  props.push({
+    id, label: item.label, asset,
+    transform: { x: props.length * 10, y: 0, z: 0, scale: 1, yaw: 0 },
+    visible: true, locked: false,
+  });
+  try { await studio.restoreProps(); }
+  catch (error) { doc = previous; studio.doc = doc; rollback?.(); throw error; }
+  if (doc.referenceLibrary) doc.referenceLibrary.mode = 'guided';
+  doc.conditioning.guide = 'coarse';
+  previewVisible = false;
+  setMode('position');
+  selectModel(id);
+  if (doc.source.kind === 'empty' && props.length === 1 && !canvasBackgroundAsset(doc)) studio.fit(true);
+  changed();
+  return true;
+}
+
 async function reconstructPhoto() {
   if (!doc.reference) return;
   clearTimeout(previewTimer);
@@ -1248,6 +1274,10 @@ async function reconstructPhoto() {
   try {
     const source = await reconstruct(reference, text => { $('#loading-text').textContent = text; }, true, keepBackground);
     if (doc.reference?.name !== reference.name) throw new Error('The source changed. Rebuild it again.');
+    if (doc.source.kind === 'human' || doc.source.kind === 'glb' || doc.props?.length) {
+      await addPlacedReference({ label: reference.label || '3D Character' }, source);
+      return;
+    }
     rollbackHistory = begin();
     if (doc.source.name !== source.name || !!doc.source.keep_background !== !!source.keep_background) doc.shots = [];
     doc.source = source; doc.front = 0; doc.scale = 1; doc.camera = referenceCamera();
@@ -1274,24 +1304,7 @@ $('#keep-background').onchange = () => {
 };
 $('#extract-coarse').onclick = () => run(reconstructPhoto);
 $('#preview-coarse').onclick = () => { previewVisible = true; refresh(); renderPreview(); };
-$('#import-glb').onclick = () => {
-  if (doc.source.kind === 'human') {
-    $('#actors-panel').open = true;
-    importModel();
-  } else $('#glb-file').click();
-};
-$('#glb-file').onchange = event => run(async () => {
-  const file = event.target.files[0]; event.target.value = ''; if (!file) return;
-  const asset = await upload(file), rollbackHistory = begin();
-  const previous = clone(doc); doc.source = { kind: 'glb', ...asset }; doc.front = 0; doc.scale = 1; doc.camera = defaultScene().camera;
-  try { await studio.restore(doc); studio.fit(); }
-  catch (e) {
-    doc = previous; rollbackHistory?.();
-    try { await studio.restore(doc); } catch { /* Keep the original GLB error. */ }
-    throw e;
-  }
-  changed(); toast('GLB loaded. Adjust its front alignment and scale under Scene and Composition.');
-});
+$('#import-glb').onclick = () => { $('#actors-panel').open = true; importModel(); };
 $('#animal-shapes').onclick = event => addAnimal(event.target.closest('button[data-shape]')?.dataset.shape);
 function addAnimal(shape, { label, onAdded } = {}) {
   return run(async () => {
@@ -1299,15 +1312,13 @@ function addAnimal(shape, { label, onAdded } = {}) {
     const rollbackHistory = begin();
     const previous = clone(doc);
     studio.syncPose();
-    const floorY = doc.source.kind === 'human' ? studio.grid.position.y + 0.03 : 0;
     const actor = createActor(doc.actors.length, { label: label || ANIMAL_SHAPES[shape], source: { kind: 'animal', shape }, animalPose: {} });
     doc.actors.push(actor);
-    doc.source = { kind: 'human' };
+    enterCast(doc);
     bindActor(doc, actor.id); doc.selectedActorIds = [actor.id];
     if (doc.conditioning.guide === 'pose') doc.conditioning.guide = 'coarse';
     try {
       await studio.restore(doc, { preserveView: !!onAdded && previous.source.kind === 'human' });
-      studio.grid.position.y = floorY - 0.03;
       studio.groundActors([actor.id]);
       if (!onAdded || previous.source.kind !== 'human') studio.fit();
       onAdded?.(actor);
@@ -1330,7 +1341,7 @@ $('#human').onclick = () => run(async () => {
   studio.syncPose();
   let person = doc.actors.find(actor => actor.source.kind === 'human');
   if (!person) { person = createActor(doc.actors.length); doc.actors.push(person); }
-  doc.source = { kind: 'human' };
+  enterCast(doc);
   bindActor(doc, person.id); doc.selectedActorIds = [person.id];
   try { await studio.restore(doc); await ensureHumanTools(); }
   catch (e) {
@@ -1696,7 +1707,7 @@ function readPendingReference() {
     begin(); const previous = doc.reference; doc.reference = reference.asset || null; sourceChanged(doc, previous);
     if (doc.version !== 3 && doc.source.kind === 'splat') doc.source = { kind: 'empty' };
     await studio.restore(doc); changed();
-    if (requiresGuide() && doc.reference && doc.source.kind === 'empty' && !hasSceneImage() && currentGuide() === 'coarse') await reconstructPhoto();
+    if (requiresGuide() && doc.reference && doc.source.kind === 'empty' && !hasSceneObjects() && currentGuide() === 'coarse') await reconstructPhoto();
   });
 }
 function readPendingStructure() {
@@ -1743,31 +1754,15 @@ function readPendingKeypoints() {
 }
 
 installActorsUI({ doc: () => doc, replace: value => { doc = value; }, studio: () => studio, run, begin, changed, refresh,
-  ensureHumanTools, askName, upload, captureGuide, toast, send, downloadURL: download, downloadBlob: download,
+  ensureHumanTools, enterCast, askName, upload, captureGuide, toast, send, downloadURL: download, downloadBlob: download,
   showScene: () => { previewVisible = false; setMode('camera'); },
   placeScene: () => { previewVisible = false; setMode('position'); },
   editScene: () => { previewVisible = false; setMode('edit'); refresh(); } });
 installReferencesUI({ doc: () => doc, sourceConnected: () => linkedReference.connected, run, begin, changed, askName, upload, send, toast,
   addCharacter, addAnimal, animalShapes: ANIMAL_SHAPES,
-  addSceneImage: item => run(async () => {
-    const rollback = begin();
-    const previous = clone(doc);
-    const id = `prop-${uuid()}`, props = doc.props ||= [];
-    props.push({
-      id, label: item.label, asset: clone(item.asset),
-      transform: { x: props.length * 2, y: 0, z: 0, scale: 1, yaw: 0 },
-      visible: true, locked: false,
-    });
-    try { await studio.restoreProps(); }
-    catch (error) { doc = previous; studio.doc = doc; rollback?.(); throw error; }
-    doc.referenceLibrary.mode = 'guided';
-    doc.conditioning.guide = 'coarse';
-    previewVisible = false;
-    setMode('position');
-    selectModel(id);
-    if (doc.source.kind === 'empty' && props.length === 1 && !canvasBackgroundAsset(doc)) studio.fit(true);
-    changed();
-    return true;
+  addSceneImage: (item, reconstructIn3D = false) => run(async () => {
+    const asset = reconstructIn3D ? await reconstruct(item.asset, text => { $('#status').textContent = text; }) : clone(item.asset);
+    return addPlacedReference(item, asset);
   }),
   clearSource: () => run(clearSourceImage),
   setSource: asset => run(async () => {

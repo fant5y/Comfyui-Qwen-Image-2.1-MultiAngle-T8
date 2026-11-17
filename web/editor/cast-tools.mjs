@@ -51,6 +51,6 @@ export function installCastTools(context) {
     await studio.restoreProps(); studio.setMode(studio.mode);
   });
   file.onchange = ()=>{const chosen=file.files[0];file.value='';if(!chosen)return;
-    mutate(async()=>{if(context.doc().source.kind!=='human')throw new Error('Switch to a mannequin scene before importing props.');const asset=await context.upload(chosen);const prop={id:`prop-${uuid()}`,label:chosen.name,asset,transform:{x:0,y:0,z:-5,scale:1,yaw:0},visible:true,locked:false};context.doc().props||=[];context.doc().props.push(prop);await context.studio().restoreProps();context.selectModel(prop.id);});
+    mutate(async()=>{const asset=await context.upload(chosen);const prop={id:`prop-${uuid()}`,label:chosen.name,asset,transform:{x:0,y:0,z:-5,scale:1,yaw:0},visible:true,locked:false};context.doc().props||=[];context.doc().props.push(prop);const studio=context.studio();await studio.restoreProps();context.selectModel(prop.id);if(context.doc().source.kind==='empty'&&context.doc().props.length===1)studio.fit(true);});
   };
 }

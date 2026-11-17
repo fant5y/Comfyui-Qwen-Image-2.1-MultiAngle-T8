@@ -255,13 +255,16 @@ function card(scene, item, manifest) {
     if (await context.addSceneImage(item)) chooseTab('objects');
   });
   sceneImage.disabled = character.disabled;
-  character.title = 'Use the photo as appearance guidance for a character.';
+  character.title = 'Assign this photo to a character as a visual reference for the generated image.';
   background.title = 'Use the photo as a frame-filling background in the coarse render.';
   sceneImage.title = 'Place the photo on a flat surface you can move, rotate, and resize.';
-  const uses = el('details', '', 'reference-actions');
-  uses.append(el('summary', 'Image Actions'), tools);
-  tools.append(character, sceneImage, background, source, replace, remove);
-  details.append(uses);
+  const rebuild = button('Add 3D Character', async () => {
+    if (await context.addSceneImage(item, true)) chooseTab('objects');
+  });
+  rebuild.disabled = character.disabled;
+  rebuild.title = 'Reconstruct this reference in 3D and add it alongside the current characters.';
+  tools.append(rebuild, character, sceneImage, background, source, replace, remove);
+  details.append(tools);
   entry.append(details);
   return entry;
 }

@@ -107,6 +107,7 @@ function disposeObject(root) {
 }
 
 function worldBounds(root) {
+  if (root.userData.splat) return root.userData.splat.bounds;
   root.updateMatrixWorld(true);
   root.traverse(object => {
     if (object.isSkinnedMesh) { object.skeleton.update(); object.computeBoundingBox(); }
@@ -366,16 +367,34 @@ export class StudioScene {
   async restoreProps() {
     this.propRoots ||= new Map(); const props = this.doc.props || [], ids = new Set(props.map(prop=>prop.id));
     if (!ids.has(this.selectedModelId)) { this.selectedModelId = null; this.modelJoint = null; }
-    for (const [id, root] of this.propRoots) if (!ids.has(id) || props.find(prop=>prop.id===id)?.asset.name !== root.userData.assetName) { disposeProp(root); this.propRoots.delete(id); }
+    for (const [id, root] of this.propRoots) if (!ids.has(id) || props.find(prop=>prop.id===id)?.asset.name !== root.userData.assetName) { await root.userData.splat?.dispose(); disposeProp(root); this.propRoots.delete(id); }
     for (const prop of props) {
       let root = this.propRoots.get(prop.id);
-      if (this.doc.source.kind !== 'human' && !prop.asset.name.endsWith('.png')) { if (root) root.visible = false; continue; }
-      if (!root) { root = await loadProp(prop.asset); root.userData.assetName = prop.asset.name; root.userData.modelId = prop.id; this.propRoots.set(prop.id,root); this.viewer.scene.add(root); }
-      placeProp(root, prop, this.doc.source.kind === 'human' || prop.asset.name.endsWith('.png'));
+      if (!root) {
+        if (prop.asset.name.endsWith('.ply')) {
+          const splat = new SplatScene(this.viewer);
+          await splat.load(prop.asset);
+          root = new THREE.Group();
+          root.add(splat.root);
+          root.userData.splat = splat;
+          root.userData.joints = [];
+          const bounds = splat.bounds;
+          const proxy = new THREE.Mesh(new THREE.BoxGeometry(...bounds.getSize(new THREE.Vector3()).toArray()), new THREE.MeshBasicMaterial({ visible: false }));
+          proxy.position.copy(bounds.getCenter(new THREE.Vector3()));
+          proxy.visible = false;
+          root.add(proxy);
+          root.userData.pickProxy = proxy;
+        } else root = await loadProp(prop.asset);
+        root.userData.assetName = prop.asset.name;
+        root.userData.modelId = prop.id;
+        this.propRoots.set(prop.id, root);
+        this.viewer.scene.add(root);
+      }
+      placeProp(root, prop);
     }
   }
 
-  updateProp(prop) { const root = this.propRoots.get(prop.id); if (root) { placeProp(root, prop, this.doc.source.kind === 'human' || prop.asset.name.endsWith('.png')); this.viewer.requestRender(); } }
+  updateProp(prop) { const root = this.propRoots.get(prop.id); if (root) { placeProp(root, prop); this.viewer.requestRender(); } }
 
   async selectActor(id) {
     if (id === this.doc.activeActorId || this.doc.source.kind !== 'human') return;
@@ -518,7 +537,7 @@ export class StudioScene {
         : doc.source.kind === 'empty' ? new THREE.Box3(new THREE.Vector3(-10, 0, -10), new THREE.Vector3(10, 20, 10))
         : doc.source.kind === 'human' ? this.humanBounds() : worldBounds(this.animal?.root || this.glb);
       if (bounds.isEmpty()) bounds.set(new THREE.Vector3(-10, 0, -10), new THREE.Vector3(10, 20, 10));
-      this.grid.position.y = bounds.min.y - 0.03;
+      this.grid.position.y = (doc.source.kind === 'human' || doc.source.kind === 'empty' ? 0 : bounds.min.y) - 0.03;
       this.ring.position.copy(this.baseTarget);
       this.ring.visible = doc.source.kind !== 'splat' && doc.source.kind !== 'empty';
       this.setMode(this.mode);
@@ -618,8 +637,7 @@ export class StudioScene {
   }
 
   selectedModel() {
-    return this.doc.props?.find(model => model.id === this.selectedModelId
-      && (this.doc.source.kind === 'human' || model.asset.name.endsWith('.png')));
+    return this.doc.props?.find(model => model.id === this.selectedModelId);
   }
 
   modelJoints() {
@@ -637,7 +655,7 @@ export class StudioScene {
 
   canPlaceScene() {
     return ['human', 'glb'].includes(this.doc?.source.kind)
-      || this.doc?.props?.some(prop => prop.visible !== false && prop.asset.name.endsWith('.png'))
+      || this.doc?.props?.some(prop => prop.visible !== false)
       || (this.doc?.sceneBackground?.visible !== false && !!canvasBackgroundAsset(this.doc || {}));
   }
 
@@ -691,7 +709,7 @@ export class StudioScene {
 
   setMode(mode) {
     this.finishDrag?.();
-    if ((mode === 'position' && !this.canPlaceScene()) || (mode === 'edit' && ['splat', 'empty'].includes(this.doc.source.kind))) mode = 'camera';
+    if ((mode === 'position' && !this.canPlaceScene()) || (mode === 'edit' && ['splat', 'empty'].includes(this.doc.source.kind) && !this.selectedModel())) mode = 'camera';
     this.mode = mode;
     const actor = activeActor(this.doc);
     const model = this.selectedModel();
@@ -753,16 +771,16 @@ export class StudioScene {
     const backgroundAsset = !options.depth && !options.canny && !options.actorIds && this.doc.sceneBackground?.visible !== false && canvasBackgroundAsset(this.doc);
     const backgroundPlane = backgroundAsset ? await this.loadSceneBackground() : null;
     if (backgroundAsset && !backgroundPlane) throw new Error('Could not load the scene background. Replace or clear the reference image.');
-    const images = !options.actorIds && !options.depth && !options.canny
-      ? (this.doc.props || []).filter(prop => prop.asset.name.endsWith('.png'))
-        .map(prop => this.propRoots.get(prop.id)).filter(root => root?.visible) : [];
+    const props = !options.actorIds ? [...this.propRoots.values()].filter(root => root.visible &&
+      (!(options.depth || options.canny) || root.userData.assetName.endsWith('.glb'))) : [];
     await this.waitForCaptureReady();
     const v = this.viewer;
     const content = this.splat?.root || this.animal?.root || (this.doc.source.kind === 'glb' ? this.glb : v.skinnedMesh);
     const contents = this.doc.source.kind === 'human' && this.actorRoots?.size
-      ? [...(options.actorIds ? this.doc.actors.filter(actor => options.actorIds.includes(actor.id)) : visibleActors(this.doc)).map(actor => this.actorRoots.get(actor.id)),
-        ...(!options.actorIds ? (this.doc.props || []).filter(prop => prop.visible !== false && !prop.asset.name.endsWith('.png')).map(prop => this.propRoots.get(prop.id)) : [])].filter(Boolean) : this.doc.source.kind === 'empty' ? [] : [content].filter(Boolean);
-    for (const image of images) if (!contents.includes(image)) contents.push(image);
+      ? (options.actorIds ? this.doc.actors.filter(actor => options.actorIds.includes(actor.id)) : visibleActors(this.doc)).map(actor => this.actorRoots.get(actor.id)).filter(Boolean)
+      : this.doc.source.kind === 'empty' ? [] : [content].filter(Boolean);
+    contents.push(...props);
+    const splats = [this.splat, ...props.map(root => root.userData.splat)].filter(Boolean);
     if (!contents.length && !backgroundPlane) throw new Error('Make a scene object visible or add an image to the scene.');
     if (options.depth && this.splat) throw new Error('Use DA3 source depth for a TripoSplat reconstruction.');
     const visibility = v.scene.children.map(object => [object, object.visible]);
@@ -776,16 +794,17 @@ export class StudioScene {
     const actorColors = [];
     let depthMaterial = null, cannyMaterial = null, captureBackground = null;
     this.capturing = true;
-    let restoreSplat = null, restoreBackgroundMap = null;
+    const restoreSplats = [];
+    let restoreBackgroundMap = null;
     try {
       if (v._renderFrame) { cancelAnimationFrame(v._renderFrame); v._renderFrame = null; }
       if (this.splat) this.splat.configureCamera(v.captureCamera, this.doc, width, height);
       else this.configureCapture(width, height);
       // Pointer input may update the live cameras while sorting awaits a worker.
       const camera = v.captureCamera.clone();
-      if (this.splat) {
-        restoreSplat = this.splat.beginOffscreenCapture(width, height);
-        await this.splat.prepareCapture(v.renderer, camera);
+      for (const splat of splats) {
+        restoreSplats.push(splat.beginOffscreenCapture(width, height));
+        await splat.prepareCapture(v.renderer, camera);
       }
       // Positive content selection excludes every editor overlay, even newly added helpers.
       for (const [object] of visibility) object.visible = contents.includes(object) || !!object.isLight;
@@ -810,7 +829,9 @@ export class StudioScene {
         for (const model of this.doc.props || []) {
           if (model.visible === false || !model.editorColor || model.asset.name.endsWith('.png')) continue;
           const materials = new Set();
-          this.propRoots.get(model.id)?.traverse(mesh => {
+          const root = this.propRoots.get(model.id);
+          if (!root || root.userData.splat) continue;
+          root.traverse(mesh => {
             if (mesh.isMesh) for (const material of [].concat(mesh.material || [])) if (material.color) materials.add(material);
           });
           for (const material of materials) {
@@ -821,7 +842,7 @@ export class StudioScene {
       }
       if (options.depth) {
         camera.updateMatrixWorld(true);
-        const bounds = this.doc.source.kind === 'human' ? this.humanBounds() : worldBounds(content);
+        const bounds = this.doc.source.kind === 'human' ? this.humanBounds() : contents.reduce((box, root) => box.union(worldBounds(root)), new THREE.Box3());
         const depths = [];
         for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z])
           depths.push(-new THREE.Vector3(x, y, z).applyMatrix4(camera.matrixWorldInverse).z);
@@ -852,8 +873,12 @@ export class StudioScene {
       if (options.subjects && ['human', 'empty'].includes(this.doc.source.kind)) {
         const ids = [...visibleActors(this.doc), ...(this.doc.props || [])].map(item => item.id);
         const subjects = ids.map(id => ({ id, root: this.actorRoots.get(id) || this.propRoots.get(id) }))
-          .filter(({ root }) => contents.includes(root));
-        options.subjects(captureSubjectIds(v.renderer, v.scene, camera, width, height, subjects, backgroundPlane));
+          .filter(({ root }) => contents.includes(root) && !root.userData.splat);
+        const splatRoots = props.filter(root => root.userData.splat);
+        try {
+          for (const root of splatRoots) root.visible = false;
+          options.subjects(captureSubjectIds(v.renderer, v.scene, camera, width, height, subjects, backgroundPlane));
+        } finally { for (const root of splatRoots) root.visible = true; }
       }
       return capturePNG(v.renderer, v.scene, camera, width, height,
         this.splat || options.depth ? THREE.NoColorSpace : THREE.SRGBColorSpace);
@@ -864,7 +889,7 @@ export class StudioScene {
       v.scene.overrideMaterial = overrideMaterial; depthMaterial?.dispose(); cannyMaterial?.dispose();
       restoreBackgroundMap?.(); captureBackground?.dispose();
       for (const [material, color] of actorColors) material.color.copy(color);
-      try { restoreSplat?.(); }
+      try { for (const restore of restoreSplats.reverse()) restore(); }
       finally { this.capturing = false; this.updateShot(); this.loadSceneBackground(); }
     }
   }
@@ -1021,7 +1046,7 @@ export class StudioScene {
     const propMeshes = [];
     if (this.doc.conditioning?.poseOcclusion === 'visible') for (const prop of this.doc.props || []) {
       const root = prop.visible !== false && this.propRoots?.get(prop.id); if (!root) continue;
-      root.updateMatrixWorld(true); root.traverseVisible(object => { if (object.isMesh) propMeshes.push(object); });
+      root.updateMatrixWorld(true); root.traverseVisible(object => { if (object.isMesh && !root.userData.splat) propMeshes.push(object); });
     }
     const raycaster = new THREE.Raycaster();
     return actors.map(actor => {
@@ -1205,7 +1230,8 @@ export class StudioScene {
       const mesh = visibleActors(this.doc).map(actor => this.actorMesh(actor.id)).filter(Boolean);
       for (const item of mesh) { item.updateMatrixWorld(true); item.skeleton.update(); item.computeBoundingBox(); item.computeBoundingSphere(); }
       const animals = visibleActors(this.doc).map(actor => this.animalActors.get(actor.id)?.root).filter(Boolean);
-      const models = [...(this.propRoots?.values() || [])].filter(root => root.visible);
+      const models = [...(this.propRoots?.values() || [])].filter(root => root.visible)
+        .map(root => root.userData.pickProxy || root);
       return [...raycaster.intersectObjects(mesh, false), ...raycaster.intersectObjects([...animals, ...models], true)]
         .sort((first, second) => first.distance - second.distance)[0];
     };
@@ -1434,7 +1460,8 @@ export class StudioScene {
     this.morphCache?.clear(); this.morphCacheBytes = 0; this.humanStatic = null; this.cachedPack = null; this.pack = null;
     // GLB props, the main GLB and line helpers remain attached: the viewer owns
     // their final disposal and deduplicates shared geometry/material/texture.
-    this.propRoots?.clear();
+    for (const root of this.propRoots.values()) root.userData.splat?.dispose();
+    this.propRoots.clear();
     this.viewer.dispose();
     this.glb = null; this.glbName = null;
     this.grid = this.ring = this.photoFrame = this.shotHelper = null;

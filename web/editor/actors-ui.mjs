@@ -1,7 +1,7 @@
 import { createActor, activeActor, ensureActors, bindActor, cloneActor, removeActor, editableActors, actorSeed, applySceneTemplate } from './actors.mjs?v=20261116en';
 import { randomPose } from './poses.mjs?v=20261116en';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { installCastTools } from './cast-tools.mjs?v=20261116canvasprompt';
+import { installCastTools } from './cast-tools.mjs?v=20261117sceneassets';
 import { poseCopyIssue, ORDER } from './openpose.mjs?v=20261116en';
 import { guideSource } from './guides.mjs?v=20261116en';
 import { addReference, newUse } from './reference-library.mjs?v=20261116canvasprompt';
@@ -27,7 +27,7 @@ export function addCharacter({ label, onAdded } = {}) {
   return atomic(async () => {
     const doc = context.doc(), wasEmpty = doc.source.kind === 'empty' && !doc.actors?.length;
     context.studio().syncPose(); ensureActors(doc); const actor = createActor(doc.actors.length, label ? { label } : {});
-    doc.actors.push(actor); doc.activeActorId = actor.id; doc.selectedActorIds = [actor.id]; doc.source = { kind: 'human' };
+    doc.actors.push(actor); doc.activeActorId = actor.id; doc.selectedActorIds = [actor.id]; context.enterCast(doc);
     onAdded?.(actor);
     bindActor(doc); if (wasEmpty) { doc.conditioning.model = 'base'; doc.conditioning.identityMode = 'actors'; doc.conditioning.imageOrder = 'guide-first'; }
     const studio = context.studio();
@@ -237,12 +237,22 @@ export function refreshActorsUI() {
   for (const element of identity.children) element.hidden = (doc.version === 3 || !!model) && element !== $('actor-description').closest('label');
   $('actor-identities').closest('label').hidden = doc.version === 3;
   const staticGuide = doc.conditioning.promptMode !== 'custom' && ['image', 'canny-image'].includes(guideSource(doc).kind);
-  $('actors-panel').classList.toggle('cast-inactive', !human && !entries.some(entry => entry.model && entry.item.asset.name.endsWith('.png')));
+  $('actors-panel').classList.toggle('cast-inactive', !human && !entries.some(entry => entry.model));
   $('read-actor-references').hidden = doc.version === 3 || !references.length;
-  const key = JSON.stringify([human, entries.map(({ item: { id, label, editorColor, visible, locked, identity } }) => ({ id, label, editorColor, visible, locked, identity })), doc.activeActorId, doc.selectedActorIds, model?.id, references]);
+  const standalone = ['glb', 'splat'].includes(doc.source.kind);
+  const sourceLabel = standalone && (doc.source.label || doc.source.reference?.label || (doc.source.kind === 'glb' ? 'Imported GLB' : '3D Character'));
+  const key = JSON.stringify([sourceLabel, human, entries.map(({ item: { id, label, editorColor, visible, locked, identity } }) => ({ id, label, editorColor, visible, locked, identity })), doc.activeActorId, doc.selectedActorIds, model?.id, references]);
   if (key !== renderKey || doc !== renderedDoc || entries.some(({ item }, index) => item !== renderedRoles[index])) {
     renderKey = key; renderedDoc = doc; renderedRoles = entries.map(({ item }) => item);
     $('actor-list').replaceChildren();
+    if (sourceLabel) {
+      const card = document.createElement('div');
+      card.className = 'actor-card';
+      const choose = button(sourceLabel, () => { clearSelection(); context.showScene(); context.refresh(); }, 'Show this source in the 3D workspace');
+      choose.className = 'actor-name';
+      card.append(choose);
+      $('actor-list').append(card);
+    }
     for (const [index, entry] of entries.entries()) {
       const item = entry.item;
       const selected = model ? model.id === item.id : doc.selectedActorIds?.includes(item.id);
@@ -284,7 +294,7 @@ export function refreshActorsUI() {
         move.disabled = destination < 0 || destination >= entries.length;
         controls.append(move);
       }
-      card.inert = !human && !(entry.model && item.asset.name.endsWith('.png'));
+      card.inert = !human && !entry.model;
       card.append(choose, controls);
       $('actor-list').append(card);
     }
@@ -294,7 +304,7 @@ export function refreshActorsUI() {
     if (actor?.identity.inputKey && !references.some(ref => ref.inputKey === actor.identity.inputKey)) selector.append(new Option(`${actor.identity.inputKey} · Saved assignment`, actor.identity.inputKey));
     selector.value = actor?.identity.inputKey || (actor?.identity.asset ? actor.identity.asset.name === doc.reference?.name ? 'reference' : 'asset' : 'text');
   }
-  $('actor-count').textContent = `${entries.filter(({ item }) => item.visible !== false).length} / ${entries.length}`;
+  $('actor-count').textContent = `${entries.filter(({ item }) => item.visible !== false).length + Number(standalone)} / ${entries.length + Number(standalone)}`;
   const selected = model || (doc.selectedActorIds?.includes(actor?.id) ? actor : null);
   $('active-actor-controls').hidden = !selected || (!human && !model);
   $('clone-actor').disabled = $('delete-actor').disabled = !selected || (!human && !model);
