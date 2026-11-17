@@ -10,6 +10,7 @@ export const ANIMAL_SHAPES = {
 const Y = new THREE.Vector3(0, 1, 0);
 // Keep the translation in the same triplet format used by saved animal poses.
 const PELVIS_OFFSET = 'Pelvis offset';
+const MODEL_ROTATION = 'Model Rotation';
 
 export class AnimalMannequin {
   constructor(shape) {
@@ -25,6 +26,8 @@ export class AnimalMannequin {
     this.jointMaterial = new THREE.MeshBasicMaterial({ color: '#a1ddea', depthTest: false });
     this.targetMaterial = new THREE.MeshBasicMaterial({ color: '#ffb64c', depthTest: false });
     this.selectedMaterial = new THREE.MeshBasicMaterial({ color: '#ffffff', depthTest: false });
+    this.modelSelectedMaterial = new THREE.MeshBasicMaterial({ color: '#00ffff', depthTest: false, depthWrite: false });
+    this.hoverMaterial = new THREE.MeshBasicMaterial({ color: '#ffd666', depthTest: false, depthWrite: false });
     if (shape === 'feline') {
       const profile = new THREE.Shape();
       profile.moveTo(-0.38, -0.33);
@@ -43,6 +46,7 @@ export class AnimalMannequin {
     this.pelvisLegs = [...this.targets].filter(([, { chain }]) => chain[0].parent === pelvis);
     const leg = this.pelvisLegs[0][1].chain;
     this.maxPelvisDrop = Math.min(Math.PI, leg.slice(1).reduce((length, joint) => length + joint.position.length(), 0) * 0.65);
+    this.joints.set(MODEL_ROTATION, this.root);
     for (const [name] of this.joints) this.marker(name, false);
     for (const [name] of this.targets) this.marker(name, true);
     this.update();
@@ -317,14 +321,30 @@ export class AnimalMannequin {
     this.updateSkins();
   }
 
+  markerMaterial(marker) {
+    const { name, target } = marker.userData;
+    if (!target && name === this.selectedMarker) return name === MODEL_ROTATION ? this.modelSelectedMaterial : this.selectedMaterial;
+    if (marker === this.hoveredMarker) return this.hoverMaterial;
+    return target || name === MODEL_ROTATION ? this.targetMaterial : this.jointMaterial;
+  }
+
+  setHoveredMarker(marker) {
+    const previous = this.hoveredMarker;
+    if (previous === marker) return false;
+    this.hoveredMarker = marker;
+    if (previous) previous.material = this.markerMaterial(previous);
+    if (marker) marker.material = this.markerMaterial(marker);
+    return true;
+  }
+
   update(selected = '', color) {
+    this.selectedMarker = selected;
     if (color) this.colors[0].color.set(color);
     this.root.updateMatrixWorld(true);
     this.updateSkins();
     for (const [marker, joint] of this.markers) {
       joint.getWorldPosition(marker.position);
-      marker.material = marker.userData.target ? this.targetMaterial
-        : marker.userData.name === selected ? this.selectedMaterial : this.jointMaterial;
+      marker.material = this.markerMaterial(marker);
     }
     this.handles.updateMatrixWorld(true);
   }
@@ -486,6 +506,6 @@ export class AnimalMannequin {
     this.sphere.dispose();
     for (const { geometry } of this.skins) geometry.dispose();
     this.catEarGeometry?.dispose();
-    for (const material of [...this.colors, this.jointMaterial, this.targetMaterial, this.selectedMaterial]) material.dispose();
+    for (const material of [...this.colors, this.jointMaterial, this.targetMaterial, this.selectedMaterial, this.modelSelectedMaterial, this.hoverMaterial]) material.dispose();
   }
 }

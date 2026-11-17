@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.mjs';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117owlwings';
+import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117animalroot';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 import { PoseViewerCore } from '../vendor/vnccs_pose_studio_core.mjs?v=20261031resize';
 import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs?v=20261116bodyrange';
@@ -659,20 +659,15 @@ export class StudioScene {
     const target = this.placementTarget();
     const root = target?.root;
     if (root) {
-      const rotate = this.placementRotation && !!target.item;
-      transform.setMode(rotate ? 'rotate' : 'translate');
+      transform.setMode('translate');
       transform.setSpace('world');
-      transform.showX = transform.showZ = !rotate || target.model;
       if (transform.object !== root) transform.attach(root);
     } else if (transform.object) transform.detach();
     this.viewer.requestRender();
   }
 
   interactionSnapshot() {
-    if (this.mode === 'position') {
-      const object = this.viewer.transform.object;
-      return JSON.stringify(object && [object.position.toArray(), object.quaternion.toArray()]);
-    }
+    if (this.mode === 'position') return JSON.stringify(this.viewer.transform.object?.position.toArray());
     return JSON.stringify(this.modelRotation() ?? this.animal?.pose() ?? this.viewer.getPose());
   }
 
@@ -682,13 +677,6 @@ export class StudioScene {
     const { x, y, z } = target.root.position;
     if (target.item) {
       Object.assign(target.item.transform, { x, y, z });
-      if (this.viewer.transform.mode === 'rotate') {
-        const rotation = new THREE.Euler().setFromQuaternion(target.root.quaternion, 'YXZ');
-        const [pitch, yaw, roll] = [rotation.x, rotation.y, rotation.z].map(degrees);
-        target.item.transform.yaw = yaw;
-        if (target.model) Object.assign(target.item.transform, { pitch, roll });
-        else this.doc.front = yaw;
-      }
       if (target.model) this.updateProp(target.item);
       else this.updateActorTransform(target.item);
     } else if (this.selectedPlacementAsset === 'background') {
@@ -706,11 +694,13 @@ export class StudioScene {
     const actor = activeActor(this.doc);
     const model = this.selectedModel();
     const editable = !model && !!actor && this.doc.selectedActorIds?.includes(actor.id) && this.doc.source.kind === 'human' && !actor.locked && actor.visible !== false;
-    for (const animal of this.animalActors.values()) animal.handles.visible = mode === 'edit' && animal === this.animal && editable;
+    for (const animal of this.animalActors.values()) {
+      animal.handles.visible = mode === 'edit' && animal === this.animal && editable;
+      animal.setHoveredMarker(null);
+    }
     const editHuman = editable && !this.animal;
     this.viewer.setIKMode(mode === 'edit' && editHuman);
     this.viewer.transform.detach();
-    this.viewer.transform.showX = this.viewer.transform.showZ = true;
     this.viewer.transform.setSize(this.animal && !model ? 0.46 : 0.8);
     this.viewer.transform.visible = mode === 'edit' && editHuman;
     if (mode === 'edit' && model && !model.locked && model.visible !== false) {
@@ -1304,7 +1294,15 @@ export class StudioScene {
       canvas.setPointerCapture(event.pointerId);
     }, true);
     canvas.addEventListener('auxclick', event => { if (this.mode === 'camera' && event.button === 1) event.preventDefault(); });
+    canvas.addEventListener('pointerleave', () => {
+      if (this.animal?.setHoveredMarker(null)) this.viewer.requestRender();
+    });
     canvas.addEventListener('pointermove', event => {
+      const rig = this.animal;
+      if (rig?.handles.visible && !drag && !event.buttons && !this.viewer.transform.dragging) {
+        const hit = pickRay(event).intersectObjects(rig.handles.children, false)[0];
+        if (rig.setHoveredMarker(hit?.object || null)) this.viewer.requestRender();
+      }
       if (this.mode === 'camera' || drag) event.stopImmediatePropagation();
       if (!drag || event.pointerId !== drag.pointerId) return;
       if (drag.animal && !drag.changed && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 3) return;

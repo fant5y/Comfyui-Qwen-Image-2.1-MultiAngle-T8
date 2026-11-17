@@ -1,5 +1,5 @@
-import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117owlwings';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117draftguard';
+import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117animalroot';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117animalroot';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261117guideprompt';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117guideprompt';
@@ -289,15 +289,10 @@ function refresh() {
   $('#pose-category').value = (doc.randomMaster || doc.poseRandom)?.category || 'mixed';
   if (document.activeElement !== $('#pose-seed')) $('#pose-seed').value = (doc.randomMaster || doc.poseRandom)?.seed || 0;
   for (const id of ['shot-shelf', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
-  const placementRotate = $('#placement-rotate');
-  placementRotate.hidden = previewVisible || studio?.mode !== 'position';
-  placementRotate.disabled = !studio?.placementTarget()?.item;
-  placementRotate.setAttribute('aria-pressed', String(!!studio?.placementRotation && !placementRotate.disabled));
-  placementRotate.classList.toggle('active', placementRotate.getAttribute('aria-pressed') === 'true');
   $('#stage-help').textContent = previewVisible ? staticGuide ? 'Source composition and structure · Apply to output this guide' : 'Guide from the current camera · Switch to 3D Workspace to adjust the view'
-    : studio?.mode === 'position' ? 'Select an object · Drag an axis to move or a ring to rotate · Right-drag to orbit · Middle-drag to pan'
+    : studio?.mode === 'position' ? 'Select an object · Drag an axis to move it · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' && studio.selectedModel() ? 'Drag the rotation rings · Right-drag to orbit · Middle-drag to pan'
-    : studio?.mode === 'edit' && studio.animal ? 'Select a blue joint for rotation rings · Drag gold handles to pose limbs · Right-drag to orbit · Middle-drag to pan'
+    : studio?.mode === 'edit' && studio.animal ? 'Select a joint or the dot under the animal for rotation rings · Drag gold limb handles to pose · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan'
       : 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom';
   for (const control of controls.values()) control.refresh();
@@ -696,7 +691,7 @@ function setMode(mode) {
   $('#camera-mode').setAttribute('aria-pressed', String(mode === 'camera')); $('#edit-mode').setAttribute('aria-pressed', String(mode === 'edit'));
   $('#use-view').hidden = mode !== 'edit';
   $('#stage-help').textContent = mode === 'camera' ? 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom'
-    : mode === 'position' ? 'Select an object · Drag an axis to move or a ring to rotate · Right-drag to orbit · Middle-drag to pan'
+    : mode === 'position' ? 'Select an object · Drag an axis to move it · Right-drag to orbit · Middle-drag to pan'
     : studio.selectedModel() ? 'Drag the rotation rings · Right-drag to orbit · Middle-drag to pan'
     : studio.animal ? 'Drag Pelvis to lower the hips · Drag knees or elbows to steer the bend · Click a joint for rotation rings'
     : doc.source.kind === 'human' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan · Camera stays in place'
@@ -706,11 +701,6 @@ $('#view-output').onclick = () => { previewVisible = true; refresh(); renderPrev
 $('#view-scene').onclick = () => { previewVisible = false; setMode(studio.mode); refresh(); };
 $('#camera-mode').onclick = () => setMode('camera'); $('#edit-mode').onclick = () => setMode('edit');
 $('#position-mode').onclick = () => { previewVisible = false; setMode('position'); refresh(); };
-$('#placement-rotate').onclick = () => {
-  studio.placementRotation = !studio.placementRotation;
-  studio.updatePlacementGizmo();
-  refresh();
-};
 $('#use-view').onclick = () => { begin(); studio.currentViewAsShot(); setMode('camera'); changed(); };
 $('#fit-frame').onclick = () => { begin(); studio.fit(); changed(); };
 document.querySelectorAll('[data-angle]').forEach(button => { button.onclick = () => { begin(); doc.camera.azimuth = Number(button.dataset.angle); doc.camera.elevation = 0; studio.updateShot(); changed(); }; });
