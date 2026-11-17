@@ -25,9 +25,7 @@ export class AnimalMannequin {
     this.colors = ['#c8b598', '#eadbc4', '#69584c'].map(color => new THREE.MeshStandardMaterial({ color }));
     this.jointMaterial = new THREE.MeshBasicMaterial({ color: '#a1ddea', depthTest: false });
     this.targetMaterial = new THREE.MeshBasicMaterial({ color: '#ffb64c', depthTest: false });
-    this.selectedMaterial = new THREE.MeshBasicMaterial({ color: '#ffffff', depthTest: false });
-    this.modelSelectedMaterial = new THREE.MeshBasicMaterial({ color: '#00ffff', depthTest: false, depthWrite: false });
-    this.hoverMaterial = new THREE.MeshBasicMaterial({ color: '#ffd666', depthTest: false, depthWrite: false });
+    this.activeMaterial = new THREE.MeshBasicMaterial({ color: '#00ffff', depthTest: false, depthWrite: false });
     if (shape === 'feline') {
       const profile = new THREE.Shape();
       profile.moveTo(-0.38, -0.33);
@@ -321,30 +319,55 @@ export class AnimalMannequin {
     this.updateSkins();
   }
 
-  markerMaterial(marker) {
+  markerGroup(name) {
+    const joint = this.joints.get(name);
+    const group = new Set(joint ? [joint] : []);
+    for (const [key, { chain, tip }] of this.targets) {
+      if (key === name || chain.includes(joint) || (name === 'Pelvis' && chain[0].parent === joint)) {
+        for (const member of chain) group.add(member);
+        group.add(tip);
+      }
+    }
+    return group;
+  }
+
+  markerMaterial(marker, joint) {
     const { name, target } = marker.userData;
-    if (!target && name === this.selectedMarker) return name === MODEL_ROTATION ? this.modelSelectedMaterial : this.selectedMaterial;
-    if (marker === this.hoveredMarker) return this.hoverMaterial;
+    const active = this.draggedJoints
+      ? this.draggedJoints.has(joint)
+      : this.selectedJoints?.has(joint) || this.hoveredJoints?.has(joint);
+    if (active) return this.activeMaterial;
     return target || name === MODEL_ROTATION ? this.targetMaterial : this.jointMaterial;
   }
 
   setHoveredMarker(marker) {
-    const previous = this.hoveredMarker;
-    if (previous === marker) return false;
+    if (this.hoveredMarker === marker) return false;
     this.hoveredMarker = marker;
-    if (previous) previous.material = this.markerMaterial(previous);
-    if (marker) marker.material = this.markerMaterial(marker);
+    this.hoveredJoints = this.markerGroup(marker?.userData.name);
+    this.refreshMarkerMaterials();
     return true;
   }
 
+  setDraggedMarker(name) {
+    this.draggedJoints = name ? this.markerGroup(name) : null;
+    this.refreshMarkerMaterials();
+  }
+
+  refreshMarkerMaterials() {
+    for (const [marker, joint] of this.markers) marker.material = this.markerMaterial(marker, joint);
+  }
+
   update(selected = '', color) {
-    this.selectedMarker = selected;
+    if (this.selectedMarker !== selected) {
+      this.selectedMarker = selected;
+      this.selectedJoints = this.markerGroup(selected);
+    }
     if (color) this.colors[0].color.set(color);
     this.root.updateMatrixWorld(true);
     this.updateSkins();
     for (const [marker, joint] of this.markers) {
       joint.getWorldPosition(marker.position);
-      marker.material = this.markerMaterial(marker);
+      marker.material = this.markerMaterial(marker, joint);
     }
     this.handles.updateMatrixWorld(true);
   }
@@ -506,6 +529,6 @@ export class AnimalMannequin {
     this.sphere.dispose();
     for (const { geometry } of this.skins) geometry.dispose();
     this.catEarGeometry?.dispose();
-    for (const material of [...this.colors, this.jointMaterial, this.targetMaterial, this.selectedMaterial, this.modelSelectedMaterial, this.hoverMaterial]) material.dispose();
+    for (const material of [...this.colors, this.jointMaterial, this.targetMaterial, this.activeMaterial]) material.dispose();
   }
 }

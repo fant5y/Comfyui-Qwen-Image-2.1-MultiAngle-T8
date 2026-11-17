@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.mjs';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117animalroot';
+import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117posegestures';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 import { PoseViewerCore } from '../vendor/vnccs_pose_studio_core.mjs?v=20261031resize';
 import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs?v=20261116bodyrange';
@@ -1156,10 +1156,17 @@ export class StudioScene {
         finally { beginning = false; }
       }
     };
-    const end = (updateControls = true) => {
+    const end = (updateControls = true, click = false) => {
       if (!drag || beginning) return false;
-      const changed = drag.changed; drag = null;
-      if (changed) this.callbacks.change(true, updateControls);
+      const finished = drag; drag = null;
+      if (finished.animal && finished.changed) {
+        finished.animal.setHoveredMarker(null);
+        finished.animal.setDraggedMarker(null);
+        this.callbacks.select?.('', false);
+      } else if (finished.animal && click) {
+        this.callbacks.select?.(finished.selection, updateControls);
+      }
+      if (finished.changed) this.callbacks.change(true, updateControls);
       return true;
     };
     this.finishDrag = (updateControls = true) => {
@@ -1214,20 +1221,21 @@ export class StudioScene {
         if (hit) {
           event.stopImmediatePropagation(); event.preventDefault();
           const { name, target } = hit.object.userData;
-          this.callbacks.select?.(target ? name + ' root' : name);
-          const pose = this.animal.pose();
-          const joint = this.animal.joints.get(name);
-          const limbBend = this.animal.isLimbBend(joint);
-          drag = { pointerId: event.pointerId, animal: this.animal, joint, pose, x: event.clientX, y: event.clientY };
-          if (target || limbBend || name === 'Pelvis') {
+          const animal = this.animal;
+          const joint = animal.joints.get(name);
+          const terminalTarget = [...animal.targets].find(([, { chain }]) => chain.at(-1) === joint)?.[0];
+          const animalTarget = target ? name : terminalTarget;
+          const selection = target ? name + ' tip' : name;
+          drag = { pointerId: event.pointerId, animal, joint, name, selection, x: event.clientX, y: event.clientY };
+          if (animalTarget || animal.isLimbBend(joint) || name === 'Pelvis') {
             const center = hit.object.position.clone();
             const normal = this.viewer.camera.getWorldDirection(new THREE.Vector3());
             const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center);
             const point = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
-            if (!point) { drag = null; return; }
-            Object.assign(drag, { plane, offset: center.sub(point), animalTarget: target ? name : null });
-            if (name === 'Pelvis') {
-              drag.footLimits = this.animal.pelvisFootLimits(this.grid.position.y + 0.03);
+            if (point) {
+              const anchor = animalTarget ? animal.targets.get(animalTarget).tip.getWorldPosition(new THREE.Vector3()) : center;
+              Object.assign(drag, { plane, offset: anchor.sub(point), animalTarget, pose: animal.pose() });
+              if (name === 'Pelvis') drag.footLimits = animal.pelvisFootLimits(this.grid.position.y + 0.03);
             }
           }
           canvas.setPointerCapture(event.pointerId);
@@ -1305,27 +1313,18 @@ export class StudioScene {
       }
       if (this.mode === 'camera' || drag) event.stopImmediatePropagation();
       if (!drag || event.pointerId !== drag.pointerId) return;
-      if (drag.animal && !drag.changed && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 3) return;
-      if (drag.joint && !drag.plane) {
-        const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
-        beginChange();
-        drag.animal.restore(drag.pose);
-        const axis = new THREE.Vector3(dy, dx, 0).applyQuaternion(this.viewer.camera.quaternion);
-        const angle = axis.length() * 0.01;
-        if (angle) {
-          axis.normalize().applyQuaternion(drag.joint.parent.getWorldQuaternion(new THREE.Quaternion()).invert());
-          drag.joint.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, angle)).normalize();
-        }
-        drag.animal.update(this.animalSelection);
-        this.viewer.requestRender();
-        return;
-      }
       if (drag.animal) {
+        drag.moved ||= Math.hypot(event.clientX - drag.x, event.clientY - drag.y) >= 3;
+        if (!drag.moved || !drag.plane) return;
         const rect = canvas.getBoundingClientRect(), raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), this.viewer.camera);
         const point = raycaster.ray.intersectPlane(drag.plane, new THREE.Vector3());
         if (!point) return;
-        beginChange();
+        if (!drag.changed) {
+          beginChange();
+          this.viewer.transform.detach();
+          drag.animal.setDraggedMarker(drag.name);
+        }
         drag.animal.restore(drag.pose);
         const destination = point.add(drag.offset);
         if (drag.footLimits) drag.animal.dragPelvis(destination, drag.footLimits);
@@ -1374,7 +1373,8 @@ export class StudioScene {
         const emptyClick = this.mode === 'camera' && this.doc.source.kind === 'human' && !drag.pan && !drag.changed
           && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 3
           && (this.selectedModel() || this.doc.selectedActorIds?.length) && !pickScene(pickRay(event));
-        end();
+        const click = !drag.moved && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 3;
+        end(true, click);
         if (emptyClick) this.callbacks.clearSelection?.();
       }
     }, true);
@@ -1400,7 +1400,9 @@ export class StudioScene {
       if (!cancelled.changed) return true;
       if (cancelled.animal) {
         cancelled.animal.restore(cancelled.pose);
-        cancelled.animal.update(this.animalSelection);
+        cancelled.animal.setHoveredMarker(null);
+        cancelled.animal.setDraggedMarker(null);
+        this.selectAnimalJoint(this.animalSelection);
       } else if (cancelled.placementId) {
         const target = (cancelled.model ? this.doc.props : this.doc.actors).find(item => item.id === cancelled.placementId);
         if (target) {
