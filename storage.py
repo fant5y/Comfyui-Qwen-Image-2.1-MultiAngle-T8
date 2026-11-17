@@ -262,7 +262,10 @@ class StudioStore:
         has_structure_image = model == "base" and guide_mode in ("pose", "depth", "canny") and (
             conditioning.get("map") or scene.get("reference")
         )
-        if not no_guide and source_kind == "empty" and not (has_canvas_background or has_structure_image):
+        has_scene_image = guide_mode == "coarse" and any(
+            prop["visible"] and prop["asset"]["name"].endswith(".png") for prop in scene.get("props", ())
+        )
+        if not no_guide and source_kind == "empty" and not (has_canvas_background or has_structure_image or has_scene_image):
             raise ValueError("Current guide requires a 3D scene or an imported image")
         guide_asset = conditioning.get("map")
         if guide_asset:

@@ -239,7 +239,8 @@ def composition_prompt(scene, manifest):
                 "canny": "Render the scene using the spatial layout and outlines in",
             }
             lines.append(f"{operations[kind]} {guide_image}.")
-            if kind == "coarse":
+            if kind == "coarse" and any(actor.get("visible", True) and actor["id"] in seen
+                                        for actor in scene.get("actors", ())):
                 lines.append("Render the subjects and setting with their intended materials and colors. Replace mannequin surfaces with the subjects’ intended appearance.")
         species = {"owl": "an owl", "bunny": "a rabbit", "canine": "a dog", "feline": "a cat"}
         for actor in scene.get("actors", []):
@@ -282,9 +283,11 @@ def composition_reference_line(scene, use, image, guide, seen):
         target = ", ".join(map(visual_name, objects))
     source = use.get("sourceText", "").strip()
     source_image = f"{image} (use {source})" if source else image
+    animal = kind == "actors" and any(item.get("source", {}).get("kind") == "animal" for item in objects)
     instructions = {
         "free": f"Use {source_image} as an appearance reference for {target}.",
-        "character": f"Match the character appearance, hairstyle and clothing in {source_image} for {target}.",
+        "character": (f"Match the animal’s appearance, coloring and markings in {source_image} for {target}."
+                      if animal else f"Match the character appearance, hairstyle and clothing in {source_image} for {target}."),
         "identity": f"Match the face and hairstyle in {source_image} for {target}.",
         "clothing": f"Dress {target} in the clothing shown in {source_image}.",
         "accessory": f"Use the accessory or product design in {source_image} for {target}.",

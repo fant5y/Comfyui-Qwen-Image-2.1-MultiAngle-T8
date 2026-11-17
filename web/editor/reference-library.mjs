@@ -172,7 +172,8 @@ function compositionPrompt(scene, { guide, references, imageCount, mode }) {
     if (anyangle && original) lines.push('Change the camera angle from ' + guideImage + ' to ' + imageTag(original.index) + '.');
     else {
       lines.push(guideOperation[kind] + ' ' + guideImage + '.');
-      if (kind === 'coarse') lines.push('Render the subjects and setting with their intended materials and colors. Replace mannequin surfaces with the subjects’ intended appearance.');
+      if (kind === 'coarse' && scene.actors?.some(actor => actor.visible !== false && seen.has(actor.id)))
+        lines.push('Render the subjects and setting with their intended materials and colors. Replace mannequin surfaces with the subjects’ intended appearance.');
     }
     for (const actor of scene.actors || []) {
       if (actor.visible === false || !seen.has(actor.id)) continue;
@@ -209,9 +210,11 @@ export function compositionReferenceLine(scene, use, image, guide, seen = new Se
   }
   const source = use.sourceText?.trim();
   const from = source ? image + ' (use ' + source + ')' : image;
+  const animal = kind === 'actors' && scene.actors?.some(actor => ids.includes(actor.id) && actor.source?.kind === 'animal');
   const instructions = {
     free: 'Use ' + from + ' as an appearance reference for ' + target + '.',
-    character: 'Match the character appearance, hairstyle and clothing in ' + from + ' for ' + target + '.',
+    character: animal ? 'Match the animal’s appearance, coloring and markings in ' + from + ' for ' + target + '.'
+      : 'Match the character appearance, hairstyle and clothing in ' + from + ' for ' + target + '.',
     identity: 'Match the face and hairstyle in ' + from + ' for ' + target + '.',
     clothing: 'Dress ' + target + ' in the clothing shown in ' + from + '.',
     accessory: 'Use the accessory or product design in ' + from + ' for ' + target + '.',

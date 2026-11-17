@@ -1,4 +1,4 @@
-import { USES, newUse, addReference, upgradeReferences, libraryManifest, libraryPrompt, referencePromptLine, compositionReferenceLine, staleGuide } from './reference-library.mjs?v=20261117guideprompt';
+import { USES, newUse, addReference, upgradeReferences, libraryManifest, libraryPrompt, referencePromptLine, compositionReferenceLine, staleGuide } from './reference-library.mjs?v=20261117animalrefs';
 import { uuid } from '../uuid.mjs?v=20261116en';
 const $ = id => document.getElementById(id);
 const copy = value => JSON.parse(JSON.stringify(value));
@@ -71,7 +71,7 @@ export function installReferencesUI(value) {
     const scene = context.doc(); if (scene.version !== 3) upgradeReferences(scene);
     scene.referenceLibrary.mode = selected;
     if (selected !== 'guided') scene.conditioning.model = 'base';
-  })); control.id = 'reference-workflow'; mode.append(control); document.querySelector('.model-switch').after(mode);
+  }, true)); control.id = 'reference-workflow'; mode.append(control); document.querySelector('.model-switch').after(mode);
   const first = el('div', '', 'reference-first-settings'); first.id = 'reference-first-settings';
   first.innerHTML = `<label>Output Aspect Reference<select id="first-reference"></select></label><label>First Image Pixel Budget<select id="first-reference-resolution"><option value="0">Keep Original Size · Align to 32</option><option value="768">768²pixels</option><option value="1024">1024²pixels</option><option value="1536">1536²pixels</option><option value="2048">2048²pixels</option></select></label><p class="hint">The first image sets the output aspect ratio and size. Other images use the encoder’s reference budget. Text-only output defaults to 1024 × 1024.</p>`;
   mode.after(first);
@@ -119,9 +119,10 @@ function chooseCharacter(scene, item) {
   description.placeholder = 'For example, Cyborg';
   description.maxLength = 48;
   const descriptionField = field('Character Name', description);
+  const speciesField = field('Mannequin', select([['human', 'Human'], ...Object.entries(context.animalShapes)], 'human', () => {}));
   const apply = el('button', '', 'primary'); apply.type = 'submit';
   const updateFields = value => {
-    descriptionField.hidden = value !== 'new';
+    descriptionField.hidden = speciesField.hidden = value !== 'new';
     apply.textContent = value === 'new' ? 'Add New Character' : 'Assign Character';
   };
   const picker = select([...targets.map(({ item }, index) => [String(index), item.label]), ['new', 'Add New Character']],
@@ -130,7 +131,7 @@ function chooseCharacter(scene, item) {
   const buttons = el('div');
   const cancel = button('Cancel', () => dialog.close());
   buttons.append(cancel, apply);
-  form.append(el('h2', 'Use as Character'), field('Target', picker), descriptionField, buttons);
+  form.append(el('h2', 'Use as Character'), field('Target', picker), speciesField, descriptionField, buttons);
   form.onsubmit = event => {
     event.preventDefault();
     const selected = targets[Number(picker.value)], text = description.value.trim();
@@ -139,9 +140,12 @@ function chooseCharacter(scene, item) {
     if (selected) {
       edit(() => assignRole(item, 'character', { kind: selected.kind, ids: [selected.item.id], text: '' }));
     } else {
-      context.addCharacter({ label: text, onAdded: actor => {
+      const options = { label: text, onAdded: actor => {
         assignRole(item, 'character', { kind: 'actors', ids: [actor.id], text: '' });
-      } });
+      } };
+      const shape = speciesField.querySelector('select').value;
+      if (shape === 'human') context.addCharacter(options);
+      else context.addAnimal(shape, options);
     }
   };
   dialog.addEventListener('close', () => dialog.remove(), { once: true });
@@ -247,7 +251,11 @@ function card(scene, item, manifest) {
   }, true));
   character.disabled = !item.asset || item.missing === true;
   background.disabled = !isBackground && character.disabled;
-  tools.append(source, character, background, replace, remove); entry.append(details, tools); return entry;
+  const sceneImage = button('Add Image to Scene', async () => {
+    if (await context.addSceneImage(item)) chooseTab('objects');
+  });
+  sceneImage.disabled = character.disabled;
+  tools.append(source, character, background, sceneImage, replace, remove); entry.append(details, tools); return entry;
 }
 function replaceReference(scene, item) {
   const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.hidden = true; document.body.append(file);

@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.mjs';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117posegestures';
+import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117animalrefs';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 import { PoseViewerCore } from '../vendor/vnccs_pose_studio_core.mjs?v=20261031resize';
 import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs?v=20261116bodyrange';
@@ -11,7 +11,7 @@ import { SplatScene } from './splat.mjs?v=20261116en';
 import { capturePNG, captureSubjectIds } from './capture.mjs?v=20261117guideprompt';
 import { liftOpenPose, copyVisiblePose, WORLD_KEYPOINT_NAMES, ORDER, LIMBS, COLORS } from './openpose.mjs?v=20261116en';
 import { createActor, ensureActors, activeActor, bindActor, saveActor, visibleActors } from './actors.mjs?v=20261116en';
-import { loadProp, disposeProp, placeProp } from './props.mjs?v=20261116canvasprompt';
+import { loadProp, disposeProp, placeProp } from './props.mjs?v=20261117animalrefs';
 import { emptyLibrary, canvasBackgroundAsset } from './reference-library.mjs?v=20261116canvasprompt';
 
 export const PRESETS = [
@@ -369,13 +369,13 @@ export class StudioScene {
     for (const [id, root] of this.propRoots) if (!ids.has(id) || props.find(prop=>prop.id===id)?.asset.name !== root.userData.assetName) { disposeProp(root); this.propRoots.delete(id); }
     for (const prop of props) {
       let root = this.propRoots.get(prop.id);
-      if (this.doc.source.kind !== 'human') { if (root) root.visible = false; continue; }
+      if (this.doc.source.kind !== 'human' && !prop.asset.name.endsWith('.png')) { if (root) root.visible = false; continue; }
       if (!root) { root = await loadProp(prop.asset); root.userData.assetName = prop.asset.name; root.userData.modelId = prop.id; this.propRoots.set(prop.id,root); this.viewer.scene.add(root); }
-      placeProp(root,prop,this.doc.source.kind==='human');
+      placeProp(root, prop, this.doc.source.kind === 'human' || prop.asset.name.endsWith('.png'));
     }
   }
 
-  updateProp(prop) { const root = this.propRoots.get(prop.id); if (root) { placeProp(root,prop,this.doc.source.kind==='human'); this.viewer.requestRender(); } }
+  updateProp(prop) { const root = this.propRoots.get(prop.id); if (root) { placeProp(root, prop, this.doc.source.kind === 'human' || prop.asset.name.endsWith('.png')); this.viewer.requestRender(); } }
 
   async selectActor(id) {
     if (id === this.doc.activeActorId || this.doc.source.kind !== 'human') return;
@@ -437,12 +437,12 @@ export class StudioScene {
       for (const animal of this.animalActors.values()) animal.dispose();
       this.animalActors.clear();
       this.animalSelection = '';
+      if (doc.source.kind === 'human' && doc.actors.some(actor => actor.source.kind !== 'animal') && !this.pack) this.pack = await loadHumanPack();
+      this.viewer.clearPassiveCharacters();
+      for (const root of this.actorRoots.values()) root.removeFromParent();
+      this.actorRoots.clear();
       if (doc.source.kind === 'human') {
         const people = doc.actors.filter(actor => actor.source.kind !== 'animal');
-        if (people.length && !this.pack) this.pack = await loadHumanPack();
-        this.viewer.clearPassiveCharacters();
-        for (const root of this.actorRoots.values()) root.removeFromParent();
-        this.actorRoots.clear();
         const selectedId = doc.activeActorId;
         for (const actor of doc.actors.filter(item => item.source.kind === 'animal')) {
           const rig = new AnimalMannequin(actor.source.shape);
@@ -618,7 +618,8 @@ export class StudioScene {
   }
 
   selectedModel() {
-    return this.doc.source.kind === 'human' && this.doc.props?.find(model => model.id === this.selectedModelId);
+    return this.doc.props?.find(model => model.id === this.selectedModelId
+      && (this.doc.source.kind === 'human' || model.asset.name.endsWith('.png')));
   }
 
   modelJoints() {
@@ -636,6 +637,7 @@ export class StudioScene {
 
   canPlaceScene() {
     return ['human', 'glb'].includes(this.doc?.source.kind)
+      || this.doc?.props?.some(prop => prop.visible !== false && prop.asset.name.endsWith('.png'))
       || (this.doc?.sceneBackground?.visible !== false && !!canvasBackgroundAsset(this.doc || {}));
   }
 
@@ -751,15 +753,17 @@ export class StudioScene {
     const backgroundAsset = !options.depth && !options.canny && !options.actorIds && this.doc.sceneBackground?.visible !== false && canvasBackgroundAsset(this.doc);
     const backgroundPlane = backgroundAsset ? await this.loadSceneBackground() : null;
     if (backgroundAsset && !backgroundPlane) throw new Error('Could not load the scene background. Replace or clear the reference image.');
-    if (this.doc.source.kind === 'empty' && !backgroundPlane) throw new Error('Rebuild the source subject or import its 3D scene first.');
+    const images = !options.actorIds && !options.depth && !options.canny
+      ? (this.doc.props || []).filter(prop => prop.asset.name.endsWith('.png'))
+        .map(prop => this.propRoots.get(prop.id)).filter(root => root?.visible) : [];
     await this.waitForCaptureReady();
     const v = this.viewer;
     const content = this.splat?.root || this.animal?.root || (this.doc.source.kind === 'glb' ? this.glb : v.skinnedMesh);
-    if (!content && !backgroundPlane) throw new Error('The scene has no renderable assets.');
     const contents = this.doc.source.kind === 'human' && this.actorRoots?.size
       ? [...(options.actorIds ? this.doc.actors.filter(actor => options.actorIds.includes(actor.id)) : visibleActors(this.doc)).map(actor => this.actorRoots.get(actor.id)),
-        ...(!options.actorIds ? (this.doc.props || []).filter(prop=>prop.visible!==false).map(prop=>this.propRoots.get(prop.id)) : [])].filter(Boolean) : this.doc.source.kind === 'empty' ? [] : [content].filter(Boolean);
-    if (!contents.length && !backgroundPlane) throw new Error('Make at least one character visible.');
+        ...(!options.actorIds ? (this.doc.props || []).filter(prop => prop.visible !== false && !prop.asset.name.endsWith('.png')).map(prop => this.propRoots.get(prop.id)) : [])].filter(Boolean) : this.doc.source.kind === 'empty' ? [] : [content].filter(Boolean);
+    for (const image of images) if (!contents.includes(image)) contents.push(image);
+    if (!contents.length && !backgroundPlane) throw new Error('Make a scene object visible or add an image to the scene.');
     if (options.depth && this.splat) throw new Error('Use DA3 source depth for a TripoSplat reconstruction.');
     const visibility = v.scene.children.map(object => [object, object.visible]);
     // VNCCS attaches joint markers below the skinned mesh, not just to the scene.
@@ -804,7 +808,7 @@ export class StudioScene {
       }
       if (this.doc.conditioning?.colorActors === true && !options.depth && !options.canny && !options.actorIds) {
         for (const model of this.doc.props || []) {
-          if (model.visible === false || !model.editorColor) continue;
+          if (model.visible === false || !model.editorColor || model.asset.name.endsWith('.png')) continue;
           const materials = new Set();
           this.propRoots.get(model.id)?.traverse(mesh => {
             if (mesh.isMesh) for (const material of [].concat(mesh.material || [])) if (material.color) materials.add(material);
@@ -845,7 +849,7 @@ export class StudioScene {
       if (this.splat && v.scene.background.isColor) v.scene.background.convertLinearToSRGB();
       v.scene.updateMatrixWorld(true);
       v.skeleton?.update();
-      if (options.subjects && this.doc.source.kind === 'human') {
+      if (options.subjects && ['human', 'empty'].includes(this.doc.source.kind)) {
         const ids = [...visibleActors(this.doc), ...(this.doc.props || [])].map(item => item.id);
         const subjects = ids.map(id => ({ id, root: this.actorRoots.get(id) || this.propRoots.get(id) }))
           .filter(({ root }) => contents.includes(root));
@@ -870,12 +874,13 @@ export class StudioScene {
       this.doc.camera = { azimuth: 0, elevation: 0, zoom: 1, offsetX: 0, offsetY: 0, offsetZ: 0 };
       this.updateShot(true); return;
     }
-    if (this.doc.source.kind === 'empty') return;
     const content = this.animal?.root || (this.doc.source.kind === 'glb' ? this.glb : this.viewer.skinnedMesh);
     const model = selected && this.selectedModel();
     const modelRoot = model && this.propRoots.get(model.id);
     if (model && !modelRoot) return;
     const bounds = model ? worldBounds(modelRoot)
+      : this.doc.source.kind === 'empty' ? [...this.propRoots.values()].filter(root => root.visible)
+        .reduce((box, root) => box.union(worldBounds(root)), new THREE.Box3())
       : this.doc.source.kind === 'human' && this.actorRoots?.size ? this.humanBounds(selected) : worldBounds(content);
     if (bounds.isEmpty()) return;
     this.doc.camera.zoom = 1;
@@ -1135,7 +1140,9 @@ export class StudioScene {
   }
 
   async morph() {
-    const pose = { bones: this.pose().bones, modelRotation: this.pose().modelRotation };
+    if (this.doc.source.kind !== 'human' || activeActor(this.doc)?.source.kind !== 'human') return;
+    const { bones, modelRotation } = this.pose();
+    const pose = { bones, modelRotation };
     this.restoring = true;
     try {
       this.buildHuman(pose);
@@ -1227,7 +1234,7 @@ export class StudioScene {
           const animalTarget = target ? name : terminalTarget;
           const selection = target ? name + ' tip' : name;
           drag = { pointerId: event.pointerId, animal, joint, name, selection, x: event.clientX, y: event.clientY };
-          if (animalTarget || animal.isLimbBend(joint) || name === 'Pelvis') {
+          if (animalTarget || joint && joint !== animal.root) {
             const center = hit.object.position.clone();
             const normal = this.viewer.camera.getWorldDirection(new THREE.Vector3());
             const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center);
@@ -1251,7 +1258,7 @@ export class StudioScene {
           const handles = [...this.viewer._getRaycastableJointMarkers(), ...Object.values(this.viewer.ikController?.poleTargets || {}).filter(handle => handle.visible)];
           if (raycaster.intersectObjects(handles, false).length) return;
         }
-        const hit = humanScene && pickScene(raycaster);
+        const hit = (humanScene || this.mode === 'position') && pickScene(raycaster);
         if (this.mode === 'position' && !hit) {
           const glbHit = this.doc.source.kind === 'glb' && this.glb && raycaster.intersectObject(this.glb, true).length;
           const backgroundHit = this.sceneBackground?.visible && raycaster.intersectObject(this.sceneBackground).length;
@@ -1329,7 +1336,7 @@ export class StudioScene {
         const destination = point.add(drag.offset);
         if (drag.footLimits) drag.animal.dragPelvis(destination, drag.footLimits);
         else if (drag.animalTarget) drag.animal.drag(drag.animalTarget, destination);
-        else drag.animal.dragLimbBend(drag.joint, destination);
+        else drag.animal.dragJoint(drag.joint, destination, this.viewer.camera);
         drag.animal.update(this.animalSelection);
         this.viewer.requestRender();
         return;

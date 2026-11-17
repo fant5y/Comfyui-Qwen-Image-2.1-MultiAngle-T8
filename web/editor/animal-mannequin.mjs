@@ -510,12 +510,17 @@ export class AnimalMannequin {
     }
   }
 
-  isLimbBend(joint) {
-    return [...this.targets.values()].some(({ chain }) => chain.slice(1, -1).includes(joint));
-  }
-
-  dragLimbBend(joint, destination) {
+  dragJoint(joint, destination, camera) {
     const parent = joint.parent;
+    if (parent === this.root) {
+      const motion = destination.sub(joint.getWorldPosition(new THREE.Vector3()));
+      const axis = camera.getWorldDirection(new THREE.Vector3()).cross(motion);
+      const angle = axis.length() / 6;
+      if (angle < 1e-6) return;
+      axis.normalize().applyQuaternion(parent.getWorldQuaternion(new THREE.Quaternion()).invert());
+      joint.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, Math.min(angle, Math.PI))).normalize();
+      return;
+    }
     const current = joint.position.clone().applyQuaternion(parent.quaternion).normalize();
     const wanted = parent.parent.worldToLocal(destination).sub(parent.position);
     if (wanted.lengthSq() < 1e-8) return;

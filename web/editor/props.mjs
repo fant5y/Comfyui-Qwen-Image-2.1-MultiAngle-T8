@@ -2,6 +2,19 @@ import * as THREE from '../vendor/three.module.mjs';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 
 export async function loadProp(asset) {
+  if (asset.name.endsWith('.png')) {
+    const texture = await new THREE.TextureLoader().loadAsync(`/anyangle-studio/assets/${encodeURIComponent(asset.name)}`);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const { width, height } = texture.image;
+    const scale = 10 / Math.max(width, height);
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(width * scale, height * scale),
+      new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, toneMapped: false, alphaTest: 0.01 }));
+    plane.position.y = height * scale / 2;
+    const root = new THREE.Group();
+    root.add(plane);
+    root.userData.joints = [];
+    return root;
+  }
   const response = await fetch(`/anyangle-studio/assets/${encodeURIComponent(asset.name)}`);
   if (!response.ok) throw new Error('GLB prop asset missing. Import it again.');
   const manager = new THREE.LoadingManager();

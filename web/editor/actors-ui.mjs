@@ -236,7 +236,7 @@ export function refreshActorsUI() {
   for (const element of identity.children) element.hidden = (doc.version === 3 || !!model) && element !== $('actor-description').closest('label');
   $('actor-identities').closest('label').hidden = doc.version === 3;
   const staticGuide = doc.conditioning.promptMode !== 'custom' && ['image', 'canny-image'].includes(guideSource(doc).kind);
-  $('actors-panel').classList.toggle('cast-inactive', !human);
+  $('actors-panel').classList.toggle('cast-inactive', !human && !entries.some(entry => entry.model && entry.item.asset.name.endsWith('.png')));
   $('read-actor-references').hidden = doc.version === 3 || !references.length;
   const key = JSON.stringify([human, entries.map(({ item: { id, label, editorColor, visible, locked, identity } }) => ({ id, label, editorColor, visible, locked, identity })), doc.activeActorId, doc.selectedActorIds, model?.id, references]);
   if (key !== renderKey || doc !== renderedDoc || entries.some(({ item }, index) => item !== renderedRoles[index])) {
@@ -283,7 +283,7 @@ export function refreshActorsUI() {
         move.disabled = destination < 0 || destination >= entries.length;
         controls.append(move);
       }
-      card.inert = !human;
+      card.inert = !human && !(entry.model && item.asset.name.endsWith('.png'));
       card.append(choose, controls);
       $('actor-list').append(card);
     }
@@ -295,8 +295,9 @@ export function refreshActorsUI() {
   }
   $('actor-count').textContent = `${entries.filter(({ item }) => item.visible !== false).length} / ${entries.length}`;
   const selected = model || (doc.selectedActorIds?.includes(actor?.id) ? actor : null);
-  $('active-actor-controls').hidden = !selected || !human;
-  $('clone-actor').disabled = $('delete-actor').disabled = !human || !selected;
+  $('active-actor-controls').hidden = !selected || (!human && !model);
+  $('clone-actor').disabled = $('delete-actor').disabled = !selected || (!human && !model);
+  $('actor-color').closest('label').hidden = !!model?.asset.name.endsWith('.png');
   $('model-size').hidden = $('model-rotation').hidden = $('model-rotation-actions').hidden = !model;
   $('rotate-model').disabled = !model || model.locked || model.visible === false;
   $('ground-actors').disabled = !!model && (model.locked || model.visible === false);
