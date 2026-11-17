@@ -746,9 +746,6 @@ $('.right-panel').append(cameraSection);
 function showRightPanel(output, camera = false) {
   cameraSection.hidden = !camera;
   $('#open-camera-settings').setAttribute('aria-expanded', String(camera));
-  $('.left-panel').hidden = $('.character-panel').hidden = output || camera;
-  $('#center-panel').classList.toggle('reviewing', output);
-  $('[data-sidebar="left"]').hidden = $('[data-sidebar="character"]').hidden = output || camera;
   $('#output-inspector').hidden = !output;
   $('#workspace').classList.toggle('show-output', output);
   $('#workspace').classList.toggle('show-camera', camera);
