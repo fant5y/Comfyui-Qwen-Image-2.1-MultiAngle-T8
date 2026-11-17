@@ -9,3 +9,8 @@
 ## Camera and Output coexistence
 
 - [x] Keep Scene and its selection available when opening Camera or Output. Compress character controls alongside the viewport on wide layouts and place them beneath Scene in the same column on narrower desktop layouts. At tablet widths keep both under the viewport, followed by Camera or Output. Restore the separate left columns when closing the right panel.
+
+## Picnic canvas controls
+
+- [x] Use outputs/AnyAngle-Picnic-Workflow.html as the interaction reference. Show world-axis arrows and a uniform scale grip for the selected item alongside its existing root and joint points. Preserve ring priority, selection, camera position and one undo per drag.
+- [x] Add the second scene view without altering the working camera, saved camera or guide capture. Preserve ordinary orbit and pan in the primary view.

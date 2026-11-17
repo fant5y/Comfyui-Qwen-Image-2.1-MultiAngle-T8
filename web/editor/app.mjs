@@ -1,5 +1,5 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117sceneassets';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117dock';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117canvas';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261117animalrefs';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117columns';
@@ -12,7 +12,7 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261117direct';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117columns';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, deleteSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117canvas';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261117animalrefs';
 
@@ -324,6 +324,10 @@ function refresh() {
   const poseImage = guide === 'pose' && input.kind === 'image';
   if (previewGuide !== guide) { previewGuide = guide; previewVisible = guide !== 'coarse'; }
   $('#stage').classList.toggle('previewing-guide', previewVisible);
+  const splitButton = $('#split-view');
+  splitButton.disabled = !studio || previewVisible || staticGuide || doc.source.kind === 'splat';
+  if (splitButton.disabled && studio?.splitView) studio.closeSplitView();
+  splitButton.setAttribute('aria-pressed', String(!!studio?.splitView));
   $('#stage-guide-view').hidden = !previewVisible;
   $('#stage-guide-title').textContent = GUIDE_LABELS[guide];
   $('#stage-guide-detail').textContent = `Output · image_${imageIndex} · ${doc.width} × ${doc.height}`;
@@ -351,9 +355,8 @@ function refresh() {
   for (const id of ['shot-shelf', 'resize-shots', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
   $('#stage-help').textContent = previewVisible ? staticGuide ? 'Source composition and structure · Apply to output this guide' : 'Guide from the current camera · Switch to 3D Workspace to adjust the view'
     : studio?.mode === 'position' ? 'Select an object · Drag an axis to move it · Right-drag to orbit · Middle-drag to pan'
-    : studio?.mode === 'edit' && studio.selectedModel() ? 'Drag the rotation rings · Right-drag to orbit · Middle-drag to pan'
-    : studio?.mode === 'edit' && studio.animal ? 'Drag joints to pose · Alt-drag the body to move · Right-drag to orbit'
-    : studio?.mode === 'edit' ? 'Drag joints to pose · Alt-drag the body to move · Right-drag to orbit'
+    : studio?.mode === 'edit' && studio.selectedModel() ? 'Drag arrows to move · Drag the square to resize · Drag the rings to turn'
+    : studio?.mode === 'edit' ? 'Drag arrows to move · Drag the square to resize · Drag joints to pose · Right-drag to orbit'
       : 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom';
   for (const control of controls.values()) control.refresh();
   $('#width').value = doc.width; $('#height').value = doc.height;
@@ -763,11 +766,15 @@ function setMode(mode) {
   $('#use-view').hidden = mode === 'camera';
   $('#stage-help').textContent = mode === 'camera' ? 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom'
     : mode === 'position' ? 'Select an object · Drag an axis to move it · Right-drag to orbit · Middle-drag to pan'
-    : studio.selectedModel() ? 'Drag the rotation rings · Right-drag to orbit · Middle-drag to pan'
-    : studio.animal ? 'Drag a joint to pose · Click a joint for rotation rings'
-    : doc.source.kind === 'human' ? 'Drag joints to pose · Alt-drag the body to move · Right-drag to orbit'
+    : studio.selectedModel() ? 'Drag arrows to move · Drag the square to resize · Drag the rings to turn'
+    : doc.source.kind === 'human' ? 'Drag arrows to move · Drag the square to resize · Drag joints to pose · Right-drag to orbit'
       : 'Right-drag to orbit · Middle-drag to pan · Set this view as the camera';
 }
+$('#split-view').onclick = () => run(() => {
+  if (studio.splitView) studio.closeSplitView();
+  else studio.openSplitView($('#secondary-viewport'));
+  $('#split-view').setAttribute('aria-pressed', String(!!studio.splitView));
+});
 $('#view-output').onclick = () => { previewVisible = true; refresh(); renderPreview(); };
 $('#view-scene').onclick = () => { previewVisible = false; setMode(studio.mode); refresh(); };
 $('#use-view').onclick = () => { begin(); studio.currentViewAsShot(); setMode('camera'); changed(); };
@@ -907,7 +914,9 @@ document.addEventListener('keydown', event => {
     if (event.key.toLowerCase() === 'z') { event.preventDefault(); (event.shiftKey ? $('#redo') : $('#undo')).click(); }
     if (event.key.toLowerCase() === 'y') { event.preventDefault(); $('#redo').click(); }
   }
-  if (doc.source.kind === 'human' && event.key === 'Delete') { event.preventDefault(); $('#delete-actor').click(); }
+  if (event.key === 'Delete' && (studio.selectedModel() || doc.source.kind === 'human' && doc.selectedActorIds?.includes(doc.activeActorId))) {
+    event.preventDefault(); deleteSelection();
+  }
   if (doc.source.kind === 'human' && event.altKey && ['ArrowLeft','ArrowRight'].includes(event.key)) {
     event.preventDefault(); const actors = doc.actors, index = actors.findIndex(actor => actor.id === doc.activeActorId);
     if (actors.length) selectRole(actors[(index + (event.key === 'ArrowRight' ? 1 : -1) + actors.length) % actors.length].id);

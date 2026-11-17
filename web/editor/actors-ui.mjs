@@ -27,7 +27,7 @@ const duplicateSelection = () => context.studio().selectedModel() ? context.dupl
     const doc = context.doc(); context.studio().syncPose(); const actor = cloneActor(doc);
     doc.activeActorId = actor.id; doc.selectedActorIds = [actor.id]; bindActor(doc); await context.studio().restore(doc);
   });
-const deleteSelection = () => context.studio().selectedModel() ? context.deleteModel() : atomic(async () => { const doc = context.doc(); removeActor(doc, doc.activeActorId); await context.studio().restore(doc); });
+export const deleteSelection = () => context.studio().selectedModel() ? context.deleteModel() : atomic(async () => { const doc = context.doc(); removeActor(doc, doc.activeActorId); await context.studio().restore(doc); });
 
 export function addCharacter({ label, onAdded } = {}) {
   return atomic(async () => {

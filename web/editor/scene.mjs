@@ -1,6 +1,8 @@
 import * as THREE from '../vendor/three.module.mjs';
+import { PlacementHandles } from './placement-handles.mjs?v=20261117canvas';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117animalrefs';
+import { OrbitControls } from '../vendor/OrbitControls.mjs';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 import { PoseViewerCore } from '../vendor/vnccs_pose_studio_core.mjs?v=20261031resize';
 import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs?v=20261116bodyrange';
@@ -118,6 +120,7 @@ function worldBounds(root) {
 export class StudioScene {
   constructor(canvas, callbacks) {
     this.canvas = canvas;
+    this.placementHandles = new PlacementHandles(canvas);
     this.callbacks = callbacks;
     this.mode = 'camera';
     this.restoring = true;
@@ -128,6 +131,11 @@ export class StudioScene {
     this.propRoots = new Map();
     this.viewer = new PoseViewerCore(canvas, {
       skinMode: 'naked', enableTextureSkinning: true,
+      onViewportRender: () => {
+        const target = this.mode === 'edit' ? this.placementTarget() : null;
+        this.placementHandles.update(target?.item && target.root, this.viewer.camera);
+        this.drawSplitView();
+      },
       showSkeletonHelper: false, showCaptureFrame: false, useHandControlPopover: false,
       onPoseChange: () => { if (!this.restoring && this.mode !== 'position') callbacks.change(true, this.interactionControls !== false); },
       onBoneSelectionChange: ({ boneName }) => callbacks.select(boneName, this.interactionControls !== false),
@@ -211,9 +219,57 @@ export class StudioScene {
   }
 
   resize() {
-    const { width, height } = this.canvas.parentElement.getBoundingClientRect();
+    const { width, height } = this.canvas.getBoundingClientRect();
     this.viewer.resize(Math.max(1, width), Math.max(1, height));
     if (this.mode === 'camera' && this.baseTarget) this.updateShot();
+  }
+
+  openSplitView(canvas) {
+    if (this.splitView) return;
+    const { renderer: primary, camera: working, orbit } = this.viewer;
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: false, antialias: true });
+    renderer.outputColorSpace = primary.outputColorSpace;
+    renderer.toneMapping = primary.toneMapping;
+    renderer.toneMappingExposure = primary.toneMappingExposure;
+    const camera = working.clone();
+    const distance = working.position.distanceTo(orbit.target);
+    camera.position.copy(orbit.target).add(new THREE.Vector3(distance, distance * 0.14, 0));
+    camera.lookAt(orbit.target);
+    const controls = new OrbitControls(camera, canvas);
+    controls.target.copy(orbit.target);
+    controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
+    controls.update();
+    controls.listenToKeyEvents(canvas);
+    controls.addEventListener("change", () => this.viewer.requestRender());
+    this.splitView = { canvas, renderer, camera, controls };
+    canvas.hidden = false;
+    this.canvas.parentElement.classList.add("split-view");
+    this.resize();
+    this.viewer.requestRender();
+  }
+
+  drawSplitView() {
+    const split = this.splitView;
+    if (!split || !split.canvas.clientWidth || !split.canvas.clientHeight) return;
+    const { clientWidth: width, clientHeight: height } = split.canvas;
+    if (split.width !== width || split.height !== height) {
+      split.width = width; split.height = height;
+      split.renderer.setSize(width, height, false);
+      split.camera.aspect = width / height;
+      split.camera.updateProjectionMatrix();
+    }
+    split.renderer.render(this.viewer.scene, split.camera);
+  }
+
+  closeSplitView() {
+    const split = this.splitView;
+    if (!split) return;
+    this.splitView = null;
+    split.controls.dispose();
+    split.renderer.dispose();
+    split.canvas.hidden = true;
+    this.canvas.parentElement.classList.remove("split-view");
+    if (!this.disposed) { this.resize(); this.viewer.requestRender(); }
   }
 
   viewAxes() {
@@ -1183,6 +1239,15 @@ export class StudioScene {
     } finally { this.restoring = false; }
   }
 
+  writePlacement(item, model, key, value) {
+    item.transform[key] = value;
+    if (model) this.updateProp(item);
+    else {
+      if (key === 'scale') this.doc.scale = value;
+      this.updateActorTransform(item);
+    }
+  }
+
   bindCamera() {
     const canvas = this.canvas;
     let drag = null, beginning = false, rigPointerId = null;
@@ -1240,10 +1305,40 @@ export class StudioScene {
       return [...raycaster.intersectObjects(mesh, false), ...raycaster.intersectObjects([...animals, ...models], true)]
         .sort((first, second) => first.distance - second.distance)[0];
     };
+    canvas.addEventListener('keydown', event => {
+      if (this.mode !== 'edit' || drag || this.viewer.transform.dragging || event.altKey || event.ctrlKey || event.metaKey) return;
+      const target = this.placementTarget();
+      if (!target?.item) return;
+      const { item, model } = target;
+      const vertical = event.shiftKey ? 'y' : 'z';
+      const step = { ArrowLeft: ["x", -0.1], ArrowRight: ["x", 0.1],
+        ArrowUp: [vertical, event.shiftKey ? 0.1 : -0.1], ArrowDown: [vertical, event.shiftKey ? -0.1 : 0.1],
+        "+": ["scale", 0.05], "=": ["scale", 0.05], "-": ["scale", -0.05] }[event.key];
+      if (!Array.isArray(step)) return;
+      event.preventDefault();
+      if (event.repeat) return;
+      const [key, delta] = step;
+      const value = key === 'scale' ? clamp(item.transform.scale + delta, 0.01, 40) : item.transform[key] + delta;
+      if (value === item.transform[key]) return;
+      this.callbacks.begin();
+      this.writePlacement(item, model, key, value);
+      this.callbacks.change();
+    });
     canvas.addEventListener('pointerdown', event => {
       if (event.button !== 0 && event.button !== 1) return;
       if (drag) { event.stopImmediatePropagation(); event.preventDefault(); return; }
       if (this.mode !== 'camera' && event.button === 0) { rigPointerId = event.pointerId; this.rigPointerDown = true; }
+      if (this.mode === 'edit' && event.button === 0 && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+        const axisHandle = this.placementHandles.hit(event);
+        const target = axisHandle && this.placementTarget();
+        if (target?.item) {
+          event.stopImmediatePropagation(); event.preventDefault();
+          drag = { pointerId: event.pointerId, placementId: target.item.id, model: target.model, axisHandle,
+            x: event.clientX, y: event.clientY, transform: { ...target.item.transform } };
+          canvas.setPointerCapture(event.pointerId);
+          return;
+        }
+      }
       if (this.mode !== 'camera' && event.button === 0 && !event.shiftKey) {
         const transform = this.viewer.transform;
         if (transform.object) {
@@ -1376,6 +1471,16 @@ export class StudioScene {
       if (drag.placementId) {
         const target = (drag.model ? this.doc.props : this.doc.actors).find(item => item.id === drag.placementId);
         if (!target || target.locked) return;
+        if (drag.axisHandle) {
+          const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+          if (!drag.changed && Math.hypot(dx, dy) < 3) return;
+          const { key, ux, uy, unitsPerPixel } = drag.axisHandle;
+          const value = key === 'scale' ? clamp(drag.transform.scale * Math.exp((dx - dy) / 120), 0.01, 40)
+            : drag.transform[key] + (dx * ux + dy * uy) * unitsPerPixel;
+          if (value === target.transform[key]) return;
+          beginChange(); this.writePlacement(target, drag.model, key, value);
+          return;
+        }
         const rect = canvas.getBoundingClientRect(), raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), this.viewer.camera);
         const point = raycaster.ray.intersectPlane(drag.plane, new THREE.Vector3()); if (!point) return;
@@ -1447,7 +1552,10 @@ export class StudioScene {
         if (target) {
           target.transform = cancelled.transform;
           if (cancelled.model) this.updateProp(target);
-          else this.updateActorTransform(target);
+          else {
+            this.doc.scale = target.transform.scale;
+            this.updateActorTransform(target);
+          }
         }
       } else this.doc.camera = cancelled.camera;
       cancelled.rollback?.();
@@ -1459,6 +1567,8 @@ export class StudioScene {
     if (this.disposed) return;
     this.disposed = true;
     this.resizeObserver?.disconnect();
+    this.placementHandles.dispose();
+    this.closeSplitView();
     this.splat?.dispose();
     for (const animal of this.animalActors.values()) animal.dispose();
     this.animalActors.clear();

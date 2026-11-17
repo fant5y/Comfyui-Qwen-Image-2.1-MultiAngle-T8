@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AnyAngle Studio · T8</title><link rel="stylesheet" href="./style.css?v=20261117columns"><link rel="stylesheet" href="./references.css?v=20261117shelf"><link rel="stylesheet" href="./workspace.css?v=20261117sidebars"><link rel="stylesheet" href="./pose-library.css?v=20261029v180"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AnyAngle Studio · T8</title><link rel="stylesheet" href="./style.css?v=20261117columns"><link rel="stylesheet" href="./references.css?v=20261117shelf"><link rel="stylesheet" href="./workspace.css?v=20261117canvas"><link rel="stylesheet" href="./pose-library.css?v=20261029v180"></head>
 <body>
 <header class="topbar">
   <div class="brand"><img src="../icons/aperture.svg" alt=""><strong>ANYANGLE</strong><span>STUDIO</span><small title="Studio version">T8 · v1.8.0</small></div>
@@ -11,7 +11,8 @@
   <section class="center-panel" id="center-panel">
     <div class="canvas-viewbar"><span id="view-detail">3D Workspace</span><button id="open-camera-settings" class="quiet" aria-controls="camera-section" aria-expanded="false" title="Adjust yaw, pitch, zoom and lens">Camera Settings</button><div class="view-switch" role="group" aria-label="Workspace View"><button id="view-output">Guide Preview</button><button id="view-scene" class="active">3D Workspace</button></div><select id="ratio" aria-label="Output Aspect Ratio"><option value="1:1">1:1</option><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="4:3">4:3</option><option value="custom">Custom</option></select></div>
     <div class="stage" id="stage">
-      <canvas id="viewport" aria-label="Interactive 3D scene. Drag to orbit, middle-drag or Shift-drag to pan, and scroll to zoom." tabindex="0"></canvas>
+      <canvas id="viewport" aria-label="3D scene. Use arrows to move the selected object, Shift plus up or down for height, and plus or minus to resize. Right-drag to orbit and middle-drag to pan." tabindex="0"></canvas>
+      <canvas id="secondary-viewport" aria-label="Secondary scene view. Use arrow keys or middle-drag to pan, right-drag to orbit, and scroll to zoom." tabindex="0" hidden></canvas>
       <div class="stage-toolbar"><button id="reference-overlay-toggle" class="overlay-toggle" title="Overlay the source image for alignment">Source Overlay</button></div>
       <svg id="view-orientation" viewBox="0 0 84 84" role="img" aria-label="Viewport orientation, Y up"><title>Viewport orientation</title><g data-view-axis="x"><line/><circle r="9"/><text>X</text></g><g data-view-axis="y"><line/><circle r="9"/><text>Y</text></g><g data-view-axis="z"><line/><circle r="9"/><text>Z</text></g></svg>
       <img id="reference-overlay" class="reference-overlay" alt="Translucent source image overlay" hidden>
@@ -27,7 +28,7 @@
 
     <div class="stage-help" id="stage-help">The yellow outline marks the output frame <span>Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom</span></div>
     <div id="resize-shots" role="separator" aria-label="Resize camera views and scene variations" aria-controls="shot-shelf" aria-orientation="horizontal" aria-valuemin="76" aria-valuemax="300" aria-valuenow="140" tabindex="0" title="Drag or use Up and Down to resize. Home resets."></div>
-    <section class="shot-shelf" id="shot-shelf"><div class="section-heading"><h2>Camera Views <small id="shot-count">0</small></h2><div class="compact-actions"><button id="open-batch">Batch Views</button><button id="save-shot"><img src="../icons/plus.svg" alt="">Save Current View</button></div></div><div id="shots" class="shots"><p class="empty-note">Save camera views here. Selecting a saved view keeps the current pose.</p></div><section class="shot-variations" aria-labelledby="variation-heading"><div class="section-heading"><h2 id="variation-heading">Scene Variations</h2></div><div class="compact-actions"><select id="composition-list" aria-label="Saved scene variation"><option value="">Choose Scene Variation</option></select><button id="save-composition">Save Variation</button><button id="apply-composition">Apply Variation</button></div><p class="hint">Variations store poses, positions, and props. Applying a variation preserves reference assignments.</p></section></section>
+    <section class="shot-shelf" id="shot-shelf"><div class="section-heading"><h2>Camera Views <small id="shot-count">0</small></h2><div class="compact-actions"><button id="split-view" type="button" aria-controls="secondary-viewport" aria-pressed="false" title="Open a second angle on the same scene">Split View</button><button id="open-batch">Batch Views</button><button id="save-shot"><img src="../icons/plus.svg" alt="">Save Current View</button></div></div><div id="shots" class="shots"><p class="empty-note">Save camera views here. Selecting a saved view keeps the current pose.</p></div><section class="shot-variations" aria-labelledby="variation-heading"><div class="section-heading"><h2 id="variation-heading">Scene Variations</h2></div><div class="compact-actions"><select id="composition-list" aria-label="Saved scene variation"><option value="">Choose Scene Variation</option></select><button id="save-composition">Save Variation</button><button id="apply-composition">Apply Variation</button></div><p class="hint">Variations store poses, positions, and props. Applying a variation preserves reference assignments.</p></section></section>
   </section>
   <aside class="left-panel">
     <section id="actors-panel" aria-labelledby="scene-heading"></section>
@@ -167,5 +168,5 @@
   </div>
 </dialog>
 <dialog closedby="any" class="studio-task-dialog" id="reconstruction-model-panel" aria-labelledby="reconstruction-model-heading"><div class="section-heading"><h2 id="reconstruction-model-heading">Reconstruction Models</h2><form method="dialog"><button>Close</button></form></div><p class="hint">Studio detects model subdirectories automatically. Select renamed compatible weights manually. Settings are saved in this browser.</p><div id="reconstruction-model-fields" class="model-fields"></div><div class="compact-actions"><button id="reconstruction-model-refresh">Refresh List</button><button id="reconstruction-model-save" class="primary" disabled>Save Selection</button></div><p id="reconstruction-model-state" class="hint" role="status">Reading the local model list…</p></dialog>
-<script type="module" src="./app.mjs?v=20261117sidebars"></script>
+<script type="module" src="./app.mjs?v=20261117canvas"></script>
 </body></html>
