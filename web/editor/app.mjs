@@ -2,7 +2,7 @@ import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117sceneassets';
 import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117dock';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261117animalrefs';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117dock';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117columns';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
@@ -12,7 +12,7 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261117direct';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117dock';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117columns';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261117animalrefs';
 
@@ -94,11 +94,11 @@ for (const handle of workspace.querySelectorAll('[data-sidebar]')) {
   const side = handle.dataset.sidebar;
   const panel = workspace.querySelector(`.${side}-panel`);
   const widthProperty = `--${side}-sidebar-width`;
-  const direction = -1;
+  const direction = side === 'right' ? -1 : 1;
   const storageKey = `anyangle-studio.sidebar-width.${side}`;
   try {
     const savedWidth = Number(localStorage.getItem(storageKey));
-    if (Number.isFinite(savedWidth) && savedWidth >= 200)
+    if (Number.isFinite(savedWidth) && savedWidth > 0)
       workspace.style.setProperty(widthProperty, `${savedWidth}px`);
   } catch { /* Studio can still resize without browser storage. */ }
   const saveWidth = () => {
@@ -110,8 +110,8 @@ for (const handle of workspace.querySelectorAll('[data-sidebar]')) {
   };
   const setWidth = width => {
     const sceneDock = side === 'left';
-    const maxWidth = Math.floor(workspace.clientWidth * (sceneDock ? 0.36 : 0.38));
-    const minimum = sceneDock ? 240 : 270;
+    const maxWidth = Math.floor(workspace.clientWidth * (sceneDock ? 0.22 : side === 'character' ? 0.33 : 0.38));
+    const minimum = sceneDock ? 170 : side === 'character' ? 248 : 270;
     workspace.style.setProperty(widthProperty, Math.max(minimum, Math.min(maxWidth, width)) + 'px');
   };
   let drag;
@@ -348,7 +348,6 @@ function refresh() {
     ? poseAnimal.source.shape === 'owl' || poseAnimal.locked || poseAnimal.visible === false
     : !doc.reference?.name || !!linkedReference.pending;
   $('#pose-category').value = (doc.randomMaster || doc.poseRandom)?.category || 'mixed';
-  if (document.activeElement !== $('#pose-seed')) $('#pose-seed').value = (doc.randomMaster || doc.poseRandom)?.seed || 0;
   for (const id of ['shot-shelf', 'resize-shots', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
   $('#stage-help').textContent = previewVisible ? staticGuide ? 'Source composition and structure · Apply to output this guide' : 'Guide from the current camera · Switch to 3D Workspace to adjust the view'
     : studio?.mode === 'position' ? 'Select an object · Drag an axis to move it · Right-drag to orbit · Middle-drag to pan'
@@ -372,8 +371,8 @@ function refresh() {
   const animal = mannequinScene && activeActor(doc)?.source.kind === 'animal';
   const human = mannequinScene && !animal;
   const splat = doc.source.kind === 'splat', empty = doc.source.kind === 'empty';
-  $('#front').disabled = $('#front-number').disabled = mannequinScene || splat || empty;
-  $('#scale').disabled = $('#scale-number').disabled = splat || empty || mannequinScene && !!activeActor(doc)?.locked;
+  $('#front').disabled = mannequinScene || splat || empty;
+  $('#scale').disabled = splat || empty || mannequinScene && !!activeActor(doc)?.locked;
   $('#front').closest('.control').hidden = mannequinScene || splat || empty;
   $('#scale').closest('.control').hidden = splat || empty || !!selectedModel || (mannequinScene && !actorSelected);
   $('#calibration-hint').textContent = splat
@@ -396,8 +395,9 @@ function refresh() {
   $('#selection-pose-tools').hidden = ['pose-panel', 'hands-panel', 'body-panel', 'joint-panel', 'cast-interactions'].every(id => document.getElementById(id).hidden);
   $('#body-sliders').hidden = animal;
   $('#male-anatomy').hidden = !human || Number(doc.mesh.gender) < 0.99;
-  $('#show-genitals').checked = doc.mesh.show_genitals === true;
-  $('#male-anatomy-controls').hidden = !$('#show-genitals').checked;
+  const anatomyVisible = doc.mesh.show_genitals === true;
+  $('#show-genitals').textContent = anatomyVisible ? 'Hide anatomy' : 'Show anatomy';
+  $('#male-anatomy-controls').hidden = !anatomyVisible;
   for (const button of document.querySelectorAll('[data-body-shape]'))
     button.setAttribute('aria-pressed', String(doc.mesh.gender === Number(button.dataset.bodyShape)));
   $('#animal-body-sliders').hidden = !animal;
@@ -418,7 +418,7 @@ function refresh() {
   $('#reference-origin').textContent = linkedReference.connected ? linkedReference.message : 'Connect an IMAGE input on the node or upload a source image.';
   $('#reconstruction-state').hidden = !doc.reference;
   const keepBackground = doc.reconstruction.keepBackground;
-  $('#keep-background').checked = keepBackground;
+  $('#keep-background').value = keepBackground ? 'full-image' : 'subject';
   $('#keep-background').disabled = !doc.reference || !!linkedReference.pending;
   const reconstructionChanged = splat && !!doc.source.keep_background !== keepBackground;
   $('#reconstruction-state').textContent = splat ? 'The reconstruction keeps its source pose. Move the camera for a different view or switch to a mannequin to edit the pose.' : 'Rebuild the subject from the source image, then adjust the camera.';
@@ -604,10 +604,10 @@ function animalJointLabel(name) {
 function makeControl(container, { id, label, min, max, step = 1, unit = '', resetValue, read, write, commit }) {
   const wrap = document.createElement('div'); wrap.className = 'control';
   const top = document.createElement('div'); top.className = 'control-top';
-  const title = document.createElement('label'); title.textContent = label; title.htmlFor = `${id}-number`;
+  const title = document.createElement('label'); title.textContent = label; title.htmlFor = id;
   const value = document.createElement('div'); value.className = 'control-value';
-  const number = document.createElement('input'); Object.assign(number, { id: `${id}-number`, type: 'number', min, max, step });
-  const suffix = document.createElement('span'); suffix.textContent = unit; value.append(number, suffix); top.append(title, value);
+  const readout = document.createElement('output'); readout.htmlFor.add(id); readout.setAttribute('aria-live', 'off');
+  const suffix = document.createElement('span'); suffix.textContent = unit; value.append(readout, suffix); top.append(title, value);
   const range = document.createElement('input'); Object.assign(range, { id, type: 'range', min, max, step }); range.setAttribute('aria-label', label);
   const endpoints = document.createElement('div'); endpoints.className = 'control-range-labels';
   for (const text of [`${min}${unit}`, `${max}${unit}`]) { const span = document.createElement('span'); span.textContent = text; endpoints.append(span); }
@@ -636,13 +636,7 @@ function makeControl(container, { id, label, min, max, step = 1, unit = '', rese
   };
   range.oninput = () => { start(); update(range.value); };
   range.onchange = () => { gesture = false; if (commit) run(async () => { await commit(); changed(); }); };
-  number.oninput = () => { if (number.value === '' || !Number.isFinite(number.valueAsNumber)) return; start(); update(number.value); };
-  number.onblur = () => {
-    const edited = gesture; gesture = false;
-    if (edited && commit) run(async () => { await commit(); changed(); });
-    control.refresh();
-  };
-  const control = { refresh() { const v = Number(read()); range.value = v; if (document.activeElement !== number) number.value = Number(v.toFixed(step < 1 ? 2 : 1)); } };
+  const control = { refresh() { const v = Number(read()); range.value = v; readout.value = Number(v.toFixed(step < 1 ? 2 : 1)); } };
   controls.set(id, control); control.refresh();
 }
 
@@ -695,8 +689,8 @@ $('#reset-male-anatomy').onclick = () => run(async () => {
   await studio.morph();
   changed();
 });
-$('#show-genitals').onchange = event => run(async () => {
-  const visible = event.target.checked;
+$('#show-genitals').onclick = () => run(async () => {
+  const visible = !doc.mesh.show_genitals;
   begin(); doc.mesh.show_genitals = visible;
   await studio.morph(); changed();
 });
@@ -708,14 +702,6 @@ for (const [key, label, min, max] of [['penis_tilt', 'Penis Tilt', -45, 175], ['
   makeControl('#male-anatomy-sliders', { id: `body-${key}`, label, min, max, unit: '°', resetValue: 0,
     read: () => doc.mesh[key] ?? 0,
     write: value => { doc.mesh[key] = value; }, commit: () => studio.morph() });
-makeControl('#animal-body-sliders', { id: 'animal-size', label: 'Size', min: 0.25, max: 4, step: 0.01, unit: '×', resetValue: 1,
-  read: () => activeActor(doc)?.transform.scale ?? 1,
-  write: value => {
-    const actor = activeActor(doc);
-    if (!studio.animal || !actor || actor.locked) return;
-    doc.scale = actor.transform.scale = value;
-    studio.updateActorTransform(actor);
-  } });
 makeControl('#animal-body-sliders', { id: 'animal-build', label: 'Body Build · Lean to Stocky', min: 0.65, max: 1.45, step: 0.01, resetValue: 1,
   read: () => activeActor(doc)?.animalBuild ?? 1,
   write: value => {
@@ -725,7 +711,7 @@ makeControl('#animal-body-sliders', { id: 'animal-build', label: 'Body Build · 
     studio.animal.setBuild(value);
     studio.viewer.requestRender();
   } });
-for (const axis of ['x', 'y', 'z']) makeControl('#bone-sliders', { id: `bone-${axis}`, label: `Rotate ${axis.toUpperCase()}`, min: -180, max: 180, step: 1, unit: '°',
+for (const axis of ['x', 'y', 'z']) makeControl('#bone-sliders', { id: `bone-${axis}`, label: `Rotate ${axis.toUpperCase()}`, min: -180, max: 180, step: 1, unit: '°', resetValue: 0,
   read: () => ((studio?.animal ? studio.animal.joints.get(selectedBone) : studio?.viewer.bones[selectedBone])?.rotation[axis] || 0) * 180 / Math.PI,
   write: value => {
     const bone = studio.animal ? studio.animal.joints.get(selectedBone) : studio.viewer.bones[selectedBone];
@@ -760,9 +746,9 @@ $('.right-panel').append(cameraSection);
 function showRightPanel(output, camera = false) {
   cameraSection.hidden = !camera;
   $('#open-camera-settings').setAttribute('aria-expanded', String(camera));
-  $('.left-panel').hidden = output || camera;
+  $('.left-panel').hidden = $('.character-panel').hidden = output || camera;
   $('#center-panel').classList.toggle('reviewing', output);
-  $('[data-sidebar="left"]').hidden = output || camera;
+  $('[data-sidebar="left"]').hidden = $('[data-sidebar="character"]').hidden = output || camera;
   $('#output-inspector').hidden = !output;
   $('#workspace').classList.toggle('show-output', output);
   $('#workspace').classList.toggle('show-camera', camera);
@@ -1378,7 +1364,7 @@ $('#reconstruct').onclick = () => {
   run(reconstructPhoto);
 };
 $('#keep-background').onchange = () => {
-  begin(); doc.reconstruction.keepBackground = $('#keep-background').checked; changed();
+  begin(); doc.reconstruction.keepBackground = $('#keep-background').value === 'full-image'; changed();
   if ($('#reconstruction-model-panel').open) run(loadReconstructionModels);
 };
 $('#extract-coarse').onclick = () => run(reconstructPhoto);
@@ -1433,12 +1419,8 @@ async function applyRandomPose(seed) {
   if (doc.source.kind !== 'human') return;
   return randomRoles(seed, $('#pose-category').value);
 }
-$('#pose-category').onchange = $('#pose-seed').onchange = () => {
-  if (!$('#pose-seed').reportValidity()) return;
-  begin(); doc.randomMaster = { seed: Number($('#pose-seed').value), category: $('#pose-category').value }; changed(false);
-};
 $('#random-pose').onclick = () => run(() => applyRandomPose(crypto.getRandomValues(new Uint32Array(1))[0]));
-$('#repeat-pose').onclick = () => run(() => applyRandomPose(Number($('#pose-seed').value)));
+$('#repeat-pose').onclick = () => run(() => applyRandomPose((doc.randomMaster || doc.poseRandom)?.seed ?? 0));
 
 $('#load-error-close').onclick = () => closeWorkbench();
 $('#load-error-dialog').oncancel = event => { if (!ready) event.preventDefault(); };
@@ -1456,7 +1438,8 @@ $('#repair-human').onclick = async () => {
   finally { $('#repair-human').disabled = $('#retry-human').disabled = false; }
 };
 
-function askName(title, initial) {
+function askName(title, initial, maxLength = 48) {
+  $('#name-input').maxLength = maxLength;
   $('#name-title').textContent = title; $('#name-input').value = initial; $('#name-dialog').returnValue = '';
   $('#name-dialog').showModal(); $('#name-input').select();
   return new Promise(resolve => { $('#name-dialog').addEventListener('close', () => resolve($('#name-dialog').returnValue === 'ok' ? $('#name-input').value.trim() : null), { once: true }); });
@@ -1857,7 +1840,7 @@ installReferencesUI({ doc: () => doc, sourceConnected: () => linkedReference.con
     doc.reference = asset;
     sourceChanged(doc, previous);
     changed();
-    toast('Scene Source Image set. Open Scene Objects to rebuild or extract its pose.');
+    toast('Source image set. Use Add to Scene to copy its pose or rebuild it in 3D.');
   }) });
 if (embedded) {
   let started = false;

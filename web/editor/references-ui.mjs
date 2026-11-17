@@ -11,9 +11,21 @@ let context, key, previewId, connected = [], openId, lastMapping = '', mappingWa
 let renderedScene, renderedItems = [];
 const openRoleOptions = new Set();
 function edit(action, updatePreview = false) { context.begin(); action(); context.changed(updatePreview); }
+function chooseSourceTask(task) {
+  const choose = !task;
+  $('source-task-heading').textContent = choose ? 'Start from an image' : task === 'pose' ? 'Copy a Pose' : 'Rebuild in 3D';
+  $('source-task-choice').hidden = !choose;
+  $('source-task-form').hidden = choose;
+  $('source-pose-task').hidden = task !== 'pose';
+  $('source-rebuild-task').hidden = task !== 'rebuild';
+}
+
 function openSourceTools() {
   $('reference-library-dialog').close();
+  $('add-to-scene').close();
+  chooseSourceTask();
   $('source-tools-panel').showModal();
+  $('source-task-choice').querySelector('button').focus();
 }
 
 function revealScene() {
@@ -24,13 +36,14 @@ function revealScene() {
 export function installReferencesUI(value) {
   context = value;
   const dialog = el('dialog', '', 'studio-task-dialog');
+  dialog.setAttribute("closedby", "any");
   dialog.id = 'reference-library-dialog';
   dialog.setAttribute('aria-labelledby', 'reference-library-title');
   const materials = el('section', '', 'reference-materials');
   materials.id = 'reference-materials';
   materials.innerHTML = `<div class="section-heading"><h2 id="reference-library-title">References</h2><span id="reference-count"></span><button id="close-references" autofocus>Close</button></div>
     <p class="hint">References tell the generator what to borrow. Expand a card to see its prompt instructions.</p>
-    <div class="reference-source"><img id="library-source-image" alt="Scene Source Image" hidden><div><strong>Scene Source Image</strong><p id="library-source-state" class="hint"></p><button id="source-tools">Rebuild / Extract / Replace</button><button id="source-to-library">Add to References</button><button id="library-clear-source" hidden>Remove Source Image</button></div></div>
+    <div class="reference-source"><img id="library-source-image" alt="Scene Source Image" hidden><div><strong>Scene Source Image</strong><p id="library-source-state" class="hint"></p><button id="source-tools">Copy pose or rebuild in 3D</button><button id="source-to-library">Add to References</button><button id="library-clear-source" hidden>Remove Source Image</button></div></div>
     <div class="compact-actions"><button id="add-reference" class="primary">＋ Add Reference</button><button id="read-references">Read Connections</button></div>
     <div id="legacy-references"><p class="hint">This scene uses legacy image rules. Upgrade to assign multiple roles to each image. You can undo the upgrade.</p><button id="upgrade-references">Upgrade References</button></div>
     <div id="reference-cards"></div><p id="reference-empty-note" class="empty-note">Add a reference and choose its role. Characters are optional.</p>
@@ -41,6 +54,20 @@ export function installReferencesUI(value) {
   $('canvas-appearance').onclick = chooseAppearanceImage;
   $('open-source-tools').onclick = openSourceTools;
   $('close-references').onclick = () => dialog.close();
+  for (const choice of $('source-task-choice').querySelectorAll('[data-source-task]')) {
+    choice.onclick = () => {
+      chooseSourceTask(choice.dataset.sourceTask);
+      $('reference-drop').focus();
+    };
+  }
+  $('source-task-back').onclick = () => {
+    chooseSourceTask();
+    $('source-task-choice').querySelector('button').focus();
+  };
+  $('open-reconstruction-models').onclick = () => $('reconstruction-model-panel').showModal();
+  for (const id of ['copy-photo-pose', 'return-to-cast']) {
+    $(id).addEventListener('click', () => $('source-tools-panel').close(), { capture: true });
+  }
   const stale = el('div', '', 'reference-review'); stale.id = 'reference-source-warning';
   const message = el('p'); message.id = 'reference-source-warning-text';
   const keep = button('Keep Saved Structure Guide', () => edit(() => { const scene = context.doc(); scene.derivedGuideStale = false; scene.retainedGuideSource = scene.derivedGuideSource;
@@ -86,7 +113,8 @@ export function installReferencesUI(value) {
   const preview = el('div', '', 'reference-stage-preview'); preview.id = 'reference-stage-preview';
   preview.innerHTML = '<div class="reference-preview-title"><strong>Reference Preview</strong><span>3D scene retained · No guide output</span></div><img id="reference-stage-image" alt="Current reference preview"><p id="reference-stage-empty" class="empty-note">Enter a prompt or add a reference.</p><div id="reference-stage-thumbs"></div>';
   $('stage').append(preview);
-  const crop = el('dialog', '', 'reference-crop-dialog'); crop.id = 'reference-crop-dialog';
+  const crop = el('dialog', '', 'reference-crop-dialog');
+  crop.setAttribute("closedby", "any"); crop.id = 'reference-crop-dialog';
   crop.innerHTML = `<form method="dialog"><div class="section-heading"><h2>Crop to New Reference</h2><button value="cancel" formnovalidate>Cancel</button></div><p class="hint">Drag a rectangle on the image. The crop gets its own reference and image number, and the source stays in the library.</p><div id="reference-crop-surface"><img id="reference-crop-image" alt="Crop source"><div id="reference-crop-box"></div></div><div class="crop-fields">${['x','y','width','height'].map(name => `<label>${name}<input id="crop-${name}" type="number" min="${name === 'width' || name === 'height' ? 1 : 0}" required></label>`).join('')}</div><button value="ok" class="primary">Save Crop</button></form>`;
   document.body.append(crop); installCropDrag();
 }
@@ -113,6 +141,7 @@ function chooseAppearanceImage() {
   if (!actor || !scene.referenceLibrary) return;
   const assign = item => assignRole(item, "character", { kind: "actors", ids: [actor.id], text: "" });
   const dialog = el("dialog", "", "studio-task-dialog appearance-picker");
+  dialog.setAttribute("closedby", "any");
   const heading = el("h2", "Appearance image for " + actor.label);
   heading.id = "appearance-picker-heading";
   dialog.setAttribute("aria-labelledby", heading.id);
@@ -162,6 +191,7 @@ function chooseCharacter(scene, item) {
     for (const model of scene.props || []) if (model.visible !== false) targets.push({ kind: 'props', item: model });
   }
   const dialog = el('dialog', '', 'reference-character-dialog');
+  dialog.setAttribute("closedby", "any");
   const form = el('form'); form.method = 'dialog';
   const description = el('input');
   description.placeholder = 'For example, Cyborg';
@@ -393,7 +423,6 @@ export function refreshReferencesUI(force = false) {
   for (const option of $('image-order').options) option.textContent = option.value === 'guide-first'
     ? (modern && anyangle && source ? 'Render 1 / Source 2 / References 3+' : modern ? 'Guide First / References After' : 'Guide 1 / Source 2')
     : (modern && anyangle && source ? 'Source 1 / Render 2 / References 3+' : modern ? 'References First / Guide Last' : 'Source 1 / Guide 2');
-  if (modern) $('reference-heading').textContent = 'Scene Source Image · Extract / Rebuild';
   document.querySelector('.guide-choice-grid').hidden = noGuide;
   document.querySelector('.guide-label').hidden = noGuide;
   document.querySelector('.output-section').hidden = noGuide;

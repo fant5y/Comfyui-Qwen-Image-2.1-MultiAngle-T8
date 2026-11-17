@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AnyAngle Studio · T8</title><link rel="stylesheet" href="./style.css?v=20261117dock"><link rel="stylesheet" href="./references.css?v=20261117shelf"><link rel="stylesheet" href="./workspace.css?v=20261117dock"><link rel="stylesheet" href="./pose-library.css?v=20261029v180"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AnyAngle Studio · T8</title><link rel="stylesheet" href="./style.css?v=20261117columns"><link rel="stylesheet" href="./references.css?v=20261117shelf"><link rel="stylesheet" href="./workspace.css?v=20261117columns"><link rel="stylesheet" href="./pose-library.css?v=20261029v180"></head>
 <body>
 <header class="topbar">
   <div class="brand"><img src="../icons/aperture.svg" alt=""><strong>ANYANGLE</strong><span>STUDIO</span><small title="Studio version">T8 · v1.8.0</small></div>
@@ -31,20 +31,23 @@
   </section>
   <aside class="left-panel">
     <section id="actors-panel" aria-labelledby="scene-heading"></section>
+    <div class="scene-action-row scene-file-actions" role="group" aria-label="Portable scene"><button id="import-scene">Import Scene ZIP</button><button id="export-scene">Export Scene ZIP</button></div>
+  </aside>
+  <button type="button" class="sidebar-resize" data-sidebar="left" aria-label="Resize scene list" title="Drag or use arrow keys. Double-click to reset."></button>
+  <aside class="character-panel" aria-label="Selected item controls">
+    <p id="selection-empty" class="empty-note">Select a scene item to edit it.</p>
     <section id="selection-inspector" hidden aria-labelledby="selection-heading">
       <div class="section-heading"><h2 id="selection-heading">Selection</h2></div>
       <div id="selection-fields" class="cast-panel" hidden></div>
       <div id="selection-pose-tools" hidden>
     <section class="inspector-group pose-subsection" id="hands-panel" hidden><h3>Hand Poses <small>Character’s Left and Right</small></h3><div id="hands"></div></section>
-    <section class="inspector-group pose-subsection" id="body-panel" hidden><h3>Body Shape</h3><div id="body-sliders"><div class="three-buttons" role="group" aria-label="Human body shape"><button type="button" data-body-shape="0">Female</button><button type="button" data-body-shape="0.5">Neutral</button><button type="button" data-body-shape="1">Male</button></div></div><button type="button" id="reset-body-shape" class="wide-button">Reset Body Shape</button><div id="male-anatomy" hidden><label class="option-toggle"><input id="show-genitals" type="checkbox"><span>Show male anatomy</span></label><div id="male-anatomy-controls" hidden><div id="male-anatomy-sliders"></div><button type="button" id="reset-male-anatomy" class="wide-button">Reset Anatomy Sliders</button></div></div><div id="animal-body-sliders" hidden><button id="import-animal-pose" class="wide-button">Import AnimalPose JSON</button><button id="read-animal-keypoints" class="wide-button" hidden>Read Connected AnimalPose</button><input type="file" id="animal-pose-file" accept=".json,application/json" hidden></div></section>
+    <section class="inspector-group pose-subsection" id="body-panel" hidden><h3>Body Shape</h3><div id="body-sliders"><div class="three-buttons" role="group" aria-label="Human body shape"><button type="button" data-body-shape="0">Female</button><button type="button" data-body-shape="0.5">Neutral</button><button type="button" data-body-shape="1">Male</button></div></div><button type="button" id="reset-body-shape" class="wide-button">Reset Body Shape</button><div id="male-anatomy" hidden><button type="button" id="show-genitals">Show anatomy</button><div id="male-anatomy-controls" hidden><div id="male-anatomy-sliders"></div><button type="button" id="reset-male-anatomy" class="wide-button">Reset Anatomy Sliders</button></div></div><div id="animal-body-sliders" hidden><button id="import-animal-pose" class="wide-button">Import AnimalPose JSON</button><button id="read-animal-keypoints" class="wide-button" hidden>Read Connected AnimalPose</button><input type="file" id="animal-pose-file" accept=".json,application/json" hidden></div></section>
     <section class="inspector-group pose-subsection" id="joint-panel" hidden><h3>Pose Joints <small id="bone-name"></small></h3><p class="hint" id="joint-hint">Use Pose &amp; Rotate to select a joint or drag a hand or foot handle.</p><select id="bone-select" aria-label="Choose Joint"><option value="">Choose Joint</option></select><div id="owl-wing-poses" hidden><div class="three-buttons" role="group" aria-label="Owl wing poses"><button type="button" data-owl-wings="folded">Fold Wings</button><button type="button" data-owl-wings="spread">Spread Wings</button><button type="button" data-owl-wings="raised">Raise Wings</button></div></div><div id="selected-joint-controls" hidden><div id="bone-sliders"></div><button id="reset-bone">Reset Selected Joint</button></div></section>
-<section class="inspector-group pose-subsection" id="pose-panel" hidden><h3>Pose Library <span class="tag amber">Experimental</span></h3><div class="preset-grid" id="presets"></div><div class="random-pose"><label>Category<select id="pose-category"><option value="mixed">Mixed</option><option value="standing">Standing</option><option value="action">Action</option><option value="seated">Seated</option></select></label><button id="random-pose" class="wide-button accent-button">Random Pose</button><label>Apply To<select id="random-scope"><option value="current">Current Character</option><option value="selected">Selected Characters</option><option value="all">All Unlocked Characters</option></select></label><label>Seed<input id="pose-seed" type="number" min="0" max="4294967295" step="1" value="0"></label><button id="repeat-pose" class="wide-button">Repeat from Seed</button><p class="hint">Generate a constrained pose variation, then adjust, undo, or save it.</p></div><div class="compact-actions" id="pose-actions"><button id="save-pose"><img src="../icons/device-floppy.svg" alt="">Save Pose</button><button id="import-pose" title="Import a pose JSON exported from Studio">Import</button><button id="export-pose" title="Export pose JSON">Export</button></div><div id="saved-poses" class="saved-poses"></div></section>
+<section class="inspector-group pose-subsection" id="pose-panel" hidden><h3>Pose Library <span class="tag amber">Experimental</span></h3><div class="preset-grid" id="presets"></div><div class="random-pose"><label>Category<select id="pose-category"><option value="mixed">Mixed</option><option value="standing">Standing</option><option value="action">Action</option><option value="seated">Seated</option></select></label><button id="random-pose" class="wide-button accent-button">Random Pose</button><label>Apply To<select id="random-scope"><option value="current">Current Character</option><option value="selected">Selected Characters</option><option value="all">All Unlocked Characters</option></select></label><button id="repeat-pose" class="wide-button">Repeat Last Pose</button><p class="hint">Generate a constrained pose variation, then adjust, undo, or save it.</p></div><div class="compact-actions" id="pose-actions"><button id="save-pose"><img src="../icons/device-floppy.svg" alt="">Save Pose</button><button id="import-pose" title="Import a pose JSON exported from Studio">Import</button><button id="export-pose" title="Export pose JSON">Export</button></div><div id="saved-poses" class="saved-poses"></div></section>
       </div>
     </section>
-    <div class="scene-action-row scene-file-actions" role="group" aria-label="Portable scene"><button id="import-scene">Import Scene ZIP</button><button id="export-scene">Export Scene ZIP</button></div>
-    
   </aside>
-  <button type="button" class="sidebar-resize" data-sidebar="left" aria-label="Resize scene dock" title="Drag or use arrow keys. Double-click to reset."></button>
+  <button type="button" class="sidebar-resize" data-sidebar="character" aria-label="Resize character controls" title="Drag or use arrow keys. Double-click to reset."></button>
   <button type="button" class="sidebar-resize" data-sidebar="right" hidden aria-label="Resize right sidebar" title="Drag or use arrow keys. Double-click to reset."></button>
   <aside class="right-panel" hidden>
     <section id="output-inspector" hidden aria-label="Output">
@@ -96,7 +99,7 @@
 <footer><div id="status" role="status">Preparing</div><span>IMAGE <b>·</b> PROMPT <b>·</b> SCENE JSON <b>·</b> <span id="footer-lora">Base model</span></span></footer>
 <div id="toast" role="status" hidden></div>
 <dialog id="load-error-dialog" class="load-error-dialog" aria-labelledby="load-error-title"><h2 id="load-error-title">Could Not Load Studio Assets</h2><p id="load-error-message"></p><p id="load-error-help" class="hint">The node includes the mannequin and works without Fisher. Repair verifies and restores mannequin assets and textures only.</p><div class="compact-actions"><button id="repair-human" class="primary">Repair Mannequin Assets</button><button id="retry-human">Retry Loading</button><button id="load-error-close">Close Studio</button></div><p id="repair-state" class="hint" role="status"></p></dialog>
-<dialog id="batch-dialog" class="batch-dialog" aria-labelledby="batch-title">
+<dialog closedby="any" id="batch-dialog" class="batch-dialog" aria-labelledby="batch-title">
   <h2 id="batch-title">Batch Views <span class="tag">MULTI-VIEW</span></h2>
   <div id="batch-options">
     <label>Pose Set<select id="batch-pose-mode"><option value="current">Current Pose · Default</option><option value="library">Selected Library Poses × Camera Views</option></select></label><p class="hint">Add poses to the batch from the library. Studio runs each job with a fixed identity and pose, then restores your draft.</p>
@@ -117,13 +120,14 @@
 </dialog>
 <input id="batch-preset-file" type="file" accept=".json,application/json" hidden>
 <dialog id="discard-draft" aria-labelledby="discard-draft-title"><form method="dialog"><h2 id="discard-draft-title">Discard unsaved changes?</h2><div><button value="keep" class="primary" autofocus>Keep Editing</button><button value="discard">Discard Changes</button></div></form></dialog>
-<dialog id="name-dialog"><form method="dialog"><h2 id="name-title">Name</h2><input id="name-input" maxlength="48" required autocomplete="off"><div><button value="cancel" formnovalidate>Cancel</button><button value="ok" class="primary">Save</button></div></form></dialog>
+<dialog closedby="any" class="studio-task-dialog" id="actor-description-dialog" aria-labelledby="actor-description-heading"><form method="dialog"><h2 id="actor-description-heading">Appearance Notes</h2><label for="actor-description">Describe the look you want generated</label><textarea id="actor-description" rows="4" maxlength="16000" autofocus></textarea><div><button value="cancel">Cancel</button><button value="save" class="primary">Save</button></div></form></dialog>
+<dialog closedby="any" id="name-dialog"><form method="dialog"><h2 id="name-title">Name</h2><input id="name-input" maxlength="48" required autocomplete="off"><div><button value="cancel" formnovalidate>Cancel</button><button value="ok" class="primary">Save</button></div></form></dialog>
 <input type="file" id="reference-file" accept="image/*" hidden><input type="file" id="pose-file" accept=".json,application/json" hidden><input type="file" id="openpose-file" accept="image/png,image/jpeg,image/webp,.json,application/json" hidden><input type="file" id="map-file" accept="image/*" hidden>
 <input type="file" id="scene-file" accept=".zip,application/zip" hidden>
-<dialog id="people-dialog" class="people-dialog"><form method="dialog"><div class="section-heading"><h2>Copy Multiple Poses from a Photo</h2><button value="cancel" formnovalidate>Cancel</button></div><p id="people-count" class="hint"></p><div class="people-picker"><div class="people-image"><img id="people-photo" alt="Pose Source Photo"><div id="people-overlay"></div></div><div id="people-choices"></div></div><label class="option-toggle"><input id="people-match-layout" type="checkbox" checked><span>Match positions to the photo and fit the full scene</span></label><label class="option-toggle"><input id="people-bind-photo" type="checkbox"><span>Also assign this photo as an identity reference<small>Leave off to copy poses only</small></span></label><div class="compact-actions"><button value="current">Copy One Pose to Current Character</button><button value="all" class="primary">Create Selected Characters</button></div></form></dialog>
-<dialog id="add-to-scene" class="studio-task-dialog" aria-labelledby="add-to-scene-heading">
+<dialog closedby="any" id="people-dialog" class="people-dialog"><form method="dialog"><div class="section-heading"><h2>Copy Multiple Poses from a Photo</h2><button value="cancel" formnovalidate>Cancel</button></div><p id="people-count" class="hint"></p><div class="people-picker"><div class="people-image"><img id="people-photo" alt="Pose Source Photo"><div id="people-overlay"></div></div><div id="people-choices"></div></div><label class="option-toggle"><input id="people-match-layout" type="checkbox" checked><span>Match positions to the photo and fit the full scene</span></label><label class="option-toggle"><input id="people-bind-photo" type="checkbox"><span>Also assign this photo as an identity reference<small>Leave off to copy poses only</small></span></label><div class="compact-actions"><button value="current">Copy One Pose to Current Character</button><button value="all" class="primary">Create Selected Characters</button></div></form></dialog>
+<dialog closedby="any" id="add-to-scene" class="studio-task-dialog" aria-labelledby="add-to-scene-heading">
   <div class="section-heading"><h2 id="add-to-scene-heading">Add to Scene</h2><form method="dialog"><button>Close</button></form></div>
-  <div id="asset-actions" class="scene-action-row"><button id="import-glb"><img src="../icons/cube.svg" alt=""><span id="import-glb-label">Import GLB</span></button></div>
+  <div id="asset-actions" class="scene-action-row"><button id="import-glb"><img src="../icons/cube.svg" alt=""><span id="import-glb-label">Import GLB</span></button><button id="open-source-tools" aria-haspopup="dialog"><img src="../icons/photo.svg" alt="">Pose or rebuild from a photo</button></div>
       <button id="human" hidden><img src="../icons/body-scan.svg" alt="">Mannequin</button>
       <div class="animal-mannequin-field">
         <span id="animal-mannequin-label">Add Animal Mannequin</span>
@@ -135,20 +139,33 @@
         </div>
       </div>
     </dialog>
-<dialog class="studio-task-dialog reference-section" id="source-tools-panel" aria-labelledby="reference-heading">
-      <div class="section-heading"><h2 id="reference-heading">Source Image <small>· image_1</small></h2><form method="dialog"><button>Close</button></form></div>
-      <button id="reference-drop" class="reference-drop" aria-label="Choose a source image"><img id="reference" alt="Full source image" hidden><span id="reference-empty"><img src="../icons/photo.svg" alt=""><strong>Import Source Image</strong><small>Pose extraction / 3D reconstruction / image_1</small></span></button>
-      <p id="reference-origin" class="hint">Connect an IMAGE input or upload a source image.</p>
-      <button id="read-reference" hidden><img src="../icons/refresh.svg" alt="">Read Connected Image</button>
-      <button id="clear-reference" hidden>Remove Source Image</button>
-      <label class="reconstruction-option"><input id="keep-background" type="checkbox" aria-describedby="keep-background-hint"><span>Include background in reconstruction <small class="tag amber">Experimental</small></span></label>
+<dialog closedby="any" class="studio-task-dialog reference-section" id="source-tools-panel" aria-labelledby="source-task-heading">
+  <div class="section-heading"><h2 id="source-task-heading">Start from an image</h2><form method="dialog"><button>Close</button></form></div>
+  <div id="source-task-choice" class="compact-actions">
+    <button type="button" data-source-task="pose">Copy a Pose</button>
+    <button type="button" data-source-task="rebuild">Rebuild in 3D</button>
+  </div>
+  <div id="source-task-form" hidden>
+    <button type="button" id="source-task-back" class="quiet">Back</button>
+    <h3 id="reference-heading">Source Image <small>· image_1</small></h3>
+    <button id="reference-drop" class="reference-drop" aria-label="Choose a source image"><img id="reference" alt="Full source image" hidden><span id="reference-empty"><img src="../icons/photo.svg" alt=""><strong>Import Source Image</strong></span></button>
+    <p id="reference-origin" class="hint">Connect an IMAGE input or upload a source image.</p>
+    <button id="read-reference" hidden><img src="../icons/refresh.svg" alt="">Read Connected Image</button>
+    <button id="clear-reference" hidden>Remove Source Image</button>
+    <div id="source-pose-task" hidden>
+      <button id="copy-photo-pose" class="primary wide-button copy-pose-button" disabled>Copy Source Pose to Mannequin</button>
+    </div>
+    <div id="source-rebuild-task" hidden>
+      <label for="keep-background">Reconstruct</label><select id="keep-background" aria-describedby="keep-background-hint"><option value="subject">Subject only</option><option value="full-image">Subject and background (experimental)</option></select>
       <p id="keep-background-hint" class="hint">Reconstruct the full image. Results for large scenes depend on TripoSplat. Rebuild after changing this setting.</p>
       <button id="reconstruct" class="primary reconstruct-button" disabled>Rebuild 3D from Source</button>
       <p id="reconstruction-state" class="hint" hidden>Rebuild the subject, then adjust the camera.</p>
-      <button id="copy-photo-pose" class="wide-button copy-pose-button" disabled>Copy Source Pose to Mannequin</button>
       <button id="return-to-cast" class="wide-button" hidden>Return to Mannequins</button>
-      <p class="asset-label" id="asset-label">Loading scene</p>
-    <details class="panel-block" id="reconstruction-model-panel"><summary class="section-heading collapsible-heading"><h2>Reconstruction Models</h2><span>Local</span></summary><p class="hint">Studio detects model subdirectories automatically. Select renamed compatible weights manually. Settings are saved in this browser.</p><div id="reconstruction-model-fields" class="model-fields"></div><div class="compact-actions"><button id="reconstruction-model-refresh">Refresh List</button><button id="reconstruction-model-save" class="primary" disabled>Save Selection</button></div><p id="reconstruction-model-state" class="hint" role="status">Open to read the local model list.</p></details>
+      <button type="button" id="open-reconstruction-models" aria-haspopup="dialog">Reconstruction Models</button>
+    </div>
+    <p class="asset-label" id="asset-label">Loading scene</p>
+  </div>
 </dialog>
-<script type="module" src="./app.mjs?v=20261117dock"></script>
+<dialog closedby="any" class="studio-task-dialog" id="reconstruction-model-panel" aria-labelledby="reconstruction-model-heading"><div class="section-heading"><h2 id="reconstruction-model-heading">Reconstruction Models</h2><form method="dialog"><button>Close</button></form></div><p class="hint">Studio detects model subdirectories automatically. Select renamed compatible weights manually. Settings are saved in this browser.</p><div id="reconstruction-model-fields" class="model-fields"></div><div class="compact-actions"><button id="reconstruction-model-refresh">Refresh List</button><button id="reconstruction-model-save" class="primary" disabled>Save Selection</button></div><p id="reconstruction-model-state" class="hint" role="status">Reading the local model list…</p></dialog>
+<script type="module" src="./app.mjs?v=20261117columns"></script>
 </body></html>
