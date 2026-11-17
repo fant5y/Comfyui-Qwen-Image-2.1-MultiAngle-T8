@@ -147,3 +147,11 @@ details:not([open])>.collapsible-heading{margin-bottom:0}
 #actors-panel .actor-list{margin-top:12px}
 #add-to-scene #open-pose-library{margin-top:12px}
 #output-guide-options{margin:10px 0}
+
+.right-panel[hidden],.workspace .sidebar-resize[hidden],#selection-inspector[hidden]{display:none}
+@media(min-width:881px){.workspace:not(.show-output){grid-template-columns:clamp(200px,var(--left-sidebar-width,var(--default-left-sidebar-width)),34vw) 7px minmax(0,1fr)}}
+#selection-inspector{padding-top:14px;margin-top:16px;border-top:1px solid var(--line)}
+#selection-fields{padding:0;border:0;background:none}
+#actor-placement-dialog label{display:flex;align-items:center;gap:8px;margin:8px 0}
+#actor-placement-dialog input:not([type=color]),#actor-placement-dialog select{width:100%;min-width:0}
+#actor-placement-dialog [hidden]{display:none}
