@@ -161,7 +161,7 @@ export class StudioScene {
     if (!this.viewer.initialized) throw new Error('WebGL initialization failed. Enable hardware acceleration in your browser.');
     this.viewer.transform.addEventListener('objectChange', () => {
       if (this.mode === 'position') {
-        this.savePlacementPosition();
+        this.savePlacementTransform();
         return;
       }
       const model = this.selectedModel();
@@ -334,7 +334,7 @@ export class StudioScene {
   updateActorTransform(actor = activeActor(this.doc)) {
     const root = this.actorRoots.get(actor?.id); if (!root) return;
     const t = actor.transform;
-    root.position.set(t.x, t.y, t.z); root.rotation.y = radians(t.yaw); root.scale.setScalar(t.scale);
+    root.position.set(t.x, t.y, t.z); root.rotation.set(0, radians(t.yaw), 0, 'YXZ'); root.scale.setScalar(t.scale);
     root.visible = this.doc.source.kind === 'human' && actor.visible !== false;
     root.updateMatrixWorld(true);
     const animal = this.animalActors.get(actor.id);
@@ -383,7 +383,7 @@ export class StudioScene {
     this.syncPose();
     if (this.animal || actor.source.kind === 'animal') {
       bindActor(this.doc, id);
-      await this.restore(this.doc);
+      await this.restore(this.doc, { preserveView: true });
       this.callbacks.actor?.(id);
       return;
     }
@@ -409,7 +409,7 @@ export class StudioScene {
     } finally { clearTimeout(timer); }
   }
 
-  async restore(doc) {
+  async restore(doc, { preserveView = false } = {}) {
     this.restoring = true;
     try {
       this.doc = restoreSceneDefaults(doc);
@@ -521,7 +521,7 @@ export class StudioScene {
       this.ring.position.copy(this.baseTarget);
       this.ring.visible = doc.source.kind !== 'splat' && doc.source.kind !== 'empty';
       this.setMode(this.mode);
-      this.updateShot(true);
+      if (!preserveView) this.updateShot(true);
       await this.waitForCaptureReady();
       // Normalize sparse or older pose documents without treating restoration
       // as a user edit and replacing an explicitly selected photo skeleton.
@@ -655,26 +655,39 @@ export class StudioScene {
   updatePlacementGizmo() {
     const transform = this.viewer.transform;
     if (this.mode !== 'position' || !transform || transform.dragging) return;
-    const root = this.placementTarget()?.root;
-    if (root && transform.object !== root) {
-      transform.setMode('translate');
+    const target = this.placementTarget();
+    const root = target?.root;
+    if (root) {
+      const rotate = this.placementRotation && !!target.item;
+      transform.setMode(rotate ? 'rotate' : 'translate');
       transform.setSpace('world');
-      transform.attach(root);
-    } else if (!root && transform.object) transform.detach();
+      transform.showX = transform.showZ = !rotate || target.model;
+      if (transform.object !== root) transform.attach(root);
+    } else if (transform.object) transform.detach();
     this.viewer.requestRender();
   }
 
   interactionSnapshot() {
-    if (this.mode === 'position') return JSON.stringify(this.viewer.transform.object?.position.toArray());
+    if (this.mode === 'position') {
+      const object = this.viewer.transform.object;
+      return JSON.stringify(object && [object.position.toArray(), object.quaternion.toArray()]);
+    }
     return JSON.stringify(this.modelRotation() ?? this.animal?.pose() ?? this.viewer.getPose());
   }
 
-  savePlacementPosition() {
+  savePlacementTransform() {
     const target = this.placementTarget();
     if (!target?.root || target.root !== this.viewer.transform.object) return;
     const { x, y, z } = target.root.position;
     if (target.item) {
       Object.assign(target.item.transform, { x, y, z });
+      if (this.viewer.transform.mode === 'rotate') {
+        const rotation = new THREE.Euler().setFromQuaternion(target.root.quaternion, 'YXZ');
+        const [pitch, yaw, roll] = [rotation.x, rotation.y, rotation.z].map(degrees);
+        target.item.transform.yaw = yaw;
+        if (target.model) Object.assign(target.item.transform, { pitch, roll });
+        else this.doc.front = yaw;
+      }
       if (target.model) this.updateProp(target.item);
       else this.updateActorTransform(target.item);
     } else if (this.selectedPlacementAsset === 'background') {
@@ -696,6 +709,7 @@ export class StudioScene {
     const editHuman = editable && !this.animal;
     this.viewer.setIKMode(mode === 'edit' && editHuman);
     this.viewer.transform.detach();
+    this.viewer.transform.showX = this.viewer.transform.showZ = true;
     this.viewer.transform.setSize(this.animal && !model ? 0.46 : 0.8);
     this.viewer.transform.visible = mode === 'edit' && editHuman;
     if (mode === 'edit' && model && !model.locked && model.visible !== false) {
