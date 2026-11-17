@@ -1,5 +1,5 @@
-import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261116movegizmo';
+import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117owlwings';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117owlwings';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261116canvasprompt';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261116scenebackdrop';
@@ -495,7 +495,11 @@ function refresh() {
     boneSelect.dataset.bones = boneList;
   }
   if (!bones.includes(selectedBone)) selectedBone = '';
-  $('#joint-hint').textContent = animal
+  const owl = animal && activeActor(doc)?.source.shape === 'owl';
+  $('#owl-wing-poses').hidden = !owl;
+  $('#joint-hint').textContent = owl
+    ? 'Drag a gold wing handle to aim the wing. Adjust the shoulder, elbow, and wrist separately, or start with a wing pose.'
+    : animal
     ? 'Select a joint to show its rotation rings, or choose it below. Drag a gold handle to move the whole limb.'
     : 'Switch to Edit Scene, then select a joint or drag an IK hand or foot control.';
   $('#bone-name').textContent = selectedBone ? animal ? animalJointLabel(selectedBone) : selectedBone : 'None Selected';
@@ -510,7 +514,8 @@ function refresh() {
 function animalJointLabel(name) {
   if (name === 'Torso') return 'Spine (Torso)';
   return name.replace(/foreleg joint 1$/, 'elbow').replace(/foreleg joint 2$/, 'wrist')
-    .replace(/hind leg joint 1$/, 'knee').replace(/hind leg joint 2$/, 'hock');
+    .replace(/hind leg joint 1$/, 'knee').replace(/hind leg joint 2$/, 'hock')
+    .replace(/wing root$/, 'wing shoulder').replace(/wing joint 1$/, 'wing elbow').replace(/wing joint 2$/, 'wing wrist');
 }
 
 function makeControl(container, { id, label, min, max, step = 1, unit = '', resetValue, read, write, commit }) {
@@ -687,6 +692,16 @@ $('#bone-select').onchange = event => {
     studio.selectAnimalJoint(selectedBone);
   } else studio.viewer.selectBoneByName(selectedBone);
   refresh();
+};
+for (const button of document.querySelectorAll('[data-owl-wings]')) button.onclick = () => {
+  const animal = studio?.animal;
+  const actor = activeActor(doc);
+  if (!animal || actor?.source.shape !== 'owl' || actor.locked) return;
+  begin();
+  animal.applyWingPose(button.dataset.owlWings);
+  animal.update(selectedBone);
+  studio.viewer.requestRender();
+  changed();
 };
 $('#reset-bone').onclick = () => {
   if (!selectedBone) return;

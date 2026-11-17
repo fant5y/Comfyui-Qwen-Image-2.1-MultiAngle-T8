@@ -76,7 +76,7 @@ export class AnimalMannequin {
     mesh.quaternion.setFromUnitVectors(Y, offset.normalize());
   }
 
-  skin(joints, radii, flatten = 1, body = false) {
+  skin(joints, radii, flatten = 1, body = false, wing = false) {
     const sides = 12, slices = (joints.length - 1) * 6;
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array((slices + 1) * sides * 3), 3));
@@ -85,19 +85,23 @@ export class AnimalMannequin {
       const a = row * sides + side, b = row * sides + (side + 1) % sides;
       indices.push(a, b, a + sides, b, b + sides, a + sides);
     }
+    if (wing) for (let side = 1; side < sides - 1; side++) {
+      const last = slices * sides;
+      indices.push(0, side + 1, side, last, last + side, last + side + 1);
+    }
     geometry.setIndex(indices);
     const mesh = new THREE.Mesh(geometry, this.colors[0]);
     mesh.frustumCulled = false;
     joints[0].add(mesh);
-    this.skins.push({ joints, radii, flatten, body, sides, slices, geometry });
+    this.skins.push({ joints, radii, flatten, body, wing, sides, slices, geometry });
   }
 
   updateSkins() {
-    for (const { joints, radii, flatten, body, sides, slices, geometry } of this.skins) {
+    for (const { joints, radii, flatten, body, wing, sides, slices, geometry } of this.skins) {
       const origin = joints[0];
       const curve = new THREE.CatmullRomCurve3(joints.map(joint => origin.worldToLocal(joint.getWorldPosition(new THREE.Vector3()))));
       const position = geometry.attributes.position;
-      const normal = new THREE.Vector3(1, 0, 0);
+      const normal = wing ? new THREE.Vector3(0, -1, 0) : new THREE.Vector3(1, 0, 0);
       for (let row = 0; row <= slices; row++) {
         const progress = row / slices;
         const center = curve.getPoint(progress), tangent = curve.getTangent(progress);
@@ -109,6 +113,7 @@ export class AnimalMannequin {
         const jointIndex = progress * (radii.length - 1);
         const before = Math.min(radii.length - 2, Math.floor(jointIndex));
         const radius = THREE.MathUtils.lerp(radii[before], radii[before + 1], jointIndex - before) * (body ? this.build ?? 1 : 1);
+        if (wing) center.addScaledVector(normal, radius * 0.5);
         for (let side = 0; side < sides; side++) {
           const angle = side * 2 * Math.PI / sides;
           const point = center.clone().addScaledVector(normal, radius * Math.cos(angle))
@@ -131,7 +136,7 @@ export class AnimalMannequin {
       chain.push(joint);
     }
     const radii = [widths[0], ...widths.slice(1).map(width => width * 0.9), Math.min(foot.radii[0], widths.at(-1)) * 0.85];
-    this.skin(chain, radii, name.endsWith('wing') ? 0.68 : 0.88);
+    this.skin(chain, radii, 0.88);
     const paw = this.volume(joint, foot.offset, foot.radii, foot.color ?? 0);
     const tip = new THREE.Object3D();
     tip.position.fromArray(foot.offset);
@@ -240,13 +245,60 @@ export class AnimalMannequin {
     for (const [side, sign] of [['Left', 1], ['Right', -1]]) {
       this.volume(head, [sign * 0.88, 0.68, 1.24], [0.98, 1.02, 0.55], 1);
       this.volume(head, [sign * 0.86, 0.72, 1.77], [0.36, 0.42, 0.19], 2);
-      this.limb(side + ' wing', chest, [sign * 1.77, 0.36, 0],
-        [[sign * 1.77, -0.58, -0.42], [sign * 2.05, -0.63, -0.72], [sign * 1.51, -0.41, -0.68]],
-        [0.92, 0.81, 0.57],
-        { offset: [sign * 0.31, -0.13, -0.23], radii: [0.72, 0.29, 0.44], color: 0 });
+      this.owlWing(side, sign, chest);
       this.limb(side + ' leg', pelvis, [sign * 0.83, -1.18, 0.08],
         [[0, -0.85, -0.15], [0, -0.69, 0.35]], [0.4, 0.27],
         { offset: [0, 0, 0.25], radii: [0.38, 0.22, 0.63], color: 2 });
+    }
+  }
+
+  owlWing(side, sign, chest) {
+    const name = side + ' wing';
+    const shoulder = this.joint(name + ' root', chest, [sign * 1.77, 0.36, -0.1]);
+    const elbow = this.joint(name + ' joint 1', shoulder, [sign * 1.77, -0.36, -0.42]);
+    const wrist = this.joint(name + ' joint 2', elbow, [sign * 2.05, -0.28, -0.72]);
+    const outer = this.joint(name + ' tip', wrist, [sign * 1.51, -0.26, -0.68]);
+    const chain = [shoulder, elbow, wrist, outer];
+    this.skin(chain, [0.8, 1.12, 0.85, 0.1], 0.29, false, true);
+
+    // Overlapping feathers follow the segment they grow from, including during a fold.
+    const feather = (parent, start, end, width) => {
+      const offset = new THREE.Vector3().fromArray(end).sub(new THREE.Vector3().fromArray(start));
+      const center = new THREE.Vector3().fromArray(start).addScaledVector(offset, 0.5);
+      const mesh = this.volume(parent, center.toArray(), [width, offset.length() * 0.57, 0.14]);
+      mesh.quaternion.setFromUnitVectors(Y, offset.normalize());
+    };
+    for (const parent of [shoulder, elbow]) {
+      for (let index = 0; index < 4; index++) {
+        const x = 0.38 + index * 0.41;
+        feather(parent, [sign * x, -0.44, -0.08], [sign * (x + 0.65), -1.94 + index * 0.08, -0.37], 0.31);
+      }
+    }
+    for (let index = 0; index < 5; index++) {
+      const x = index * 0.29;
+      feather(wrist, [sign * x, -0.38 + index * 0.07, -0.12 - x * 0.39],
+        [sign * (x + 1.05), -1.78 + index * 0.34, -0.7 - x * 0.39], 0.3);
+    }
+    feather(outer, [-sign * 0.28, -0.08, 0.08], [sign * 0.64, -0.49, -0.52], 0.28);
+
+    const tip = new THREE.Object3D();
+    tip.position.set(sign * 0.72, -0.43, -0.47);
+    outer.add(tip);
+    this.targets.set(name, { tip, chain, wing: true });
+  }
+
+  applyWingPose(pose) {
+    for (const [side, sign] of [['Left', 1], ['Right', -1]]) {
+      const [shoulder, elbow, wrist, tip] = this.targets.get(side + ' wing').chain;
+      for (const joint of [shoulder, elbow, wrist, tip]) joint.rotation.set(0, 0, 0);
+      if (pose === 'folded') {
+        shoulder.rotation.set(0, sign * 0.37, -sign * 0.86);
+        elbow.rotation.y = sign * 0.78;
+        wrist.rotation.y = sign * 0.9;
+      } else if (pose === 'raised') {
+        shoulder.rotation.z = sign * 0.65;
+        elbow.rotation.z = -sign * 0.18;
+      }
     }
   }
 
@@ -378,7 +430,17 @@ export class AnimalMannequin {
   }
 
   drag(name, destination, planeNormal = null) {
-    const { chain, tip } = this.targets.get(name);
+    const { chain, tip, wing } = this.targets.get(name);
+    if (wing) {
+      const shoulder = chain[0], parent = shoulder.parent;
+      const current = parent.worldToLocal(tip.getWorldPosition(new THREE.Vector3())).sub(shoulder.position);
+      const wanted = parent.worldToLocal(destination.clone()).sub(shoulder.position);
+      if (current.lengthSq() > 1e-8 && wanted.lengthSq() > 1e-8) {
+        const rotation = new THREE.Quaternion().setFromUnitVectors(current.normalize(), wanted.normalize());
+        shoulder.quaternion.premultiply(rotation).normalize();
+      }
+      return;
+    }
     const origin = new THREE.Vector3(), current = new THREE.Vector3(), wanted = new THREE.Vector3();
     const parentInverse = new THREE.Quaternion(), delta = new THREE.Quaternion(), identity = new THREE.Quaternion();
     for (let iteration = 0; iteration < 10; iteration++) {

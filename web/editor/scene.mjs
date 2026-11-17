@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.mjs';
 import { uuid } from '../uuid.mjs?v=20261116en';
-import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261116pawdrag';
+import { AnimalMannequin, ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117owlwings';
 import { GLTFLoader } from '../vendor/GLTFLoader.mjs';
 import { PoseViewerCore } from '../vendor/vnccs_pose_studio_core.mjs?v=20261031resize';
 import { solveMorph, buildStaticModelData } from '../vendor/vnccs_pose_morph_runtime.mjs?v=20261116bodyrange';
