@@ -7,7 +7,7 @@ import { promptForSnapshot } from './batch-queue.mjs?v=20261116en';
 let graphRevision = 0;
 let closeActive = null;
 const extensionURL = new URL('./editor/index.html', import.meta.url);
-extensionURL.searchParams.set('v', '20261117placement');
+extensionURL.searchParams.set('v', '20261117draftguard');
 
 const dialogStyles = document.createElement('link');
 dialogStyles.rel = 'stylesheet';
@@ -267,8 +267,7 @@ function openEditor(node, widget) {
     }
   };
   window.addEventListener('message', receive);
-  dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
-  dialog.addEventListener('click', event => { if (event.target === dialog) close(); });
+  dialog.addEventListener('cancel', event => event.preventDefault());
   closeActive = close; dialog.showModal();
 }
 

@@ -1,5 +1,5 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117owlwings';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117placement';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117draftguard';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261117guideprompt';
 import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117guideprompt';
@@ -12,7 +12,7 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116canvasprompt';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261116movegizmo';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117draftguard';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261117guideprompt';
 
@@ -1560,7 +1560,15 @@ async function startCameraBatch(queueFinal) {
 $('#batch-guides').onclick = () => run(() => startCameraBatch(false));
 $('#batch-final').onclick = () => run(() => startCameraBatch(true));
 function closeWorkbench() { if (embedded) send('anyangle-close'); else location.reload(); }
-$('#cancel').onclick = closeWorkbench;
+const discardDraft = $('#discard-draft');
+discardDraft.addEventListener('close', () => {
+  if (discardDraft.returnValue === 'discard') closeWorkbench();
+});
+$('#cancel').onclick = () => {
+  if (!ready || $('#status').dataset.state !== 'dirty') { closeWorkbench(); return; }
+  discardDraft.returnValue = 'keep';
+  discardDraft.showModal();
+};
 $('#clear-canvas').onclick = () => run(async () => {
   if (!canvasHasObjects()) return;
   const rollback = begin(), previous = doc;

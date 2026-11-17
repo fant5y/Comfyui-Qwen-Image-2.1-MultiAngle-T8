@@ -30,8 +30,11 @@ export function addCharacter({ label, onAdded } = {}) {
     doc.actors.push(actor); doc.activeActorId = actor.id; doc.selectedActorIds = [actor.id]; doc.source = { kind: 'human' };
     onAdded?.(actor);
     bindActor(doc); if (wasEmpty) { doc.conditioning.model = 'base'; doc.conditioning.identityMode = 'actors'; doc.conditioning.imageOrder = 'guide-first'; }
-    context.studio().selectedModelId = null; context.studio().modelJoint = null;
-    await context.studio().restore(doc); await context.ensureHumanTools(); context.showScene();
+    const studio = context.studio();
+    studio.selectedModelId = null; studio.modelJoint = null; studio.selectedPlacementAsset = null;
+    await studio.restore(doc, { preserveView: !!onAdded && !wasEmpty }); await context.ensureHumanTools();
+    if (onAdded) context.editScene();
+    else context.showScene();
     $('actors-panel').open = true;
     context.toast(onAdded ? 'Character added with its reference.' : 'Character added.');
   });

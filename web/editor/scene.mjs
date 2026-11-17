@@ -394,6 +394,7 @@ export class StudioScene {
         this.attachActor(previous, this.viewer.passiveCharacters.get(previous.id).mesh);
       this.viewer.removePassiveCharacter(id);
       bindActor(this.doc, id); this.buildHuman(actor.pose, actor);
+      this.viewer.setMannequinVisible(true);
       this.setMode(this.mode); await this.waitForCaptureReady(); this.syncPose();
     } finally { this.restoring = false; }
     this.callbacks.actor?.(id);
