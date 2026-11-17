@@ -258,11 +258,11 @@ function card(scene, item, manifest) {
   character.title = 'Assign this photo to a character as a visual reference for the generated image.';
   background.title = 'Use the photo as a frame-filling background in the coarse render.';
   sceneImage.title = 'Place the photo on a flat surface you can move, rotate, and resize.';
-  const rebuild = button('Add 3D Character', async () => {
-    if (await context.addSceneImage(item, true)) chooseTab('objects');
+  const rebuild = button('Add Posed Character', async () => {
+    if (await context.addPosedCharacter(item)) chooseTab('objects');
   });
   rebuild.disabled = character.disabled;
-  rebuild.title = 'Reconstruct this reference in 3D and add it alongside the current characters.';
+  rebuild.title = 'Copy the pose from this photo to a new, editable human mannequin.';
   tools.append(rebuild, character, sceneImage, background, source, replace, remove);
   details.append(tools);
   entry.append(details);

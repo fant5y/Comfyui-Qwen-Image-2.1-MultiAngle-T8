@@ -2,7 +2,7 @@ import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117sceneassets';
 import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117animalrefs';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261117animalrefs';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117sceneassets';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117posedreference';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
@@ -12,7 +12,7 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261116canvasprompt';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117sceneassets';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117posedreference';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261117animalrefs';
 
@@ -941,18 +941,23 @@ async function applyStructureAsset(asset) {
   begin(); doc.conditioning.map = asset; doc.conditioning.mapKind = currentGuide(); doc.conditioning.mapOrigin = 'import'; changed();
 }
 $('#import-openpose').onclick = () => $('#openpose-file').click();
+async function detectPhotoPose(reference) {
+  const response = await fetch('/anyangle-studio/dwpose', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reference: reference.name }),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'DWPose extraction failed');
+  return result;
+}
+
 async function extractPhotoPose(copyToHuman = false) {
   if (!doc.reference?.name) throw new Error('Connect or import a source image first.');
   $('#loading-text').textContent = 'Extracting pose from the source';
   $('#loading-detail').textContent = 'First use may require downloading the DWPose model.';
   $('#loading').hidden = false;
   try {
-    const response = await fetch('/anyangle-studio/dwpose', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reference: doc.reference.name }),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'DWPose extraction failed');
+    const result = await detectPhotoPose(doc.reference);
     await applyOpenPoseAsset(result.asset, result.points, result.fullBody, result.visibleOnly);
     doc.openpose.people = result.people || [];
     if (copyToHuman) { const copied = await retargetPose(); toast(copied ? 'Copied the visible pose to the mannequin. You can edit, undo, or save it.' : 'Pose transfer canceled. The source skeleton and scene characters are kept.'); }
@@ -1760,9 +1765,15 @@ installActorsUI({ doc: () => doc, replace: value => { doc = value; }, studio: ()
   editScene: () => { previewVisible = false; setMode('edit'); refresh(); } });
 installReferencesUI({ doc: () => doc, sourceConnected: () => linkedReference.connected, run, begin, changed, askName, upload, send, toast,
   addCharacter, addAnimal, animalShapes: ANIMAL_SHAPES,
-  addSceneImage: (item, reconstructIn3D = false) => run(async () => {
-    const asset = reconstructIn3D ? await reconstruct(item.asset, text => { $('#status').textContent = text; }) : clone(item.asset);
-    return addPlacedReference(item, asset);
+  addSceneImage: item => run(() => addPlacedReference(item, clone(item.asset))),
+  addPosedCharacter: item => run(async () => {
+    $('#loading-text').textContent = 'Detecting people and poses in the reference';
+    $('#loading-detail').textContent = 'DWPose';
+    $('#loading').hidden = false;
+    let result;
+    try { result = await detectPhotoPose(item.asset); }
+    finally { $('#loading').hidden = true; }
+    return chooseDetectedPeople(result.people, result.asset, { reference: item.asset, referenceItem: item, origin: 'dwpose' });
   }),
   clearSource: () => run(clearSourceImage),
   setSource: asset => run(async () => {

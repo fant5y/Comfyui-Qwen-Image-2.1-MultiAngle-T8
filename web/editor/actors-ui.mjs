@@ -381,8 +381,15 @@ export async function chooseDetectedPeople(people, asset, options = {}) {
     const box = person.bbox, w = person.canvasWidth || options.reference?.width, h = person.canvasHeight || options.reference?.height;
     if (box && w && h) { const marker = document.createElement('button'); marker.type = 'button'; marker.textContent = String(index + 1); marker.disabled = checkbox.disabled; marker.classList.toggle('excluded', !checkbox.checked); marker.style.cssText = `left:${box[0]/w*100}%;top:${box[1]/h*100}%;width:${(box[2]-box[0])/w*100}%;height:${(box[3]-box[1])/h*100}%`; marker.onclick = () => { if (checkbox.disabled) return; checkbox.checked = !checkbox.checked; marker.classList.toggle('excluded', !checkbox.checked); }; overlay.append(marker); }
   }
-  $('people-count').textContent = `${people.length} people · Source skeleton retained. Choose how to transfer the pose.`;
-  $('people-bind-photo').checked = false; $('people-match-layout').checked = true;
+  const fromReference = !!options.referenceItem;
+  dialog.querySelector('h2').textContent = fromReference ? 'Add Posed Character' : 'Copy Multiple Poses from a Photo';
+  const copyCurrent = dialog.querySelector('button[value="current"]');
+  copyCurrent.hidden = fromReference; copyCurrent.disabled = fromReference;
+  $('people-count').textContent = fromReference ? 'Select the people to add as editable mannequins.'
+    : `${people.length} people · Source skeleton retained. Choose how to transfer the pose.`;
+  $('people-bind-photo').checked = fromReference;
+  $('people-match-layout').checked = !fromReference;
+  $('people-match-layout').closest('label').hidden = fromReference;
   $('people-bind-photo').closest('label').hidden = !options.reference;
   dialog.returnValue = ''; dialog.showModal();
   const action = await new Promise(resolve => dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true }));
@@ -392,20 +399,20 @@ export async function chooseDetectedPeople(people, asset, options = {}) {
   if (action === 'current' && selected.length !== 1) throw new Error('Select one person to copy to the current character.');
   const doc = context.doc(), previous = clone(doc), rollbackHistory = context.begin();
   try {
-  context.studio().syncPose(); doc.source = { kind: 'human' }; ensureActors(doc, action === 'current');
+  context.studio().syncPose(); context.enterCast(doc); ensureActors(doc, action === 'current');
   let roles;
   if (action === 'all') {
     roles = selected.map((person, i) => createActor(doc.actors.length + i)); doc.actors.push(...roles);
-    if ($('people-match-layout').checked) {
+    if (fromReference || $('people-match-layout').checked) {
       const fullHeights = selected.filter(person => person.fullBody && person.bbox).map(person => person.bbox[3]-person.bbox[1]).filter(height => height > 0);
       const scale = fullHeights.length ? 20 / Math.max(...fullHeights) : 30 / (selected[0].canvasHeight || options.reference?.height || 1024);
       for (const [i, person] of selected.entries()) { const b = person.bbox, w = person.canvasWidth || options.reference?.width || 1024;
-        if (b) { roles[i].transform.x = ((b[0]+b[2])/2 - w/2)*scale; if (person.fullBody) roles[i].transform.scale = Math.max(.25, (b[3]-b[1])*scale/20); }
+        if (b) { if (!fromReference) roles[i].transform.x = ((b[0]+b[2])/2 - w/2)*scale; if (person.fullBody) roles[i].transform.scale = Math.max(.25, (b[3]-b[1])*scale/20); }
       }
     }
   } else { roles = [activeActor(doc)]; if (roles[0].locked) throw new Error('Unlock the current character first.'); }
   doc.activeActorId = roles[0].id; doc.selectedActorIds = roles.map(role => role.id); bindActor(doc);
-  await context.studio().restore(doc); await context.ensureHumanTools();
+  await context.studio().restore(doc, { preserveView: fromReference && previous.source.kind === 'human' }); await context.ensureHumanTools();
   const previousActive = roles[0].id;
   for (const [i, role] of roles.entries()) {
     await context.studio().selectActor(role.id); const person = selected[i];
@@ -414,14 +421,24 @@ export async function chooseDetectedPeople(people, asset, options = {}) {
     role.poseSource = { origin: options.origin || 'dwpose', detectionId: person.id, points: clone(person.points), fullBody: person.fullBody, visibleOnly: person.visibleOnly, retargetMode: mode, rawAsset: asset };
     if ($('people-bind-photo').checked && options.reference) role.identity = { ...role.identity, asset: options.reference, inputKey: null, sourcePerson: { id: person.id, bbox: person.bbox, canvasWidth: person.canvasWidth || options.reference.width, canvasHeight: person.canvasHeight || options.reference.height, description: `person ${people.indexOf(person)+1} in the source photo` } };
     if (doc.version === 3 && $('people-bind-photo').checked && options.reference) {
-      let material = doc.referenceLibrary.items.find(item => item.asset?.name === options.reference.name);
+      let material = options.referenceItem || doc.referenceLibrary.items.find(item => item.asset?.name === options.reference.name);
       if (!material) material = addReference(doc, options.reference, { label: 'Group Identity Reference', usages: [] });
       const usage = newUse('identity', { kind: 'actors', ids: [role.id], text: '' });
       usage.sourceText = `person ${people.indexOf(person)+1} in the source photo${person.bbox ? `, pixel region [${person.bbox.join(', ')}] in ${person.canvasWidth || options.reference.width} x ${person.canvasHeight || options.reference.height}` : ''}`;
       material.usages.push(usage);
     }
   }
-  await context.studio().selectActor(previousActive); doc.conditioning.model = 'base'; doc.conditioning.guide = 'pose'; doc.conditioning.map = null; doc.conditioning.mapKind = null; doc.conditioning.mapOrigin = 'rig';
+  await context.studio().selectActor(previousActive);
+  if (fromReference) {
+    context.studio().groundActors(roles.map(role => role.id));
+    if (previous.source.kind === 'empty') context.studio().fit();
+    doc.referenceLibrary.mode = 'guided';
+    doc.conditioning.guide = 'coarse';
+    $('actors-panel').open = true;
+    context.placeScene(); context.changed(); context.toast(`Added ${roles.length} posed ${roles.length === 1 ? 'character' : 'characters'}.`);
+    return true;
+  }
+  doc.conditioning.model = 'base'; doc.conditioning.guide = 'pose'; doc.conditioning.map = null; doc.conditioning.mapKind = null; doc.conditioning.mapOrigin = 'rig';
   if ($('people-bind-photo').checked || action === 'all' && doc.actors.length > 1) { doc.conditioning.identityMode = 'actors'; doc.conditioning.imageOrder = 'guide-first'; }
   if (doc.openpose) doc.openpose.useRig = true;
   if (action === 'all' && $('people-match-layout').checked) { context.studio().groundActors(roles.map(role => role.id)); doc.camera.azimuth = 0; doc.camera.elevation = 0; context.studio().fit(); }
