@@ -132,13 +132,13 @@ export function installActorsUI(options) {
   };
   $('random-scope').onchange = () => { context.begin(); context.doc().randomScope = $('random-scope').value; context.changed(false); };
   $('save-composition').onclick = async () => {
-    const name = await context.askName('Save Scene Template', 'Group Composition'); if (!name) return;
+    const name = await context.askName('Save Scene Variation', 'Group Composition'); if (!name) return;
     context.begin(); context.studio().syncPose(); const doc = context.doc(); doc.compositionTemplates ||= [];
     doc.compositionTemplates.push({ id: uuid(), name, actors: clone(doc.actors).map(actor => ({ ...actor, identity: { asset: null, inputKey: null, sourcePerson: null, description: '' } })), props: clone(doc.props || []), contacts: clone(doc.contacts || []), camera: clone(doc.camera), cameraTarget: clone(doc.cameraTarget) }); context.changed(false);
   };
   $('apply-composition').onclick = () => atomic(async () => {
     const doc = context.doc(), template = doc.compositionTemplates?.find(item => item.id === $('composition-list').value);
-    if (!template) throw new Error('Select a scene template first.');
+    if (!template) throw new Error('Choose a scene variation first.');
     if (doc.actors.some(actor => actor.locked)) throw new Error('Unlock characters before applying a scene template.');
     if (template.props && doc.props?.some(prop => prop.locked)) throw new Error('Unlock props before applying a scene template.');
     applySceneTemplate(doc, template); await context.studio().restore(doc); context.studio().useRigPose(); await context.ensureHumanTools();
@@ -350,7 +350,7 @@ export function refreshActorsUI() {
   $('random-scope').value = doc.randomScope || 'current';
   for (const id of ['random-pose', 'repeat-pose']) $(id).disabled = !human || !editableActors(doc, doc.randomScope || 'current').filter(role => role.source.kind !== 'animal').length;
   const templateKey = JSON.stringify(doc.compositionTemplates?.map(item => [item.id, item.name]));
-  if ($('composition-list').dataset.key !== templateKey) { $('composition-list').dataset.key = templateKey; $('composition-list').replaceChildren(new Option('Choose Scene Template', '')); for (const template of doc.compositionTemplates || []) $('composition-list').append(new Option(template.name, template.id)); }
+  if ($('composition-list').dataset.key !== templateKey) { $('composition-list').dataset.key = templateKey; $('composition-list').replaceChildren(new Option('Choose Scene Variation', '')); for (const template of doc.compositionTemplates || []) $('composition-list').append(new Option(template.name, template.id)); }
   const staticOutput = ['image', 'canny-image'].includes(guideSource(doc).kind);
   $('export-keypoints').disabled = !human || staticOutput || !doc.actors.some(role => role.visible !== false && role.source.kind !== 'animal');
   $('export-keypoints').title = staticOutput ? 'Studio is outputting the source skeleton. Switch to a 3D mannequin pose to export its JSON.' : 'Export the 3D skeleton from the current camera.';

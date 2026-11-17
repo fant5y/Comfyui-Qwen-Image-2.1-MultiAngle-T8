@@ -68,7 +68,7 @@ export function installPoseLibrary(context) {
       page = 0;
     } else if ($('pl-category').value.startsWith('Animal · ')) $('pl-category').value = '';
     render(); if(!dialog.open)dialog.showModal(); if(entry())await showPreview(); }), 'wide-button accent-button');
-  open.id = 'open-pose-library'; document.querySelector('.reference-tabs').after(open);
+  open.id = 'open-pose-library'; document.getElementById('add-to-scene').append(open);
   const message = text => { if(!disposed)$('pl-status').textContent = text; };
   const execute = task => Promise.resolve().then(task).catch(error => { if(!disposed){message(error.message); context.toast(error.message);} });
   const mutate = task => {

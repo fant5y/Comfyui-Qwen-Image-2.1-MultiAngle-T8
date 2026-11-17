@@ -7,43 +7,34 @@ const el = (tag, text, className) => { const node = document.createElement(tag);
 function button(text, action, className = '') { const node = el('button', text, className); node.type = 'button'; node.onclick = action; return node; }
 function select(options, value, change) { const node = el('select'); for (const [key, title] of options) node.append(new Option(title, key)); node.value = value; node.onchange = () => change(node.value); return node; }
 function field(title, input) { const node = el('label', title); node.append(input); return node; }
-let context, key, previewId, connected = [], tab = 'materials', openId, lastMapping = '', mappingWarning = '';
+let context, key, previewId, connected = [], openId, lastMapping = '', mappingWarning = '';
 let renderedScene, renderedItems = [];
 const openRoleOptions = new Set();
 function edit(action, updatePreview = false) { context.begin(); action(); context.changed(updatePreview); }
-function chooseTab(value) { tab = value; refreshReferencesUI(true); $(`tab-${value}`).focus(); }
+function revealSection(id) {
+  const section = $(id);
+  section.open = true;
+  section.querySelector('summary').focus({ preventScroll: true });
+  section.scrollIntoView({ block: 'nearest' });
+}
 
 export function installReferencesUI(value) {
   context = value;
-  const left = document.querySelector('.left-panel'), objects = el('div', '', 'reference-objects'); objects.id = 'reference-objects';
-  objects.setAttribute('role', 'tabpanel'); objects.setAttribute('aria-labelledby', 'tab-objects');
-  objects.append(...left.children); left.append(objects);
-  const tabs = el('div', '', 'reference-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Sidebar');
-  for (const [id, title] of [['materials', 'References'], ['objects', 'Scene Objects']]) {
-    const node = button(title, () => chooseTab(id)); node.id = `tab-${id}`; node.setAttribute('role', 'tab'); node.setAttribute('aria-controls', `reference-${id}`);
-    node.onkeydown = event => {
-      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-      event.preventDefault(); chooseTab(event.key === 'Home' ? 'materials' : event.key === 'End' ? 'objects' : tab === 'materials' ? 'objects' : 'materials');
-    };
-    tabs.append(node);
-  }
-  left.prepend(tabs);
-  const materials = el('section', '', 'reference-materials'); materials.id = 'reference-materials';
-  materials.setAttribute('role', 'tabpanel'); materials.setAttribute('aria-labelledby', 'tab-materials');
-  materials.innerHTML = `<div class="section-heading"><h2>References <small>REFERENCE LIBRARY</small></h2><span id="reference-count"></span></div>
+  const materials = el('details', '', 'panel-block reference-materials');
+  materials.id = 'reference-materials';
+  materials.innerHTML = `<summary class="section-heading collapsible-heading"><h2>References</h2><span id="reference-count"></span></summary>
     <p class="hint">References tell the generator what to borrow. Expand a card to see its prompt instructions.</p>
     <div class="reference-source"><img id="library-source-image" alt="Scene Source Image" hidden><div><strong>Scene Source Image</strong><p id="library-source-state" class="hint"></p><button id="source-tools">Rebuild / Extract / Replace</button><button id="source-to-library">Add to References</button><button id="library-clear-source" hidden>Remove Source Image</button></div></div>
     <div class="compact-actions"><button id="add-reference" class="primary">＋ Add Reference</button><button id="read-references">Read Connections</button></div>
     <div id="legacy-references"><p class="hint">This scene uses legacy image rules. Upgrade to assign multiple roles to each image. You can undo the upgrade.</p><button id="upgrade-references">Upgrade References</button></div>
     <div id="reference-cards"></div><p id="reference-empty-note" class="empty-note">Add a reference and choose its role. Characters are optional.</p>
     <details class="reference-templates"><summary>Reference Set Templates</summary><select id="reference-template"></select><div class="compact-actions"><button id="save-reference-template">Save Set</button><button id="apply-reference-template">Apply Set</button></div><p class="hint">Templates store references and their roles. Applying one adds separate references. Check their targets afterward.</p></details>`;
-  left.insertBefore(materials, objects);
+  $('add-to-scene').after(materials);
   const stale = el('div', '', 'reference-review'); stale.id = 'reference-source-warning';
   const message = el('p'); message.id = 'reference-source-warning-text';
   const keep = button('Keep Saved Structure Guide', () => edit(() => { const scene = context.doc(); scene.derivedGuideStale = false; scene.retainedGuideSource = scene.derivedGuideSource;
     scene.conditioning.acceptStoredSource = true; if (scene.openpose) scene.openpose.acceptStoredSource = true; })); keep.id = 'keep-derived-guide';
-  stale.append(message, button('Extract / Rebuild Again', () => chooseTab('objects')), keep); materials.insertBefore(stale, $('reference-cards'));
-  const portable = el('div', '', 'compact-actions reference-portable'); portable.append($('export-scene'), $('import-scene')); materials.append(portable);
+  stale.append(message, button('Extract / Rebuild Again', () => revealSection('source-tools-panel')), keep); materials.insertBefore(stale, $('reference-cards'));
   const file = el('input'); file.type = 'file'; file.multiple = true; file.accept = 'image/*'; file.hidden = true; document.body.append(file);
   $('add-reference').onclick = () => file.click();
   file.onchange = () => { const files = [...file.files]; file.value = ''; if (!files.length) return;
@@ -54,7 +45,7 @@ export function installReferencesUI(value) {
   };
   $('read-references').onclick = () => context.send('anyangle-read-actors');
   $('upgrade-references').onclick = () => edit(() => upgradeReferences(context.doc()));
-  $('source-tools').onclick = () => chooseTab('objects');
+  $('source-tools').onclick = () => revealSection('source-tools-panel');
   $('library-clear-source').onclick = () => context.clearSource();
   $('source-to-library').onclick = () => edit(() => { const scene = context.doc(); if (scene.version !== 3) upgradeReferences(scene); if (scene.reference) addReference(scene, scene.reference); });
   $('save-reference-template').onclick = async () => { const name = await context.askName('Save Reference Set', 'My Reference Set'); if (!name) return;
@@ -270,7 +261,7 @@ function card(scene, item, manifest) {
   character.disabled = !item.asset || item.missing === true;
   background.disabled = !isBackground && character.disabled;
   const sceneImage = button('Place Flat Image in Scene', async () => {
-    if (await context.addSceneImage(item)) chooseTab('objects');
+    if (await context.addSceneImage(item)) revealSection('actors-panel');
   });
   sceneImage.disabled = character.disabled;
   character.title = 'Assign this photo to a character as a visual reference for the generated image.';
@@ -279,7 +270,7 @@ function card(scene, item, manifest) {
     : 'Show the image behind the scene and add a background reference role for generation.';
   sceneImage.title = 'Place the photo on a flat surface you can move, rotate, and resize.';
   const rebuild = button('Create Posed Mannequin', async () => {
-    if (await context.addPosedCharacter(item)) chooseTab('objects');
+    if (await context.addPosedCharacter(item)) revealSection('actors-panel');
   });
   rebuild.disabled = character.disabled;
   rebuild.title = 'Copy the pose from this photo to a new, editable human mannequin.';
@@ -326,8 +317,6 @@ export function setReferenceConnections(values) { connected = values || []; }
 export function refreshReferencesUI(force = false) {
   if (!context) return;
   const scene = context.doc(), library = scene.referenceLibrary, modern = scene.version === 3 && !!library;
-  $('reference-materials').hidden = tab !== 'materials'; $('reference-objects').hidden = tab !== 'objects';
-  for (const value of ['materials', 'objects']) { $(`tab-${value}`).classList.toggle('active', tab === value); $(`tab-${value}`).setAttribute('aria-selected', String(tab === value)); $(`tab-${value}`).tabIndex = tab === value ? 0 : -1; }
   $('legacy-references').hidden = modern; $('reference-workflow').value = modern ? library.mode : 'guided';
   const source = scene.reference; $('source-to-library').disabled = !source;
   $('library-clear-source').hidden = !source;

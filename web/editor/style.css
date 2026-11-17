@@ -126,3 +126,10 @@ details:not([open])>.collapsible-heading{margin-bottom:0}
 .scene-background-position label{min-width:0;flex:1}
 .scene-background-position input{min-width:0;width:100%}
 
+
+/* Keep view and variation controls reachable in the existing shelf. */
+.shot-shelf{overflow:auto}
+.shot-variations{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.shot-variations .compact-actions{flex-wrap:wrap}
+.shot-variations select{max-width:100%}
+#add-to-scene .source-buttons{margin-top:0}
