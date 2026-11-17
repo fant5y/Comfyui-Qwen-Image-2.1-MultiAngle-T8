@@ -46,14 +46,13 @@ export function installActorsUI(options) {
     <div id="active-actor-controls">
     <div class="compact-actions"><button id="ground-actors" title="Move the selection down or up until it touches the floor">Ground</button><button id="fit-actors" title="Frame the selection with the camera">Frame</button></div>
     <div class="selection-scale"><label for="actor-scale-slider">Object Scale</label><output id="actor-scale-readout" for="actor-scale-slider">1×</output><button id="reset-actor-scale" type="button" title="Reset object scale to 1×">Reset</button><input id="actor-scale-slider" type="range" min="0.01" max="4" step="0.01"></div>
-    <input id="selection-task" type="hidden">
-    <div id="placement-fields" hidden><label>Object Scale<input id="actor-scale" type="number" min="0.01" step="0.01" title="Resize the whole selection uniformly"></label><label>Drag Plane<select id="actor-plane"><option value="screen">View Plane · Up / Down / Left / Right</option><option value="ground">Ground Plane · Forward / Back / Left / Right</option></select></label>
+    <details id="placement-fields"><summary>Precise placement</summary><label>Object Scale<input id="actor-scale" type="number" min="0.01" step="0.01" title="Resize the whole selection uniformly"></label><label>Drag Plane<select id="actor-plane"><option value="screen">View Plane · Up / Down / Left / Right</option><option value="ground">Ground Plane · Forward / Back / Left / Right</option></select></label>
     <div class="actor-position"><label>X<input id="actor-x" type="number" step="0.1"></label><label>Y<input id="actor-y" type="number" step="0.1"></label><label>Z<input id="actor-z" type="number" step="0.1"></label></div>
     <div class="dimensions"><label>Facing °<input id="actor-yaw" type="number" step="1"></label></div>
     <div id="model-size" class="actor-position" hidden><label>Size X<input id="model-scaleX" type="number" min="0.01" step="0.01"></label><label>Size Y<input id="model-scaleY" type="number" min="0.01" step="0.01"></label><label>Size Z<input id="model-scaleZ" type="number" min="0.01" step="0.01"></label></div>
     <div id="model-rotation" class="dimensions" hidden><label>Pitch °<input id="model-pitch" type="number" step="1"></label><label>Roll °<input id="model-roll" type="number" step="1"></label></div>
     <label id="model-joint-row" hidden>Rotation Target<select id="model-joint"></select></label>
-    </div><div id="appearance-fields" hidden><label>Name<input id="actor-label" maxlength="255"></label><div class="actor-identity inspector-group"><label>Guide Color<input id="actor-color" type="color"></label><label>Source<select id="actor-reference"><option value="text">Text Description</option><option value="upload">Upload Character Photo…</option><option value="reference">Use Scene Source Image</option></select></label><img id="actor-reference-preview" alt="Character identity photo" hidden><label>Describe Character in Group Photo<input id="actor-source-person" placeholder="For example, the person with glasses on the left"></label><label>Appearance / Clothing<textarea id="actor-description" rows="3" maxlength="16000" placeholder="Character appearance, clothing, and style"></textarea></label><p id="actor-binding-state" class="hint"></p></div></div>
+    </details><div id="appearance-fields"><label>Name<input id="actor-label" maxlength="255"></label><div class="actor-identity inspector-group"><label>Guide Color<input id="actor-color" type="color"></label><label>Source<select id="actor-reference"><option value="text">Text Description</option><option value="upload">Upload Character Photo…</option><option value="reference">Use Scene Source Image</option></select></label><img id="actor-reference-preview" alt="Character identity photo" hidden><label>Describe Character in Group Photo<input id="actor-source-person" placeholder="For example, the person with glasses on the left"></label><label>Appearance / Clothing<textarea id="actor-description" rows="3" maxlength="16000" placeholder="Character appearance, clothing, and style"></textarea></label><p id="actor-binding-state" class="hint"></p></div></div>
     </div>
     <label class="option-toggle"><input id="actor-identities" type="checkbox"><span>Assign Each Character an Identity<small>Use the Qwen Base Model with Multi-Image Encode.</small></span></label>
     <label class="option-toggle"><input id="color-actors" type="checkbox"><span>Use Guide Colors in Coarse Render<small>Distinguishes characters and models. Pose guides keep standard joint colors.</small></span></label>`;
@@ -67,30 +66,12 @@ export function installActorsUI(options) {
   }, true);
   $('output-guide-options').append($('actor-identities').closest('label'), $('color-actors').closest('label'));
   const actions = $('canvas-actions');
-  actions.innerHTML = '<strong id="canvas-target"></strong><button type="button" id="canvas-place" title="Move this object in the scene"><img src="../icons/arrows-move.svg" alt="">Move</button><button type="button" id="canvas-pose" title="Show joint handles or the rotation pivot"><img src="../icons/rotate-3d.svg" alt=""><span>Pose</span></button><button type="button" id="canvas-appearance" aria-haspopup="dialog" title="Choose an image to guide this character’s appearance"><img src="../icons/photo.svg" alt="">Appearance</button><button type="button" id="canvas-more" aria-haspopup="dialog" title="More actions for the selected object"><img src="../icons/adjustments-horizontal.svg" alt="">More</button>';
-  const commandDialog = $('scene-command-dialog');
-  $('canvas-more').onclick = () => commandDialog.showModal();
-  commandDialog.addEventListener('click', event => {
-    const command = event.target.closest('[data-scene-command]');
-    if (!command) return;
-    commandDialog.close();
-    const task = $('selection-task');
-    task.value = task.value === command.dataset.sceneCommand ? '' : command.dataset.sceneCommand;
-    task.dispatchEvent(new Event('change'));
-    if (task.value) $('selection-heading').focus();
-  });
-  $('selection-heading').tabIndex = -1;
-  $('close-selection-panel').onclick = () => {
-    const task = $('selection-task');
-    task.value = '';
-    task.dispatchEvent(new Event('change'));
-    $('canvas-more').focus();
-  };
-  $('canvas-place').onclick = context.placeScene;
-  $('canvas-pose').onclick = context.editScene;
+  actions.innerHTML = '<button type="button" id="canvas-appearance" aria-haspopup="dialog"><img src="../icons/photo.svg" alt="">Choose appearance image</button>';
+  $('selection-inspector').querySelector('.section-heading').after(actions);
   $('start-scene').onclick = () => assets.showModal();
   $('start-source').onclick = () => $('open-source-tools').click();
   $('selection-fields').append($('active-actor-controls'), $('clone-actor').parentElement);
+  $('selection-pose-tools').prepend($('joint-panel'));
   const identityFile = document.createElement('input'); identityFile.type = 'file'; identityFile.accept = 'image/*'; identityFile.hidden = true; identityFile.id = 'actor-identity-file'; document.body.append(identityFile);
   const readReferences = button('Read Connected Character Photos', () => context.send('anyangle-read-actors')); readReferences.id = 'read-actor-references'; readReferences.className = 'wide-button'; $('actors-panel').append(readReferences);
   const readKeypoints = button('Read Connected Pose Keypoints', () => context.send('anyangle-read-keypoints')); readKeypoints.id = 'read-pose-keypoints'; readKeypoints.className = 'wide-button'; readKeypoints.hidden = true; $('openpose-panel').prepend(readKeypoints);
@@ -306,6 +287,10 @@ export function refreshActorsUI() {
         else selectRole(item.id, event.ctrlKey || event.metaKey);
       });
       choose.className = 'actor-name';
+      const title = document.createElement('span');
+      title.className = 'actor-name-text';
+      title.textContent = item.label;
+      choose.replaceChildren(title);
       choose.dataset.sceneItem = item.id;
       choose.setAttribute('aria-pressed', String(!!selected));
       if (selected) {
@@ -370,15 +355,9 @@ export function refreshActorsUI() {
   const selected = model || (doc.selectedActorIds?.includes(actor?.id) ? actor : null);
   const hasSelection = !!selected && (human || !!model);
   $('canvas-actions').hidden = !hasSelection;
-  $('canvas-target').textContent = hasSelection ? selected.label : '';
-  $('canvas-pose').querySelector('span').textContent = model ? 'Rotate' : 'Pose';
-  $('canvas-pose').disabled = !hasSelection || selected.locked || selected.visible === false;
-  $('canvas-place').disabled = !hasSelection || selected.locked || selected.visible === false;
-  $('canvas-place').setAttribute('aria-pressed', String(studio?.mode === 'position'));
-  $('canvas-pose').setAttribute('aria-pressed', String(studio?.mode === 'edit'));
   $('canvas-appearance').hidden = !hasSelection || !!model || doc.version !== 3;
   $('selection-fields').hidden = !hasSelection;
-  $('selection-inspector').hidden = !hasSelection || !$('selection-task').value;
+  $('selection-inspector').hidden = !hasSelection;
   $('selection-heading').textContent = hasSelection ? selected.label : 'Selection';
   $('clone-actor').disabled = $('delete-actor').disabled = !selected || (!human && !model);
   $('actor-color').closest('label').hidden = photo;

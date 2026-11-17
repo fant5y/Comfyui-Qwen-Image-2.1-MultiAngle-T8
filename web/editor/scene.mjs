@@ -216,6 +216,11 @@ export class StudioScene {
     if (this.mode === 'camera' && this.baseTarget) this.updateShot();
   }
 
+  viewAxes() {
+    const inverse = this.viewer.camera.quaternion.clone().invert();
+    return [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(axis => new THREE.Vector3(...axis).applyQuaternion(inverse));
+  }
+
   loadSceneBackground() {
     if (this.capturing) return this.backgroundLoad;
     const name = canvasBackgroundAsset(this.doc)?.name;
@@ -1246,7 +1251,7 @@ export class StudioScene {
           if (transform.axis) return;
         }
       }
-      if (this.animal?.handles.visible && this.mode === 'edit' && event.button === 0 && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+      if (this.animal?.handles.visible && this.mode === 'edit' && event.button === 0 && !event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
         const transform = this.viewer.transform;
         transform.pointerHover(transform._getPointer(event));
         const raycaster = pickRay(event);
@@ -1280,12 +1285,12 @@ export class StudioScene {
       if (this.mode !== 'camera' && event.button === 0 && !event.shiftKey) {
         const raycaster = pickRay(event);
         const humanScene = this.doc.source.kind === 'human';
-        if (this.mode === 'edit' && humanScene && !this.animal && this.doc.selectedActorIds?.includes(this.doc.activeActorId)) {
+        if (this.mode === 'edit' && !event.altKey && humanScene && !this.animal && this.doc.selectedActorIds?.includes(this.doc.activeActorId)) {
           const handles = [...this.viewer._getRaycastableJointMarkers(), ...Object.values(this.viewer.ikController?.poleTargets || {}).filter(handle => handle.visible)];
           if (raycaster.intersectObjects(handles, false).length) return;
         }
         const hit = (humanScene || this.mode === 'position') && pickScene(raycaster);
-        if (this.mode === 'position' && !hit) {
+        if ((this.mode === 'position' || event.altKey) && !hit) {
           const glbHit = this.doc.source.kind === 'glb' && this.glb && raycaster.intersectObject(this.glb, true).length;
           const backgroundHit = this.sceneBackground?.visible && raycaster.intersectObject(this.sceneBackground).length;
           if (glbHit || backgroundHit) {
@@ -1308,18 +1313,19 @@ export class StudioScene {
         if (id && (id !== this.doc.activeActorId || !this.doc.selectedActorIds?.includes(id) || this.selectedModelId || this.selectedPlacementAsset || event.ctrlKey || event.metaKey)) {
           event.stopImmediatePropagation(); event.preventDefault(); this.callbacks.pick?.(id, event.ctrlKey || event.metaKey); return;
         }
-        if (this.mode === 'edit' && (modelId || this.selectedModel())) {
+        if (this.mode === 'edit' && !event.altKey && (modelId || this.selectedModel())) {
           event.stopImmediatePropagation(); event.preventDefault();
           if (modelId && modelId !== this.selectedModelId) this.callbacks.pickModel?.(modelId);
           return;
         }
-        if (this.mode === 'position') {
+        if (this.mode === 'position' || event.altKey) {
           event.stopImmediatePropagation(); event.preventDefault();
           if (modelId) this.callbacks.pickModel?.(modelId);
           const target = modelId ? this.doc.props.find(model => model.id === modelId) : activeActor(this.doc);
           if (!target || target.locked) return;
           const normal = this.doc.interaction?.movePlane === 'ground' ? new THREE.Vector3(0, 1, 0) : this.viewer.camera.getWorldDirection(new THREE.Vector3());
           const root = modelId ? this.propRoots.get(modelId) : this.actorRoots.get(target.id);
+          if (!root) return;
           const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, root.position);
           const point = raycaster.ray.intersectPlane(plane, new THREE.Vector3()); if (!point) return;
           drag = { pointerId: event.pointerId, placementId: target.id, model: !!modelId, plane, point, transform: { ...target.transform } };

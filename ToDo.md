@@ -17,6 +17,8 @@
 
 ## Workflow restructuring
 
+**Implementation list:** [Studio layout correction](docs/studio-layout-plan.md).
+
 **Current direction:** Start with the [blank-slate Studio redesign](docs/studio-redesign.md). The canvas command strip, empty start, and targeted appearance picker are implemented on the preview branch. See the acceptance checks before extending the rest of the redesign.
 
 Status: the reference-card labels, status and keyboard focus restoration are implemented. Output displays inputs by image number after Prompt. Live behavior and accessibility still need verification.

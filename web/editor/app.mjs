@@ -1,8 +1,8 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117sceneassets';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117canvas';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117dock';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261117animalrefs';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117canvas';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117dock';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
@@ -12,7 +12,7 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261117direct';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117canvas';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117dock';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261117animalrefs';
 
@@ -42,11 +42,59 @@ const batchReplies = new Map();
 const controls = new Map();
 
 const workspace = $('#workspace');
+const shotResize = $('#resize-shots');
+const shotShelf = $('#shot-shelf');
+const minimumShelfHeight = 76;
+const defaultShelfHeight = 140;
+function setShelfHeight(height) {
+  const max = Math.max(minimumShelfHeight, Math.min(300, Math.floor(innerHeight * 0.35), workspace.clientHeight - 420));
+  const size = Math.max(minimumShelfHeight, Math.min(max, height));
+  shotShelf.style.setProperty('--shot-shelf-height', size + 'px');
+  shotResize.setAttribute('aria-valuemax', String(max));
+  shotResize.setAttribute('aria-valuenow', String(size));
+}
+let shelfDrag;
+shotResize.onpointerdown = event => {
+  if (event.button !== 0) return;
+  shelfDrag = { y: event.clientY, height: shotShelf.offsetHeight };
+  shotResize.setPointerCapture(event.pointerId);
+};
+shotResize.onpointermove = event => {
+  if (shelfDrag && shotResize.hasPointerCapture(event.pointerId))
+    setShelfHeight(shelfDrag.height + shelfDrag.y - event.clientY);
+};
+shotResize.onlostpointercapture = () => { shelfDrag = null; };
+shotResize.ondblclick = () => setShelfHeight(defaultShelfHeight);
+shotResize.onkeydown = event => {
+  if (!['ArrowUp', 'ArrowDown', 'Home'].includes(event.key)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  setShelfHeight(event.key === 'Home' ? defaultShelfHeight : shotShelf.offsetHeight + (event.key === 'ArrowUp' ? 12 : -12));
+};
+setShelfHeight(defaultShelfHeight);
+window.addEventListener('resize', () => { if (!shotShelf.hidden) setShelfHeight(shotShelf.offsetHeight); });
+
+const orientationAxes = [...document.querySelectorAll('#view-orientation g')];
+function updateOrientation() {
+  if (!studio?.viewer?.camera) return;
+  const axes = studio.viewAxes();
+  for (const [index, group] of orientationAxes.entries()) {
+    const { x, y, z } = axes[index];
+    const endX = 42 + x * 28, endY = 42 - y * 28;
+    const [line, dot, label] = group.children;
+    for (const [key, value] of Object.entries({ x1: 42, y1: 42, x2: endX, y2: endY })) line.setAttribute(key, value);
+    dot.setAttribute('cx', endX); dot.setAttribute('cy', endY);
+    label.setAttribute('x', endX); label.setAttribute('y', endY);
+    group.style.opacity = z < 0 ? '.55' : '1';
+  }
+  for (const { index } of axes.map((axis, index) => ({ index, depth: axis.z })).sort((a, b) => a.depth - b.depth))
+    $('#view-orientation').append(orientationAxes[index]);
+}
 for (const handle of workspace.querySelectorAll('[data-sidebar]')) {
   const side = handle.dataset.sidebar;
   const panel = workspace.querySelector(`.${side}-panel`);
   const widthProperty = `--${side}-sidebar-width`;
-  const direction = side === 'left' ? 1 : -1;
+  const direction = -1;
   const storageKey = `anyangle-studio.sidebar-width.${side}`;
   try {
     const savedWidth = Number(localStorage.getItem(storageKey));
@@ -61,8 +109,10 @@ for (const handle of workspace.querySelectorAll('[data-sidebar]')) {
     } catch { /* Browser storage is optional. */ }
   };
   const setWidth = width => {
-    const maxWidth = Math.floor(workspace.clientWidth * 0.34);
-    workspace.style.setProperty(widthProperty, `${Math.max(200, Math.min(maxWidth, width))}px`);
+    const sceneDock = side === 'left';
+    const maxWidth = Math.floor(workspace.clientWidth * (sceneDock ? 0.36 : 0.38));
+    const minimum = sceneDock ? 240 : 270;
+    workspace.style.setProperty(widthProperty, Math.max(minimum, Math.min(maxWidth, width)) + 'px');
   };
   let drag;
   handle.onpointerdown = event => {
@@ -258,8 +308,10 @@ function refresh() {
     doc.promptTemplate = 2;
     if (doc !== guideSubjectDocument || guideSubjectRevision !== revision) delete doc.guideSubjects;
   }
-  if (studio && (doc.source.kind === 'splat' || doc.source.kind === 'empty') &&
-      ((studio.mode === 'edit' || $('#edit-mode').classList.contains('active')) && !studio.selectedModel() || studio.mode === 'position' && !studio.canPlaceScene())) setMode('camera');
+  if (studio && !studio.capturing && !studio.restoring) {
+    const mode = studio.selectedPlacementAsset ? 'position' : doc.source.kind === 'human' || studio.selectedModel() ? 'edit' : studio.canPlaceScene() ? 'position' : 'camera';
+    if (studio.mode !== mode) setMode(mode);
+  }
   if (linkedReference.asset) doc.reference = linkedReference.asset;
   const guide = currentGuide(), base = doc.conditioning.model === 'base', input = guideSource(doc);
   const manifest = buildManifest(doc), multi = actorMode(doc);
@@ -283,6 +335,7 @@ function refresh() {
   for (const [id, active] of [['view-output', previewVisible], ['view-scene', !previewVisible]]) {
     $(`#${id}`).classList.toggle('active', active); $(`#${id}`).setAttribute('aria-pressed', String(active));
   }
+  $('#use-view').hidden = !studio || studio.mode === 'camera';
   $('#view-scene').hidden = staticGuide || guide === 'depth' && input.kind !== 'depth-scene';
   $('#view-scene').disabled = doc.source.kind === 'empty' && !hasSceneObjects();
   $('#open-camera-settings').disabled = staticGuide;
@@ -296,12 +349,12 @@ function refresh() {
     : !doc.reference?.name || !!linkedReference.pending;
   $('#pose-category').value = (doc.randomMaster || doc.poseRandom)?.category || 'mixed';
   if (document.activeElement !== $('#pose-seed')) $('#pose-seed').value = (doc.randomMaster || doc.poseRandom)?.seed || 0;
-  for (const id of ['shot-shelf', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
+  for (const id of ['shot-shelf', 'resize-shots', 'scene-panel']) $(`#${id}`).hidden = staticGuide;
   $('#stage-help').textContent = previewVisible ? staticGuide ? 'Source composition and structure · Apply to output this guide' : 'Guide from the current camera · Switch to 3D Workspace to adjust the view'
     : studio?.mode === 'position' ? 'Select an object · Drag an axis to move it · Right-drag to orbit · Middle-drag to pan'
     : studio?.mode === 'edit' && studio.selectedModel() ? 'Drag the rotation rings · Right-drag to orbit · Middle-drag to pan'
-    : studio?.mode === 'edit' && studio.animal ? 'Select a joint or the dot under the animal for rotation rings · Drag a joint or limb handle to pose · Right-drag to orbit · Middle-drag to pan'
-    : studio?.mode === 'edit' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan'
+    : studio?.mode === 'edit' && studio.animal ? 'Drag joints to pose · Alt-drag the body to move · Right-drag to orbit'
+    : studio?.mode === 'edit' ? 'Drag joints to pose · Alt-drag the body to move · Right-drag to orbit'
       : 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom';
   for (const control of controls.values()) control.refresh();
   $('#width').value = doc.width; $('#height').value = doc.height;
@@ -332,25 +385,14 @@ function refresh() {
         : 'GLB uses Y-up by default. Rotate the asset to align its front. Asset scale and camera zoom adjust independently.';
   $('#asset-label').textContent = empty ? 'Waiting for source reconstruction' : selectedModel ? selectedModel.label : human ? 'MakeHuman · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Posable Mannequin' : doc.source.label || 'GLB Scene';
   $('#source-badge').textContent = empty ? 'PHOTO → 3D' : splat ? doc.source.keep_background ? 'TRIPOSPLAT · Background Included' : 'TRIPOSPLAT · Source Subject' : selectedModel ? selectedModel.label : human ? 'HUMAN · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Mannequin' : 'GLB · Scene';
-  const selectionTask = $('#selection-task');
-  const canPose = actorSelected && !selectedModel && !staticGuide && (human || animal);
-  for (const command of document.querySelectorAll('[data-scene-command]')) {
-    const task = command.dataset.sceneCommand;
-    command.hidden = ['pose', 'body', 'presets'].includes(task) && (!canPose || task === 'presets' && !human);
-    if (command.hidden && selectionTask.value === task) selectionTask.value = '';
-  }
-  $('.actor-selection-actions').hidden = selectionTask.value !== 'actions';
   for (const id of ['pose-panel', 'hands-panel', 'body-panel', 'joint-panel']) {
     const available = actorSelected && !selectedModel && (human || animal && ['joint-panel', 'body-panel'].includes(id));
     const panel = document.getElementById(id);
     panel.classList.toggle('disabled-panel', !available);
     panel.inert = !available || mannequinScene && id !== 'pose-panel' && !!activeActor(doc)?.locked;
-    const task = { 'pose-panel': 'presets', 'hands-panel': 'body', 'body-panel': 'body', 'joint-panel': 'pose' }[id];
-    panel.hidden = !available || staticGuide || selectionTask.value !== task;
+    panel.hidden = !available || staticGuide;
   }
-  $('#placement-fields').hidden = selectionTask.value !== 'placement';
-  $('#appearance-fields').hidden = selectionTask.value !== 'appearance';
-  $('#cast-interactions').hidden = !canPose || !human || selectionTask.value !== 'presets';
+  $('#cast-interactions').hidden = !human || !actorSelected || !!selectedModel || staticGuide;
   $('#selection-pose-tools').hidden = ['pose-panel', 'hands-panel', 'body-panel', 'joint-panel', 'cast-interactions'].every(id => document.getElementById(id).hidden);
   $('#body-sliders').hidden = animal;
   $('#male-anatomy').hidden = !human || Number(doc.mesh.gender) < 0.99;
@@ -520,9 +562,6 @@ function refresh() {
   $('#download-guide').disabled = !requiresGuide() || !hasGuide();
   $('#apply').disabled = applyDisabled();
   $('#clear-canvas').disabled = busy || !ready || !canvasHasObjects();
-  $('#edit-mode').disabled = (splat || empty) && !studio?.selectedModel();
-  $('#position-mode').disabled = !studio?.canPlaceScene();
-  $('#edit-mode').title = studio?.selectedModel() ? '' : splat ? 'Use Camera mode to change the view of a reconstructed subject.' : empty ? 'Load a 3D subject first.' : '';
   $('#mode-hint').hidden = !splat;
   $('#fit-frame').textContent = splat ? 'Return to Source Camera' : 'Fit to Frame';
   $('.eyebrow').textContent = `${splat ? 'Estimated Source Camera' : 'Scene Front'} · Y-Up · Perspective`;
@@ -543,11 +582,12 @@ function refresh() {
     ? 'Drag a gold wing handle to aim the wing. Adjust the shoulder, elbow, and wrist separately, or start with a wing pose.'
     : animal
     ? 'Select a joint to show its rotation rings, or choose it below. Drag a gold handle to move the whole limb.'
-    : 'Use Pose & Rotate to select a joint or drag a hand or foot handle.';
+    : 'Select a joint in the viewport or choose it by name.';
   $('#bone-name').textContent = selectedBone ? animal ? animalJointLabel(selectedBone) : selectedBone : '';
   $('#selected-joint-controls').hidden = !selectedBone;
   $('#bone-select').value = selectedBone;
   for (const axis of ['x', 'y', 'z']) controls.get(`bone-${axis}`)?.refresh();
+  updateOrientation();
   refreshActorsUI();
   refreshReferencesUI();
   studio?.loadSceneBackground();
@@ -737,23 +777,16 @@ $('#open-camera-settings').onclick = () => showRightPanel(false, !$('#workspace'
 function setMode(mode) {
   studio.setMode(mode);
   mode = studio.mode;
-  $('#camera-mode').classList.toggle('active', mode === 'camera'); $('#edit-mode').classList.toggle('active', mode === 'edit');
-  $('#canvas-place')?.setAttribute('aria-pressed', String(mode === 'position'));
-  $('#canvas-pose')?.setAttribute('aria-pressed', String(mode === 'edit'));
-  $('#position-mode').classList.toggle('active', mode === 'position'); $('#position-mode').setAttribute('aria-pressed', String(mode === 'position'));
-  $('#camera-mode').setAttribute('aria-pressed', String(mode === 'camera')); $('#edit-mode').setAttribute('aria-pressed', String(mode === 'edit'));
-  $('#use-view').hidden = mode !== 'edit';
+  $('#use-view').hidden = mode === 'camera';
   $('#stage-help').textContent = mode === 'camera' ? 'Yellow frame marks the output · Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom'
     : mode === 'position' ? 'Select an object · Drag an axis to move it · Right-drag to orbit · Middle-drag to pan'
     : studio.selectedModel() ? 'Drag the rotation rings · Right-drag to orbit · Middle-drag to pan'
     : studio.animal ? 'Drag a joint to pose · Click a joint for rotation rings'
-    : doc.source.kind === 'human' ? 'Select joints or drag IK handles · Right-drag to orbit · Middle-drag to pan · Camera stays in place'
+    : doc.source.kind === 'human' ? 'Drag joints to pose · Alt-drag the body to move · Right-drag to orbit'
       : 'Right-drag to orbit · Middle-drag to pan · Set this view as the camera';
 }
 $('#view-output').onclick = () => { previewVisible = true; refresh(); renderPreview(); };
 $('#view-scene').onclick = () => { previewVisible = false; setMode(studio.mode); refresh(); };
-$('#camera-mode').onclick = () => setMode('camera'); $('#edit-mode').onclick = () => setMode('edit');
-$('#position-mode').onclick = () => { previewVisible = false; setMode('position'); refresh(); };
 $('#use-view').onclick = () => { begin(); studio.currentViewAsShot(); setMode('camera'); changed(); };
 $('#fit-frame').onclick = () => { begin(); studio.fit(); changed(); };
 document.querySelectorAll('[data-angle]').forEach(button => { button.onclick = () => { begin(); doc.camera.azimuth = Number(button.dataset.angle); doc.camera.elevation = 0; studio.updateShot(); changed(); }; });
@@ -1728,6 +1761,7 @@ async function start(token, reference = { connected: false }, structure = { conn
       if (updateControls) refresh();
     }, error });
     await studio.init(doc);
+    studio.viewer.orbit.addEventListener('change', updateOrientation);
     if (doc.actors.some(actor => actor.source.kind === 'human')) await ensureHumanTools();
     if (structure.asset && doc.conditioning.model === 'base' && ['pose', 'depth', 'canny'].includes(doc.conditioning.guide)
         && !usesLocalGuide())
@@ -1803,7 +1837,6 @@ installActorsUI({ doc: () => doc, replace: value => { doc = value; }, studio: ()
   showScene: () => { previewVisible = false; setMode('camera'); },
   placeScene: () => { previewVisible = false; setMode('position'); },
   editScene: () => { previewVisible = false; setMode('edit'); refresh(); } });
-$('#selection-task').onchange = () => refresh();
 installReferencesUI({ doc: () => doc, sourceConnected: () => linkedReference.connected, run, begin, changed, askName, upload, send, toast,
   addCharacter, addAnimal, animalShapes: ANIMAL_SHAPES,
   addSceneImage: item => run(() => addPlacedReference(item, clone(item.asset))),

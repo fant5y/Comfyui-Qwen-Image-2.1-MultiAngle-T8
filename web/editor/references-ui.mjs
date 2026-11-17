@@ -122,14 +122,16 @@ function chooseAppearanceImage() {
   const grid = el("div", "", "appearance-image-grid");
   for (const item of scene.referenceLibrary.items) {
     if (!item.asset || item.missing) continue;
-    const choice = button(item.label || item.asset.name, () => {
+    const name = item.label || item.asset.name;
+    const choice = button('', () => {
       if (!dialog.open || context.doc() !== scene || !scene.actors.includes(actor)) return;
       edit(() => assign(item));
       dialog.close();
       context.toast("Appearance image assigned to " + actor.label + ".");
     });
     const image = el("img"); image.src = imageURL(item.asset); image.alt = "";
-    choice.prepend(image);
+    choice.title = name;
+    choice.append(image, el('span', name, 'appearance-image-name'));
     grid.append(choice);
   }
   const file = el("input"); file.type = "file"; file.accept = "image/*"; file.hidden = true;

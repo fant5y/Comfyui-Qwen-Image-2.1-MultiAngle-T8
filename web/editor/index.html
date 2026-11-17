@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AnyAngle Studio · T8</title><link rel="stylesheet" href="./style.css?v=20261117canvas"><link rel="stylesheet" href="./references.css?v=20261117shelf"><link rel="stylesheet" href="./workspace.css?v=20261117canvas"><link rel="stylesheet" href="./pose-library.css?v=20261029v180"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AnyAngle Studio · T8</title><link rel="stylesheet" href="./style.css?v=20261117dock"><link rel="stylesheet" href="./references.css?v=20261117shelf"><link rel="stylesheet" href="./workspace.css?v=20261117dock"><link rel="stylesheet" href="./pose-library.css?v=20261029v180"></head>
 <body>
 <header class="topbar">
   <div class="brand"><img src="../icons/aperture.svg" alt=""><strong>ANYANGLE</strong><span>STUDIO</span><small title="Studio version">T8 · v1.8.0</small></div>
@@ -8,17 +8,12 @@
   <div class="top-actions"><button id="undo" class="icon-button" title="Undo Ctrl+Z" aria-label="Undo"><img src="../icons/arrow-back-up.svg" alt=""></button><button id="redo" class="icon-button" title="Redo Ctrl+Shift+Z" aria-label="Redo"><img src="../icons/arrow-forward-up.svg" alt=""></button><button id="clear-canvas" class="quiet" disabled>Clear Canvas</button><button id="cancel" class="quiet">Cancel</button><button id="review-output" class="quiet" aria-controls="output-inspector" aria-expanded="false">Review Output</button><button id="apply" class="primary" disabled><img src="../icons/check.svg" alt="">Apply to Node</button></div>
 </header>
 <main class="workspace" id="workspace" inert>
-  <aside class="left-panel">
-    <section id="actors-panel" aria-labelledby="scene-heading"></section>
-    <div class="scene-action-row scene-file-actions" role="group" aria-label="Portable scene"><button id="import-scene">Import Scene ZIP</button><button id="export-scene">Export Scene ZIP</button></div>
-    
-  </aside>
-  <button type="button" class="sidebar-resize" data-sidebar="left" aria-label="Resize left sidebar" title="Drag or use arrow keys. Double-click to reset."></button>
   <section class="center-panel" id="center-panel">
     <div class="canvas-viewbar"><span id="view-detail">3D Workspace</span><button id="open-camera-settings" class="quiet" aria-controls="camera-section" aria-expanded="false" title="Adjust yaw, pitch, zoom and lens">Camera Settings</button><div class="view-switch" role="group" aria-label="Workspace View"><button id="view-output">Guide Preview</button><button id="view-scene" class="active">3D Workspace</button></div><select id="ratio" aria-label="Output Aspect Ratio"><option value="1:1">1:1</option><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="4:3">4:3</option><option value="custom">Custom</option></select></div>
     <div class="stage" id="stage">
       <canvas id="viewport" aria-label="Interactive 3D scene. Drag to orbit, middle-drag or Shift-drag to pan, and scroll to zoom." tabindex="0"></canvas>
-      <div class="stage-toolbar"><div class="mode-switch" role="group" aria-label="Editing Mode"><button id="camera-mode" class="active"><img src="../icons/camera.svg" alt="">Camera</button><button id="position-mode"><img src="../icons/body-scan.svg" alt="">Place Objects</button><button id="edit-mode"><img src="../icons/cube.svg" alt="">Pose &amp; Rotate</button></div><button id="reference-overlay-toggle" class="overlay-toggle" title="Overlay the source image for alignment">Source Overlay</button></div>
+      <div class="stage-toolbar"><button id="reference-overlay-toggle" class="overlay-toggle" title="Overlay the source image for alignment">Source Overlay</button></div>
+      <svg id="view-orientation" viewBox="0 0 84 84" role="img" aria-label="Viewport orientation, Y up"><title>Viewport orientation</title><g data-view-axis="x"><line/><circle r="9"/><text>X</text></g><g data-view-axis="y"><line/><circle r="9"/><text>Y</text></g><g data-view-axis="z"><line/><circle r="9"/><text>Z</text></g></svg>
       <img id="reference-overlay" class="reference-overlay" alt="Translucent source image overlay" hidden>
       <p id="mode-hint" class="mode-hint" hidden>The reconstructed pose is fixed. Move the camera to change the view.</p>
       <div class="stage-meta"><span id="source-badge">Loading scene</span></div>
@@ -30,8 +25,14 @@
     </div>
     <div id="canvas-actions" class="canvas-actions" hidden aria-label="Selected object actions"></div>
 
+    <div class="stage-help" id="stage-help">The yellow outline marks the output frame <span>Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom</span></div>
+    <div id="resize-shots" role="separator" aria-label="Resize camera views and scene variations" aria-controls="shot-shelf" aria-orientation="horizontal" aria-valuemin="76" aria-valuemax="300" aria-valuenow="140" tabindex="0" title="Drag or use Up and Down to resize. Home resets."></div>
+    <section class="shot-shelf" id="shot-shelf"><div class="section-heading"><h2>Camera Views <small id="shot-count">0</small></h2><div class="compact-actions"><button id="open-batch">Batch Views</button><button id="save-shot"><img src="../icons/plus.svg" alt="">Save Current View</button></div></div><div id="shots" class="shots"><p class="empty-note">Save camera views here. Selecting a saved view keeps the current pose.</p></div><section class="shot-variations" aria-labelledby="variation-heading"><div class="section-heading"><h2 id="variation-heading">Scene Variations</h2></div><div class="compact-actions"><select id="composition-list" aria-label="Saved scene variation"><option value="">Choose Scene Variation</option></select><button id="save-composition">Save Variation</button><button id="apply-composition">Apply Variation</button></div><p class="hint">Variations store poses, positions, and props. Applying a variation preserves reference assignments.</p></section></section>
+  </section>
+  <aside class="left-panel">
+    <section id="actors-panel" aria-labelledby="scene-heading"></section>
     <section id="selection-inspector" hidden aria-labelledby="selection-heading">
-      <div class="section-heading"><h2 id="selection-heading">Selection</h2><button id="close-selection-panel" type="button">Close</button></div>
+      <div class="section-heading"><h2 id="selection-heading">Selection</h2></div>
       <div id="selection-fields" class="cast-panel" hidden></div>
       <div id="selection-pose-tools" hidden>
     <section class="inspector-group pose-subsection" id="hands-panel" hidden><h3>Hand Poses <small>Character’s Left and Right</small></h3><div id="hands"></div></section>
@@ -40,9 +41,10 @@
 <section class="inspector-group pose-subsection" id="pose-panel" hidden><h3>Pose Library <span class="tag amber">Experimental</span></h3><div class="preset-grid" id="presets"></div><div class="random-pose"><label>Category<select id="pose-category"><option value="mixed">Mixed</option><option value="standing">Standing</option><option value="action">Action</option><option value="seated">Seated</option></select></label><button id="random-pose" class="wide-button accent-button">Random Pose</button><label>Apply To<select id="random-scope"><option value="current">Current Character</option><option value="selected">Selected Characters</option><option value="all">All Unlocked Characters</option></select></label><label>Seed<input id="pose-seed" type="number" min="0" max="4294967295" step="1" value="0"></label><button id="repeat-pose" class="wide-button">Repeat from Seed</button><p class="hint">Generate a constrained pose variation, then adjust, undo, or save it.</p></div><div class="compact-actions" id="pose-actions"><button id="save-pose"><img src="../icons/device-floppy.svg" alt="">Save Pose</button><button id="import-pose" title="Import a pose JSON exported from Studio">Import</button><button id="export-pose" title="Export pose JSON">Export</button></div><div id="saved-poses" class="saved-poses"></div></section>
       </div>
     </section>
-    <div class="stage-help" id="stage-help">The yellow outline marks the output frame <span>Drag to orbit · Middle-drag or Shift-drag to pan · Scroll to zoom</span></div>
-    <section class="shot-shelf" id="shot-shelf"><div class="section-heading"><h2>Camera Views <small id="shot-count">0</small></h2><div class="compact-actions"><button id="open-batch">Batch Views</button><button id="save-shot"><img src="../icons/plus.svg" alt="">Save Current View</button></div></div><div id="shots" class="shots"><p class="empty-note">Save camera views here. Selecting a saved view keeps the current pose.</p></div><section class="shot-variations" aria-labelledby="variation-heading"><div class="section-heading"><h2 id="variation-heading">Scene Variations</h2></div><div class="compact-actions"><select id="composition-list" aria-label="Saved scene variation"><option value="">Choose Scene Variation</option></select><button id="save-composition">Save Variation</button><button id="apply-composition">Apply Variation</button></div><p class="hint">Variations store poses, positions, and props. Applying a variation preserves reference assignments.</p></section></section>
-  </section>
+    <div class="scene-action-row scene-file-actions" role="group" aria-label="Portable scene"><button id="import-scene">Import Scene ZIP</button><button id="export-scene">Export Scene ZIP</button></div>
+    
+  </aside>
+  <button type="button" class="sidebar-resize" data-sidebar="left" aria-label="Resize scene dock" title="Drag or use arrow keys. Double-click to reset."></button>
   <button type="button" class="sidebar-resize" data-sidebar="right" hidden aria-label="Resize right sidebar" title="Drag or use arrow keys. Double-click to reset."></button>
   <aside class="right-panel" hidden>
     <section id="output-inspector" hidden aria-label="Output">
@@ -119,7 +121,6 @@
 <input type="file" id="reference-file" accept="image/*" hidden><input type="file" id="pose-file" accept=".json,application/json" hidden><input type="file" id="openpose-file" accept="image/png,image/jpeg,image/webp,.json,application/json" hidden><input type="file" id="map-file" accept="image/*" hidden>
 <input type="file" id="scene-file" accept=".zip,application/zip" hidden>
 <dialog id="people-dialog" class="people-dialog"><form method="dialog"><div class="section-heading"><h2>Copy Multiple Poses from a Photo</h2><button value="cancel" formnovalidate>Cancel</button></div><p id="people-count" class="hint"></p><div class="people-picker"><div class="people-image"><img id="people-photo" alt="Pose Source Photo"><div id="people-overlay"></div></div><div id="people-choices"></div></div><label class="option-toggle"><input id="people-match-layout" type="checkbox" checked><span>Match positions to the photo and fit the full scene</span></label><label class="option-toggle"><input id="people-bind-photo" type="checkbox"><span>Also assign this photo as an identity reference<small>Leave off to copy poses only</small></span></label><div class="compact-actions"><button value="current">Copy One Pose to Current Character</button><button value="all" class="primary">Create Selected Characters</button></div></form></dialog>
-<dialog id="scene-command-dialog" class="studio-task-dialog scene-command-dialog" aria-labelledby="scene-command-title"><div class="section-heading"><h2 id="scene-command-title">Object actions</h2><form method="dialog"><button>Close</button></form></div><div class="scene-command-list"><button data-scene-command="placement">Fine-tune placement</button><button data-scene-command="appearance">Rename or describe appearance</button><button data-scene-command="pose">Adjust a joint precisely</button><button data-scene-command="body">Adjust body shape and hands</button><button data-scene-command="presets">Browse pose presets and files</button><button data-scene-command="actions">Duplicate or delete</button></div></dialog>
 <dialog id="add-to-scene" class="studio-task-dialog" aria-labelledby="add-to-scene-heading">
   <div class="section-heading"><h2 id="add-to-scene-heading">Add to Scene</h2><form method="dialog"><button>Close</button></form></div>
   <div id="asset-actions" class="scene-action-row"><button id="import-glb"><img src="../icons/cube.svg" alt=""><span id="import-glb-label">Import GLB</span></button></div>
@@ -149,5 +150,5 @@
       <p class="asset-label" id="asset-label">Loading scene</p>
     <details class="panel-block" id="reconstruction-model-panel"><summary class="section-heading collapsible-heading"><h2>Reconstruction Models</h2><span>Local</span></summary><p class="hint">Studio detects model subdirectories automatically. Select renamed compatible weights manually. Settings are saved in this browser.</p><div id="reconstruction-model-fields" class="model-fields"></div><div class="compact-actions"><button id="reconstruction-model-refresh">Refresh List</button><button id="reconstruction-model-save" class="primary" disabled>Save Selection</button></div><p id="reconstruction-model-state" class="hint" role="status">Open to read the local model list.</p></details>
 </dialog>
-<script type="module" src="./app.mjs?v=20261117canvas"></script>
+<script type="module" src="./app.mjs?v=20261117dock"></script>
 </body></html>
