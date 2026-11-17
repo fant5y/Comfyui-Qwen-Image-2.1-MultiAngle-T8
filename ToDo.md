@@ -17,6 +17,8 @@
 
 ## Workflow restructuring
 
+**Current direction:** Start with the [blank-slate Studio redesign](docs/studio-redesign.md). The canvas command strip, empty start, and targeted appearance picker are implemented on the preview branch. See the acceptance checks before extending the rest of the redesign.
+
 Status: the reference-card labels, status and keyboard focus restoration are implemented. Output displays inputs by image number after Prompt. Live behavior and accessibility still need verification.
 
 The user arranges an editable scene and sends its composition guide, prompt, and selected images to the generator. Keep the route from each reference to its visible effect and output easy to follow.

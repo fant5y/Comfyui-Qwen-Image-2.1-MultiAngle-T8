@@ -38,6 +38,7 @@ export function installReferencesUI(value) {
   dialog.append(materials);
   document.body.append(dialog);
   $('open-references').onclick = () => dialog.showModal();
+  $('canvas-appearance').onclick = chooseAppearanceImage;
   $('open-source-tools').onclick = openSourceTools;
   $('close-references').onclick = () => dialog.close();
   const stale = el('div', '', 'reference-review'); stale.id = 'reference-source-warning';
@@ -104,6 +105,50 @@ function assignRole(item, kind, target) {
   if (initial && initial.kind === 'free' && initial.target.kind === 'scene'
       && !initial.sourceText && !initial.instruction) item.usages = [];
   item.usages.push(newUse(kind, target));
+}
+
+function chooseAppearanceImage() {
+  const scene = context.doc();
+  const actor = scene.actors.find(item => item.id === scene.activeActorId);
+  if (!actor || !scene.referenceLibrary) return;
+  const assign = item => assignRole(item, "character", { kind: "actors", ids: [actor.id], text: "" });
+  const dialog = el("dialog", "", "studio-task-dialog appearance-picker");
+  const heading = el("h2", "Appearance image for " + actor.label);
+  heading.id = "appearance-picker-heading";
+  dialog.setAttribute("aria-labelledby", heading.id);
+  const close = button("Close", () => dialog.close());
+  const header = el("div", "", "section-heading");
+  header.append(heading, close);
+  const grid = el("div", "", "appearance-image-grid");
+  for (const item of scene.referenceLibrary.items) {
+    if (!item.asset || item.missing) continue;
+    const choice = button(item.label || item.asset.name, () => {
+      if (!dialog.open || context.doc() !== scene || !scene.actors.includes(actor)) return;
+      edit(() => assign(item));
+      dialog.close();
+      context.toast("Appearance image assigned to " + actor.label + ".");
+    });
+    const image = el("img"); image.src = imageURL(item.asset); image.alt = "";
+    choice.prepend(image);
+    grid.append(choice);
+  }
+  const file = el("input"); file.type = "file"; file.accept = "image/*"; file.hidden = true;
+  file.onchange = () => {
+    const picked = file.files[0];
+    if (!picked) return;
+    context.run(async () => {
+      const asset = await context.upload(picked, true);
+      if (!dialog.open || context.doc() !== scene || !scene.actors.includes(actor)) return;
+      edit(() => assign(addReference(scene, asset)));
+      dialog.close();
+      context.toast("Appearance image assigned to " + actor.label + ".");
+    });
+  };
+  dialog.append(header, el("p", "The generator uses this image to guide the character’s look.", "hint"), grid,
+    button("Choose a file", () => file.click(), "primary"), file);
+  dialog.addEventListener("close", () => dialog.remove(), { once: true });
+  document.body.append(dialog);
+  dialog.showModal();
 }
 
 function chooseCharacter(scene, item) {
@@ -258,9 +303,9 @@ function card(scene, item, manifest) {
     if (scene.backgroundReferenceId === item.id) { scene.backgroundReferenceId = null; scene.sceneBackground = null; }
   }, scene.backgroundReferenceId === item.id));
   remove.title = 'Remove from the library. You can undo this. The scene source and characters are kept.';
-  const character = button('Assign Appearance Reference', () => chooseCharacter(scene, item));
+  const character = button('Match a character’s appearance', () => chooseCharacter(scene, item));
   const isBackground = scene.backgroundReferenceId === item.id;
-  const background = button(isBackground ? 'Clear Visible Background' : 'Set Scene and Generation Background', () => edit(() => {
+  const background = button(isBackground ? 'Clear Visible Background' : 'Use as backdrop', () => edit(() => {
     scene.sceneBackground = null;
     if (isBackground) scene.backgroundReferenceId = null;
     else {
@@ -270,7 +315,7 @@ function card(scene, item, manifest) {
   }, true));
   character.disabled = !item.asset || item.missing === true;
   background.disabled = !isBackground && character.disabled;
-  const sceneImage = button('Place Flat Image in Scene', async () => {
+  const sceneImage = button('Place as a flat image', async () => {
     if (await context.addSceneImage(item)) revealScene();
   });
   sceneImage.disabled = character.disabled;
@@ -279,7 +324,7 @@ function card(scene, item, manifest) {
   background.title = isBackground ? 'Clear the viewport and guide background. The generation role stays active.'
     : 'Show the image behind the scene and add a background reference role for generation.';
   sceneImage.title = 'Place the photo on a flat surface you can move, rotate, and resize.';
-  const rebuild = button('Create Posed Mannequin', async () => {
+  const rebuild = button('Create a posed character', async () => {
     if (await context.addPosedCharacter(item)) revealScene();
   });
   rebuild.disabled = character.disabled;

@@ -176,7 +176,7 @@ export class StudioScene {
     });
     this.cameraClips = [this.viewer.camera, this.viewer.captureCamera].map(camera => ({ near: camera.near, far: camera.far }));
     this.viewer.setDirectionalSkydomeVisible(false);
-    this.workspaceBackground = new THREE.Color('#171f28');
+    this.workspaceBackground = new THREE.Color('#242422');
     this.viewer.scene.background = this.workspaceBackground;
     this.viewer.camera.fov = 38;
     this.viewer.updateLights([{ type: 'ambient', color: '#ffffff', intensity: 1.3 },

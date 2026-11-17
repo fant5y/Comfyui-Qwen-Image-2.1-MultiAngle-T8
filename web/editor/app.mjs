@@ -1,8 +1,8 @@
 import { ANIMAL_SHAPES } from './animal-mannequin.mjs?v=20261117sceneassets';
-import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117animalrefs';
+import { StudioScene, defaultScene, restoreSceneDefaults, PRESETS, assetURL } from './scene.mjs?v=20261117canvas';
 import { uuid } from '../uuid.mjs?v=20261116en';
 import { updateReferences, sourceChanged, staleGuide, canvasBackgroundAsset } from './reference-library.mjs?v=20261117animalrefs';
-import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117direct';
+import { installReferencesUI, refreshReferencesUI, setReferenceConnections } from './references-ui.mjs?v=20261117canvas';
 import { reconstruct, reconstructionConfig, selectedReconstructionModels, saveReconstructionModels } from './reconstruct.mjs?v=20261116en';
 import { readSkeletonImage } from './openpose.mjs?v=20261116en';
 import { GUIDE_LABELS, guideImageIndex, guideSource, cannyEdges, hasCannyEdges } from './guides.mjs?v=20261116animals';
@@ -12,7 +12,7 @@ import { randomPose } from './poses.mjs?v=20261116en';
 import { installPoseLibrary } from './pose-library-ui.mjs?v=20261117direct';
 import { installGalleryActions } from './gallery-actions.mjs?v=20261116canvasprompt';
 import { poseCameraPlan, finishCatalogPose } from './pose-catalog.mjs?v=20261116rig';
-import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117shelf';
+import { installActorsUI, refreshActorsUI, updateActorReferences, selectRole, selectModel, clearSelection, addCharacter, importModel, chooseDetectedPeople, randomRoles } from './actors-ui.mjs?v=20261117canvas';
 import { activeActor, bindActor, createActor, saveActor } from './actors.mjs?v=20261116en';
 import { buildManifest, actorMode, actorPrompt, scenePrompt } from './manifest.mjs?v=20261117animalrefs';
 
@@ -334,10 +334,12 @@ function refresh() {
   $('#source-badge').textContent = empty ? 'PHOTO → 3D' : splat ? doc.source.keep_background ? 'TRIPOSPLAT · Background Included' : 'TRIPOSPLAT · Source Subject' : selectedModel ? selectedModel.label : human ? 'HUMAN · Posable Mannequin' : animal ? ANIMAL_SHAPES[activeActor(doc).source.shape] + ' · Mannequin' : 'GLB · Scene';
   const selectionTask = $('#selection-task');
   const canPose = actorSelected && !selectedModel && !staticGuide && (human || animal);
-  for (const option of selectionTask.options) {
-    option.disabled = ['pose', 'body', 'presets'].includes(option.value) && (!canPose || option.value === 'presets' && !human);
+  for (const command of document.querySelectorAll('[data-scene-command]')) {
+    const task = command.dataset.sceneCommand;
+    command.hidden = ['pose', 'body', 'presets'].includes(task) && (!canPose || task === 'presets' && !human);
+    if (command.hidden && selectionTask.value === task) selectionTask.value = '';
   }
-  if (selectionTask.selectedOptions[0]?.disabled) selectionTask.value = '';
+  $('.actor-selection-actions').hidden = selectionTask.value !== 'actions';
   for (const id of ['pose-panel', 'hands-panel', 'body-panel', 'joint-panel']) {
     const available = actorSelected && !selectedModel && (human || animal && ['joint-panel', 'body-panel'].includes(id));
     const panel = document.getElementById(id);
@@ -719,6 +721,7 @@ function showRightPanel(output, camera = false) {
   cameraSection.hidden = !camera;
   $('#open-camera-settings').setAttribute('aria-expanded', String(camera));
   $('.left-panel').hidden = output || camera;
+  $('#center-panel').classList.toggle('reviewing', output);
   $('[data-sidebar="left"]').hidden = output || camera;
   $('#output-inspector').hidden = !output;
   $('#workspace').classList.toggle('show-output', output);
@@ -735,6 +738,8 @@ function setMode(mode) {
   studio.setMode(mode);
   mode = studio.mode;
   $('#camera-mode').classList.toggle('active', mode === 'camera'); $('#edit-mode').classList.toggle('active', mode === 'edit');
+  $('#canvas-place')?.setAttribute('aria-pressed', String(mode === 'position'));
+  $('#canvas-pose')?.setAttribute('aria-pressed', String(mode === 'edit'));
   $('#position-mode').classList.toggle('active', mode === 'position'); $('#position-mode').setAttribute('aria-pressed', String(mode === 'position'));
   $('#camera-mode').setAttribute('aria-pressed', String(mode === 'camera')); $('#edit-mode').setAttribute('aria-pressed', String(mode === 'edit'));
   $('#use-view').hidden = mode !== 'edit';
@@ -1717,7 +1722,6 @@ async function start(token, reference = { connected: false }, structure = { conn
     studio = new StudioScene($('#viewport'), { begin, change: changed, camera: () => { revision++; refresh(); schedulePreview(); $('#status').textContent = 'Camera draft · Apply to save'; $('#status').dataset.state = 'dirty'; }, pick: selectRole, pickModel: selectModel, clearSelection, select: (name, updateControls = true) => {
       selectedBone = name || '';
       if (selectedBone) selectedBoneActorId = activeActor(doc)?.id;
-      if (selectedBone && !$('#selection-fields').contains(document.activeElement)) $('#selection-task').value = 'pose';
       if (studio.animal) {
         studio.selectAnimalJoint(selectedBone);
       }

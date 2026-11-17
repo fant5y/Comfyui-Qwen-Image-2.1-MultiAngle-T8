@@ -1,0 +1,161 @@
+:root {
+  --bg: #191918;
+  --panel: #222221;
+  --line: #44423e;
+  --text: #f1efeb;
+  --muted: #bcb8b0;
+  --studio-accent: #e5bb7a;
+  font-family: "Instrument Sans", "Segoe UI", sans-serif;
+}
+
+.topbar, .canvas-viewbar, .stage-help, .shot-shelf, footer {
+  background: var(--bg);
+  border-color: var(--line);
+}
+
+.left-panel, .right-panel, .studio-task-dialog {
+  background: var(--panel);
+  border-color: var(--line);
+}
+
+.stage { background: #242422; }
+.topbar .brand strong { letter-spacing: .16em; }
+.topbar .primary, .empty-scene .primary, .appearance-picker .primary {
+  background: var(--studio-accent);
+  border-color: var(--studio-accent);
+  color: #231a10;
+}
+.topbar .primary img, .empty-scene .primary img { filter: brightness(0); }
+
+.scene-index-heading, .scene-assets {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.scene-index-heading { margin-bottom: 12px; }
+.scene-index-heading h2 { font-size: 17px; margin: 0; }
+.scene-index-heading small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.scene-index-heading button { margin-left: auto; min-width: 38px; }
+.scene-assets { flex-wrap: wrap; }
+.scene-assets button, .scene-index-heading button {
+  border: 1px solid var(--line);
+  min-height: 36px;
+  background: #2b2a28;
+}
+.scene-assets img, .scene-index-heading img, .canvas-actions img {
+  width: 17px;
+  height: 17px;
+}
+
+#actors-panel .actor-list { gap: 0; border-top: 1px solid var(--line); }
+#actors-panel .actor-card {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 4px 0 4px 6px;
+  box-shadow: none;
+  background: transparent;
+}
+#actors-panel .actor-card.selected { box-shadow: inset 2px 0 var(--studio-accent); background: #38332b; }
+#actors-panel .actor-card-actions button { border: 0; background: transparent; }
+#actors-panel .actor-card-actions button:hover { background: #46423c; }
+#actors-panel .actor-card-actions button:disabled { opacity: .3; }
+#actors-panel .actor-name { min-height: 38px; font-size: 14px; }
+.scene-file-actions { border-color: var(--line); }
+.scene-file-actions button { background: transparent; color: var(--muted); }
+
+.canvas-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #242321;
+  border-top: 1px solid var(--line);
+}
+.canvas-actions strong {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(180px, 100%);
+  padding: 0 10px 0 0;
+  font-size: 14px;
+}
+.canvas-actions button {
+  min-height: 36px;
+  padding: 4px 10px;
+  background: transparent;
+  border-color: transparent;
+  font-size: 13px;
+  color: var(--text);
+}
+.canvas-actions button:hover { background: #393631; }
+.canvas-actions button[aria-pressed=true] { border-color: #a28558; background: #3b3226; color: #ffe0aa; }
+.reviewing .canvas-actions, .reviewing #selection-inspector { display: none; }
+#selection-inspector {
+  background: #252422;
+  margin: 0;
+  padding: 12px 16px;
+  max-height: min(32vh, 340px);
+  overflow: auto;
+}
+#selection-inspector h2 { margin: 0; }
+#selection-inspector :is(label, select, textarea) { font-size: 13px; }
+#selection-inspector .actor-position input { min-width: 0; width: 100%; }
+
+.empty-scene { gap: 12px; z-index: 3; }
+.empty-scene button { min-height: 42px; pointer-events: auto; }
+.empty-scene .quiet { color: var(--muted); background: #282725; }
+.mode-switch { border-color: var(--line); background: #232220ed; gap: 2px; padding: 3px; }
+.mode-switch button.active { background: #393228; border-color: #92784f; color: #ffe0aa; }
+.stage-help { color: var(--muted); font-size: 12px; }
+
+.scene-command-list { display: grid; gap: 2px; }
+.scene-command-list button {
+  min-height: 40px;
+  justify-content: start;
+  color: var(--text);
+  background: transparent;
+  border-color: transparent;
+  white-space: normal;
+  text-align: start;
+}
+.scene-command-list button:hover { background: #38342d; }
+.appearance-image-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 8px; margin: 14px 0; }
+.appearance-image-grid button {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  text-align: start;
+  background: #2c2a27;
+  border-color: var(--line);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.appearance-image-grid img { width: 100%; height: 98px; object-fit: contain; background: #1a1918; }
+.reference-card, .reference-source, .reference-use { background: #262523; border-color: var(--line); }
+.reference-card-tools .reference-action-group { grid-template-columns: 1fr; }
+.reference-card-tools button { justify-content: flex-start; text-align: start; }
+.reference-card label, .reference-card > summary small, .reference-use > .hint { color: var(--muted); }
+.reference-card input:not([type=checkbox]), .reference-card textarea, .reference-card select {
+  background: #191918;
+  border-color: #55524d;
+  font-size: 13px;
+}
+:where(.canvas-actions, .scene-assets, .studio-task-dialog) :focus-visible {
+  outline: 2px solid #ffe0aa;
+  outline-offset: 2px;
+}
+
+@media (min-width: 881px) {
+  .workspace { --default-left-sidebar-width: 226px; }
+  .left-panel { padding: 18px 14px; }
+  .shot-shelf { height: clamp(120px, 17vh, 175px); }
+}
+@media (max-width: 550px) {
+  .canvas-actions { padding: 6px 8px; }
+  .canvas-actions strong { flex-basis: 100%; }
+  .appearance-image-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

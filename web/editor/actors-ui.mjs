@@ -34,20 +34,19 @@ export function addCharacter({ label, onAdded } = {}) {
     studio.selectedModelId = null; studio.modelJoint = null; studio.selectedPlacementAsset = null;
     await studio.restore(doc, { preserveView: !!onAdded && !wasEmpty }); await context.ensureHumanTools();
     if (onAdded) context.editScene();
-    else context.showScene();
+    else context.editScene();
     context.toast(onAdded ? 'Character added with its reference.' : 'Character added.');
   });
 }
 
 export function installActorsUI(options) {
   context = options;
-  $('actors-panel').innerHTML = `<div class="section-heading"><h2 id="scene-heading">Scene <small id="actor-count" title="Visible items / total items">0</small></h2></div>
-    <div class="scene-action-row"><button id="open-add-assets" class="accent-button" aria-haspopup="dialog"><img src="../icons/plus.svg" alt="">Add</button><button id="open-references" aria-haspopup="dialog">References</button><button id="open-source-tools" aria-haspopup="dialog">Source Image</button></div><div class="actor-toolbar actor-selection-actions"><button id="clone-actor">Duplicate</button><button id="delete-actor">Delete</button></div>
+  $('actors-panel').innerHTML = `<div class="scene-index-heading"><h2 id="scene-heading">Scene</h2><small id="actor-count" title="Visible items / total items">0</small><button id="open-add-assets" class="quiet" aria-label="Add to scene" title="Add to scene" aria-haspopup="dialog"><img src="../icons/plus.svg" alt=""></button></div><div class="scene-assets"><button id="open-references" aria-haspopup="dialog"><img src="../icons/photo.svg" alt="">Images</button><button id="open-source-tools" aria-haspopup="dialog">Source tools</button></div><div class="actor-toolbar actor-selection-actions"><button id="clone-actor">Duplicate</button><button id="delete-actor">Delete</button></div>
     <div id="actor-list" class="actor-list"></div>
     <div id="active-actor-controls">
     <div class="compact-actions"><button id="ground-actors" title="Move the selection down or up until it touches the floor">Ground</button><button id="fit-actors" title="Frame the selection with the camera">Frame</button></div>
     <div class="selection-scale"><label for="actor-scale-slider">Object Scale</label><output id="actor-scale-readout" for="actor-scale-slider">1×</output><button id="reset-actor-scale" type="button" title="Reset object scale to 1×">Reset</button><input id="actor-scale-slider" type="range" min="0.01" max="4" step="0.01"></div>
-    <label class="selection-task-label">Settings<select id="selection-task"><option value="">Choose Settings</option><option value="placement">Precise Placement</option><option value="appearance">Appearance &amp; Name</option><option value="pose">Pose Joints</option><option value="body">Body Shape &amp; Hands</option><option value="presets">Pose Presets &amp; Files</option></select></label>
+    <input id="selection-task" type="hidden">
     <div id="placement-fields" hidden><label>Object Scale<input id="actor-scale" type="number" min="0.01" step="0.01" title="Resize the whole selection uniformly"></label><label>Drag Plane<select id="actor-plane"><option value="screen">View Plane · Up / Down / Left / Right</option><option value="ground">Ground Plane · Forward / Back / Left / Right</option></select></label>
     <div class="actor-position"><label>X<input id="actor-x" type="number" step="0.1"></label><label>Y<input id="actor-y" type="number" step="0.1"></label><label>Z<input id="actor-z" type="number" step="0.1"></label></div>
     <div class="dimensions"><label>Facing °<input id="actor-yaw" type="number" step="1"></label></div>
@@ -67,6 +66,30 @@ export function installActorsUI(options) {
     if (event.target.closest('#add-actor, #import-glb, #animal-shapes button, #open-pose-library')) assets.close();
   }, true);
   $('output-guide-options').append($('actor-identities').closest('label'), $('color-actors').closest('label'));
+  const actions = $('canvas-actions');
+  actions.innerHTML = '<strong id="canvas-target"></strong><button type="button" id="canvas-place" title="Move this object in the scene"><img src="../icons/arrows-move.svg" alt="">Move</button><button type="button" id="canvas-pose" title="Show joint handles or the rotation pivot"><img src="../icons/rotate-3d.svg" alt=""><span>Pose</span></button><button type="button" id="canvas-appearance" aria-haspopup="dialog" title="Choose an image to guide this character’s appearance"><img src="../icons/photo.svg" alt="">Appearance</button><button type="button" id="canvas-more" aria-haspopup="dialog" title="More actions for the selected object"><img src="../icons/adjustments-horizontal.svg" alt="">More</button>';
+  const commandDialog = $('scene-command-dialog');
+  $('canvas-more').onclick = () => commandDialog.showModal();
+  commandDialog.addEventListener('click', event => {
+    const command = event.target.closest('[data-scene-command]');
+    if (!command) return;
+    commandDialog.close();
+    const task = $('selection-task');
+    task.value = task.value === command.dataset.sceneCommand ? '' : command.dataset.sceneCommand;
+    task.dispatchEvent(new Event('change'));
+    if (task.value) $('selection-heading').focus();
+  });
+  $('selection-heading').tabIndex = -1;
+  $('close-selection-panel').onclick = () => {
+    const task = $('selection-task');
+    task.value = '';
+    task.dispatchEvent(new Event('change'));
+    $('canvas-more').focus();
+  };
+  $('canvas-place').onclick = context.placeScene;
+  $('canvas-pose').onclick = context.editScene;
+  $('start-scene').onclick = () => assets.showModal();
+  $('start-source').onclick = () => $('open-source-tools').click();
   $('selection-fields').append($('active-actor-controls'), $('clone-actor').parentElement);
   const identityFile = document.createElement('input'); identityFile.type = 'file'; identityFile.accept = 'image/*'; identityFile.hidden = true; identityFile.id = 'actor-identity-file'; document.body.append(identityFile);
   const readReferences = button('Read Connected Character Photos', () => context.send('anyangle-read-actors')); readReferences.id = 'read-actor-references'; readReferences.className = 'wide-button'; $('actors-panel').append(readReferences);
@@ -346,8 +369,16 @@ export function refreshActorsUI() {
   $('actor-count').textContent = `${entries.filter(({ item }) => item.visible !== false).length + Number(standalone)} / ${entries.length + Number(standalone)}`;
   const selected = model || (doc.selectedActorIds?.includes(actor?.id) ? actor : null);
   const hasSelection = !!selected && (human || !!model);
+  $('canvas-actions').hidden = !hasSelection;
+  $('canvas-target').textContent = hasSelection ? selected.label : '';
+  $('canvas-pose').querySelector('span').textContent = model ? 'Rotate' : 'Pose';
+  $('canvas-pose').disabled = !hasSelection || selected.locked || selected.visible === false;
+  $('canvas-place').disabled = !hasSelection || selected.locked || selected.visible === false;
+  $('canvas-place').setAttribute('aria-pressed', String(studio?.mode === 'position'));
+  $('canvas-pose').setAttribute('aria-pressed', String(studio?.mode === 'edit'));
+  $('canvas-appearance').hidden = !hasSelection || !!model || doc.version !== 3;
   $('selection-fields').hidden = !hasSelection;
-  $('selection-inspector').hidden = !hasSelection;
+  $('selection-inspector').hidden = !hasSelection || !$('selection-task').value;
   $('selection-heading').textContent = hasSelection ? selected.label : 'Selection';
   $('clone-actor').disabled = $('delete-actor').disabled = !selected || (!human && !model);
   $('actor-color').closest('label').hidden = photo;
